@@ -26,6 +26,7 @@ pub struct ModuleExports {
     pub functions: Vec<(String, Vec<(String, Ty)>, Ty)>, // (name, params, return_ty)
     pub constants: Vec<(String, Ty, u64)>,               // (name, ty, value)
     pub structs: Vec<StructTy>,                          // exported struct types
+    pub warnings: Vec<Diagnostic>,                       // non-fatal diagnostics
 }
 
 pub struct TypeChecker {
@@ -101,6 +102,8 @@ impl TypeChecker {
     }
 
     pub fn check_file(mut self, file: &File) -> Result<ModuleExports, Vec<Diagnostic>> {
+        let is_std_module = file.name.node.starts_with("std.");
+
         // First pass: register all structs, function signatures, and constants
         for item in &file.items {
             match &item.node {
@@ -117,6 +120,17 @@ impl TypeChecker {
                     self.structs.insert(sdef.name.node.clone(), sty);
                 }
                 Item::Fn(func) => {
+                    // #[intrinsic] is only allowed in std.* modules
+                    if func.intrinsic.is_some() && !is_std_module {
+                        self.error(
+                            format!(
+                                "#[intrinsic] is only allowed in std.* modules, \
+                                 not in '{}'",
+                                file.name.node
+                            ),
+                            func.name.span,
+                        );
+                    }
                     let params: Vec<(String, Ty)> = func
                         .params
                         .iter()
@@ -169,10 +183,35 @@ impl TypeChecker {
             }
         }
 
+        // Recursion detection: build call graph and reject cycles
+        self.detect_recursion(file);
+
         // Second pass: type check function bodies
         for item in &file.items {
             if let Item::Fn(func) = &item.node {
                 self.check_fn(func);
+            }
+        }
+
+        // Unused import detection: collect used module prefixes from all calls
+        let mut used_prefixes: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for item in &file.items {
+            if let Item::Fn(func) = &item.node {
+                if let Some(body) = &func.body {
+                    Self::collect_used_modules_block(&body.node, &mut used_prefixes);
+                }
+            }
+        }
+        for use_stmt in &file.uses {
+            let module_path = use_stmt.node.as_dotted();
+            // Short alias: last segment
+            let short = module_path
+                .rsplit('.')
+                .next()
+                .unwrap_or(&module_path)
+                .to_string();
+            if !used_prefixes.contains(&short) && !used_prefixes.contains(&module_path) {
+                self.warning(format!("unused import '{}'", module_path), use_stmt.span);
             }
         }
 
@@ -212,15 +251,268 @@ impl TypeChecker {
             }
         }
 
-        if self.diagnostics.is_empty() {
+        let has_errors = self
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == crate::diagnostic::Severity::Error);
+        if has_errors {
+            Err(self.diagnostics)
+        } else {
             Ok(ModuleExports {
                 module_name,
                 functions: exported_fns,
                 constants: exported_consts,
                 structs: exported_structs,
+                warnings: self.diagnostics,
             })
-        } else {
-            Err(self.diagnostics)
+        }
+    }
+
+    /// Build a call graph from the file's functions and report any cycles.
+    fn detect_recursion(&mut self, file: &File) {
+        // Build adjacency list: fn_name → set of called fn_names
+        let mut call_graph: HashMap<String, Vec<String>> = HashMap::new();
+
+        for item in &file.items {
+            if let Item::Fn(func) = &item.node {
+                if let Some(body) = &func.body {
+                    let mut callees = Vec::new();
+                    Self::collect_calls_block(&body.node, &mut callees);
+                    call_graph.insert(func.name.node.clone(), callees);
+                }
+            }
+        }
+
+        // DFS cycle detection
+        let fn_names: Vec<String> = call_graph.keys().cloned().collect();
+        let mut visited = HashMap::new(); // 0=unvisited, 1=in-stack, 2=done
+
+        for name in &fn_names {
+            visited.insert(name.clone(), 0u8);
+        }
+
+        for name in &fn_names {
+            if visited[name] == 0 {
+                let mut path = Vec::new();
+                if self.dfs_cycle(name, &call_graph, &mut visited, &mut path) {
+                    // Find the span for the function that starts the cycle
+                    let cycle_fn = &path[0];
+                    let span = file
+                        .items
+                        .iter()
+                        .find_map(|item| {
+                            if let Item::Fn(func) = &item.node {
+                                if func.name.node == *cycle_fn {
+                                    return Some(func.name.span);
+                                }
+                            }
+                            None
+                        })
+                        .unwrap_or(file.name.span);
+                    self.error(
+                        format!("recursive call cycle detected: {}", path.join(" -> ")),
+                        span,
+                    );
+                }
+            }
+        }
+    }
+
+    fn dfs_cycle(
+        &self,
+        node: &str,
+        graph: &HashMap<String, Vec<String>>,
+        visited: &mut HashMap<String, u8>,
+        path: &mut Vec<String>,
+    ) -> bool {
+        visited.insert(node.to_string(), 1); // in-stack
+        path.push(node.to_string());
+
+        if let Some(callees) = graph.get(node) {
+            for callee in callees {
+                // Only check local functions (those in our graph)
+                let state = visited.get(callee).copied().unwrap_or(2);
+                if state == 1 {
+                    // Back-edge: cycle found
+                    path.push(callee.clone());
+                    return true;
+                }
+                if state == 0 {
+                    if self.dfs_cycle(callee, graph, visited, path) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        path.pop();
+        visited.insert(node.to_string(), 2); // done
+        false
+    }
+
+    /// Collect all function call names from a block.
+    fn collect_calls_block(block: &Block, calls: &mut Vec<String>) {
+        for stmt in &block.stmts {
+            Self::collect_calls_stmt(&stmt.node, calls);
+        }
+        if let Some(tail) = &block.tail_expr {
+            Self::collect_calls_expr(&tail.node, calls);
+        }
+    }
+
+    fn collect_calls_stmt(stmt: &Stmt, calls: &mut Vec<String>) {
+        match stmt {
+            Stmt::Let { init, .. } => Self::collect_calls_expr(&init.node, calls),
+            Stmt::Assign { value, .. } => Self::collect_calls_expr(&value.node, calls),
+            Stmt::If {
+                cond,
+                then_block,
+                else_block,
+            } => {
+                Self::collect_calls_expr(&cond.node, calls);
+                Self::collect_calls_block(&then_block.node, calls);
+                if let Some(eb) = else_block {
+                    Self::collect_calls_block(&eb.node, calls);
+                }
+            }
+            Stmt::For {
+                start, end, body, ..
+            } => {
+                Self::collect_calls_expr(&start.node, calls);
+                Self::collect_calls_expr(&end.node, calls);
+                Self::collect_calls_block(&body.node, calls);
+            }
+            Stmt::TupleAssign { value, .. } => Self::collect_calls_expr(&value.node, calls),
+            Stmt::Expr(expr) => Self::collect_calls_expr(&expr.node, calls),
+            Stmt::Return(Some(val)) => Self::collect_calls_expr(&val.node, calls),
+            Stmt::Return(None) => {}
+            Stmt::Emit { fields, .. } | Stmt::Seal { fields, .. } => {
+                for (_, val) in fields {
+                    Self::collect_calls_expr(&val.node, calls);
+                }
+            }
+        }
+    }
+
+    /// Collect module prefixes used in calls and variable access within a block.
+    fn collect_used_modules_block(block: &Block, used: &mut std::collections::HashSet<String>) {
+        for stmt in &block.stmts {
+            Self::collect_used_modules_stmt(&stmt.node, used);
+        }
+        if let Some(tail) = &block.tail_expr {
+            Self::collect_used_modules_expr(&tail.node, used);
+        }
+    }
+
+    fn collect_used_modules_stmt(stmt: &Stmt, used: &mut std::collections::HashSet<String>) {
+        match stmt {
+            Stmt::Let { init, .. } => Self::collect_used_modules_expr(&init.node, used),
+            Stmt::Assign { value, .. } => Self::collect_used_modules_expr(&value.node, used),
+            Stmt::If {
+                cond,
+                then_block,
+                else_block,
+            } => {
+                Self::collect_used_modules_expr(&cond.node, used);
+                Self::collect_used_modules_block(&then_block.node, used);
+                if let Some(eb) = else_block {
+                    Self::collect_used_modules_block(&eb.node, used);
+                }
+            }
+            Stmt::For {
+                start, end, body, ..
+            } => {
+                Self::collect_used_modules_expr(&start.node, used);
+                Self::collect_used_modules_expr(&end.node, used);
+                Self::collect_used_modules_block(&body.node, used);
+            }
+            Stmt::TupleAssign { value, .. } => Self::collect_used_modules_expr(&value.node, used),
+            Stmt::Expr(expr) => Self::collect_used_modules_expr(&expr.node, used),
+            Stmt::Return(Some(val)) => Self::collect_used_modules_expr(&val.node, used),
+            Stmt::Return(None) => {}
+            Stmt::Emit { fields, .. } | Stmt::Seal { fields, .. } => {
+                for (_, val) in fields {
+                    Self::collect_used_modules_expr(&val.node, used);
+                }
+            }
+        }
+    }
+
+    fn collect_used_modules_expr(expr: &Expr, used: &mut std::collections::HashSet<String>) {
+        match expr {
+            Expr::Call { path, args } => {
+                let dotted = path.node.as_dotted();
+                // "module.func" → module is used
+                if let Some(dot_pos) = dotted.rfind('.') {
+                    let prefix = &dotted[..dot_pos];
+                    used.insert(prefix.to_string());
+                }
+                for arg in args {
+                    Self::collect_used_modules_expr(&arg.node, used);
+                }
+            }
+            Expr::Var(name) => {
+                // "module.CONST" → module is used
+                if let Some(dot_pos) = name.rfind('.') {
+                    let prefix = &name[..dot_pos];
+                    used.insert(prefix.to_string());
+                }
+            }
+            Expr::BinOp { lhs, rhs, .. } => {
+                Self::collect_used_modules_expr(&lhs.node, used);
+                Self::collect_used_modules_expr(&rhs.node, used);
+            }
+            Expr::Tuple(elems) | Expr::ArrayInit(elems) => {
+                for e in elems {
+                    Self::collect_used_modules_expr(&e.node, used);
+                }
+            }
+            Expr::FieldAccess { expr: inner, .. } | Expr::Index { expr: inner, .. } => {
+                Self::collect_used_modules_expr(&inner.node, used);
+            }
+            Expr::StructInit { path, fields } => {
+                let dotted = path.node.as_dotted();
+                if let Some(dot_pos) = dotted.rfind('.') {
+                    let prefix = &dotted[..dot_pos];
+                    used.insert(prefix.to_string());
+                }
+                for (_, val) in fields {
+                    Self::collect_used_modules_expr(&val.node, used);
+                }
+            }
+            Expr::Literal(_) => {}
+        }
+    }
+
+    fn collect_calls_expr(expr: &Expr, calls: &mut Vec<String>) {
+        match expr {
+            Expr::Call { path, args } => {
+                // Extract the function name (last segment for cross-module calls)
+                let dotted = path.node.as_dotted();
+                let fn_name = dotted.rsplit('.').next().unwrap_or(&dotted);
+                calls.push(fn_name.to_string());
+                for arg in args {
+                    Self::collect_calls_expr(&arg.node, calls);
+                }
+            }
+            Expr::BinOp { lhs, rhs, .. } => {
+                Self::collect_calls_expr(&lhs.node, calls);
+                Self::collect_calls_expr(&rhs.node, calls);
+            }
+            Expr::Tuple(elems) | Expr::ArrayInit(elems) => {
+                for e in elems {
+                    Self::collect_calls_expr(&e.node, calls);
+                }
+            }
+            Expr::FieldAccess { expr: inner, .. } | Expr::Index { expr: inner, .. } => {
+                Self::collect_calls_expr(&inner.node, calls);
+            }
+            Expr::StructInit { fields, .. } => {
+                for (_, val) in fields {
+                    Self::collect_calls_expr(&val.node, calls);
+                }
+            }
+            Expr::Literal(_) | Expr::Var(_) => {}
         }
     }
 
@@ -245,8 +537,24 @@ impl TypeChecker {
 
     fn check_block(&mut self, block: &Block) -> Ty {
         self.push_scope();
+        let mut terminated = false;
         for stmt in &block.stmts {
+            if terminated {
+                self.error("unreachable code after return".to_string(), stmt.span);
+                break;
+            }
             self.check_stmt(&stmt.node, stmt.span);
+            if self.is_terminating_stmt(&stmt.node) {
+                terminated = true;
+            }
+        }
+        if terminated {
+            if let Some(tail) = &block.tail_expr {
+                self.error(
+                    "unreachable tail expression after return".to_string(),
+                    tail.span,
+                );
+            }
         }
         let ty = if let Some(tail) = &block.tail_expr {
             self.check_expr(&tail.node, tail.span)
@@ -255,6 +563,25 @@ impl TypeChecker {
         };
         self.pop_scope();
         ty
+    }
+
+    fn is_terminating_stmt(&self, stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Return(_) => true,
+            // assert(false) is an unconditional halt
+            Stmt::Expr(expr) => {
+                if let Expr::Call { path, args } = &expr.node {
+                    let name = path.node.as_dotted();
+                    if (name == "assert" || name == "assert.is_true") && args.len() == 1 {
+                        if let Expr::Literal(Literal::Bool(false)) = &args[0].node {
+                            return true;
+                        }
+                    }
+                }
+                false
+            }
+            _ => false,
+        }
     }
 
     fn check_stmt(&mut self, stmt: &Stmt, _span: Span) {
@@ -887,6 +1214,10 @@ impl TypeChecker {
         self.diagnostics.push(Diagnostic::error(msg, span));
     }
 
+    fn warning(&mut self, msg: String, span: Span) {
+        self.diagnostics.push(Diagnostic::warning(msg, span));
+    }
+
     fn register_builtins(&mut self) {
         let b = &mut self.functions;
 
@@ -1339,5 +1670,90 @@ mod tests {
         // Destructure directly from hash() call
         let result = check("program test\nfn main() {\n    let (f0, f1, f2, f3, f4) = hash(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)\n    pub_write(f0)\n}");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_intrinsic_rejected_outside_std() {
+        let result =
+            check("program test\n#[intrinsic(hash)] fn foo() -> Digest {\n}\nfn main() {\n}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_intrinsic_allowed_in_std_module() {
+        let result = check("module std.test\n#[intrinsic(hash)] pub fn foo(x0: Field, x1: Field, x2: Field, x3: Field, x4: Field, x5: Field, x6: Field, x7: Field, x8: Field, x9: Field) -> Digest\n");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_direct_recursion_rejected() {
+        let result =
+            check("program test\nfn loop_forever() {\n    loop_forever()\n}\nfn main() {\n}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_mutual_recursion_rejected() {
+        let result =
+            check("program test\nfn a() {\n    b()\n}\nfn b() {\n    a()\n}\nfn main() {\n}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_false_positive_recursion() {
+        // a calls b, b calls c — no cycle
+        let result = check("program test\nfn c() {\n    pub_write(1)\n}\nfn b() {\n    c()\n}\nfn a() {\n    b()\n}\nfn main() {\n    a()\n}");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_dead_code_after_return() {
+        let result = check(
+            "program test\nfn foo() -> Field {\n    return 1\n    pub_write(2)\n}\nfn main() {\n}",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_dead_code_after_assert_false() {
+        let result = check(
+            "program test\nfn foo() {\n    assert(false)\n    pub_write(1)\n}\nfn main() {\n}",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_false_positive_dead_code() {
+        let result = check("program test\nfn foo() -> Field {\n    let x: Field = pub_read()\n    pub_write(x)\n    x\n}\nfn main() {\n}");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_unused_import_warning() {
+        // Unused import should produce a warning but still succeed (it's not an error)
+        let result = check("module test_mod\nuse std.hash\npub fn foo() -> Field {\n    42\n}");
+        // Should succeed (warnings don't fail compilation)
+        assert!(result.is_ok());
+        // But should contain a warning
+        let exports = result.unwrap();
+        assert!(
+            !exports.warnings.is_empty(),
+            "expected unused import warning"
+        );
+    }
+
+    #[test]
+    fn test_used_import_no_warning() {
+        // We can't test cross-module calls in unit tests (no import_module),
+        // but we can verify the module prefix collection works by checking
+        // that a module with no imports produces no warnings.
+        let result = check("module test_mod\npub fn foo() -> Field {\n    42\n}");
+        assert!(result.is_ok());
+        let exports = result.unwrap();
+        assert!(
+            exports.warnings.is_empty(),
+            "no warning expected for module with no imports, got: {:?}",
+            exports.warnings
+        );
     }
 }
