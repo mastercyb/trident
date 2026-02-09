@@ -136,6 +136,27 @@ impl Emitter {
             }
         }
 
+        // Emit sec ram metadata as comments (prover pre-initializes these RAM slots)
+        for decl in &file.declarations {
+            if let Declaration::SecRam(entries) = decl {
+                self.raw("// sec ram: prover-initialized RAM slots");
+                for (addr, ty) in entries {
+                    self.raw(&format!(
+                        "// ram[{}]: {} ({} field element{})",
+                        addr,
+                        crate::emit::format_type_name(&ty.node),
+                        resolve_type_width(&ty.node),
+                        if resolve_type_width(&ty.node) == 1 {
+                            ""
+                        } else {
+                            "s"
+                        }
+                    ));
+                }
+                self.raw("");
+            }
+        }
+
         if file.kind == FileKind::Program {
             self.raw("    call __main");
             self.raw("    halt");
@@ -1184,6 +1205,22 @@ impl Emitter {
 
     fn emit_label(&mut self, label: &str) {
         self.output.push(format!("{}:", label));
+    }
+}
+
+fn format_type_name(ty: &Type) -> String {
+    match ty {
+        Type::Field => "Field".to_string(),
+        Type::Bool => "Bool".to_string(),
+        Type::U32 => "U32".to_string(),
+        Type::XField => "XField".to_string(),
+        Type::Digest => "Digest".to_string(),
+        Type::Array(inner, n) => format!("[{}; {}]", format_type_name(inner), n),
+        Type::Tuple(elems) => {
+            let parts: Vec<_> = elems.iter().map(|t| format_type_name(t)).collect();
+            format!("({})", parts.join(", "))
+        }
+        Type::Named(path) => path.0.join("."),
     }
 }
 

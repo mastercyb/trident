@@ -141,6 +141,17 @@ impl<'a> FormatCtx<'a> {
                     self.output.push_str(&format_type(&ty.node));
                     self.output.push('\n');
                 }
+                Declaration::SecRam(entries) => {
+                    self.output.push_str("sec ram: {\n");
+                    for (addr, ty) in entries {
+                        self.output.push_str(&format!(
+                            "    {}: {},\n",
+                            addr,
+                            format_type(&ty.node)
+                        ));
+                    }
+                    self.output.push_str("}\n");
+                }
             }
         }
 

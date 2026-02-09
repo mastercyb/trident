@@ -94,11 +94,32 @@ impl Parser {
                 self.advance(); // consume sec
                 let kind_name = self.expect_ident();
                 self.expect(&Lexeme::Colon);
-                let ty = self.parse_type();
                 if kind_name.node == "input" {
+                    let ty = self.parse_type();
                     decls.push(Declaration::SecInput(ty));
+                } else if kind_name.node == "ram" {
+                    // sec ram: { addr: Type, addr: Type, ... }
+                    self.expect(&Lexeme::LBrace);
+                    let mut entries = Vec::new();
+                    while !self.at(&Lexeme::RBrace) && !self.at(&Lexeme::Eof) {
+                        // Parse address (integer literal)
+                        let addr_tok = self.advance();
+                        let addr = if let Lexeme::Integer(n) = &addr_tok.node {
+                            *n as u64
+                        } else {
+                            0 // error recovery
+                        };
+                        self.expect(&Lexeme::Colon);
+                        let ty = self.parse_type();
+                        entries.push((addr, ty));
+                        // Optional comma
+                        if self.at(&Lexeme::Comma) {
+                            self.advance();
+                        }
+                    }
+                    self.expect(&Lexeme::RBrace);
+                    decls.push(Declaration::SecRam(entries));
                 }
-                // sec ram: { ... } would need special handling — skip for now
             } else {
                 break;
             }
@@ -1021,6 +1042,21 @@ mod tests {
         assert!(matches!(file.declarations[0], Declaration::PubInput(_)));
         assert!(matches!(file.declarations[1], Declaration::PubOutput(_)));
         assert!(matches!(file.declarations[2], Declaration::SecInput(_)));
+    }
+
+    #[test]
+    fn test_sec_ram_declaration() {
+        let file = parse(
+            "program test\n\nsec ram: {\n    17: Field,\n    42: Field,\n}\n\nfn main() {\n}",
+        );
+        assert_eq!(file.declarations.len(), 1);
+        if let Declaration::SecRam(entries) = &file.declarations[0] {
+            assert_eq!(entries.len(), 2);
+            assert_eq!(entries[0].0, 17);
+            assert_eq!(entries[1].0, 42);
+        } else {
+            panic!("expected SecRam declaration");
+        }
     }
 
     #[test]

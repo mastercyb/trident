@@ -16,6 +16,9 @@ pub enum Declaration {
     PubInput(Spanned<Type>),
     PubOutput(Spanned<Type>),
     SecInput(Spanned<Type>),
+    /// `sec ram: { addr: Type, addr: Type, ... }`
+    /// Pre-initialized RAM slots (prover-supplied secret data).
+    SecRam(Vec<(u64, Spanned<Type>)>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
