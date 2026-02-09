@@ -522,6 +522,12 @@ pub struct CostAnalyzer {
     loop_bound_waste: Vec<(String, u64, u64)>,
 }
 
+impl Default for CostAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CostAnalyzer {
     pub fn new() -> Self {
         Self {
@@ -567,7 +573,7 @@ impl CostAnalyzer {
         // Estimate program instruction count for attestation.
         // Rough heuristic: total processor cycles ≈ instruction count.
         let instruction_count = total.processor.max(10);
-        let attestation_hash_rows = ((instruction_count + 9) / 10) * 6;
+        let attestation_hash_rows = instruction_count.div_ceil(10) * 6;
 
         // Padded height includes attestation.
         let max_height = total.max_height().max(attestation_hash_rows);

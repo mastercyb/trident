@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
 use crate::diagnostic::Diagnostic;
@@ -19,14 +19,17 @@ struct VarInfo {
     mutable: bool,
 }
 
+/// A function's exported signature: (name, params, return_type).
+pub type FnExport = (String, Vec<(String, Ty)>, Ty);
+
 /// Exported signatures from a type-checked module.
 #[derive(Clone, Debug)]
 pub struct ModuleExports {
     pub module_name: String,
-    pub functions: Vec<(String, Vec<(String, Ty)>, Ty)>, // (name, params, return_ty)
-    pub constants: Vec<(String, Ty, u64)>,               // (name, ty, value)
-    pub structs: Vec<StructTy>,                          // exported struct types
-    pub warnings: Vec<Diagnostic>,                       // non-fatal diagnostics
+    pub functions: Vec<FnExport>,
+    pub constants: Vec<(String, Ty, u64)>, // (name, ty, value)
+    pub structs: Vec<StructTy>,            // exported struct types
+    pub warnings: Vec<Diagnostic>,         // non-fatal diagnostics
 }
 
 pub struct TypeChecker {
@@ -43,7 +46,13 @@ pub struct TypeChecker {
     /// Accumulated diagnostics.
     diagnostics: Vec<Diagnostic>,
     /// Variables proven to be in U32 range (via as_u32, split, or U32 type).
-    u32_proven: std::collections::HashSet<String>,
+    u32_proven: HashSet<String>,
+}
+
+impl Default for TypeChecker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TypeChecker {
@@ -55,7 +64,7 @@ impl TypeChecker {
             structs: HashMap::new(),
             events: HashMap::new(),
             diagnostics: Vec::new(),
-            u32_proven: std::collections::HashSet::new(),
+            u32_proven: HashSet::new(),
         };
         tc.register_builtins();
         tc
@@ -197,7 +206,7 @@ impl TypeChecker {
         }
 
         // Unused import detection: collect used module prefixes from all calls
-        let mut used_prefixes: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut used_prefixes: HashSet<String> = HashSet::new();
         for item in &file.items {
             if let Item::Fn(func) = &item.node {
                 if let Some(body) = &func.body {
@@ -340,10 +349,8 @@ impl TypeChecker {
                     path.push(callee.clone());
                     return true;
                 }
-                if state == 0 {
-                    if self.dfs_cycle(callee, graph, visited, path) {
-                        return true;
-                    }
+                if state == 0 && self.dfs_cycle(callee, graph, visited, path) {
+                    return true;
                 }
             }
         }
@@ -398,7 +405,7 @@ impl TypeChecker {
     }
 
     /// Collect module prefixes used in calls and variable access within a block.
-    fn collect_used_modules_block(block: &Block, used: &mut std::collections::HashSet<String>) {
+    fn collect_used_modules_block(block: &Block, used: &mut HashSet<String>) {
         for stmt in &block.stmts {
             Self::collect_used_modules_stmt(&stmt.node, used);
         }
@@ -407,7 +414,7 @@ impl TypeChecker {
         }
     }
 
-    fn collect_used_modules_stmt(stmt: &Stmt, used: &mut std::collections::HashSet<String>) {
+    fn collect_used_modules_stmt(stmt: &Stmt, used: &mut HashSet<String>) {
         match stmt {
             Stmt::Let { init, .. } => Self::collect_used_modules_expr(&init.node, used),
             Stmt::Assign { value, .. } => Self::collect_used_modules_expr(&value.node, used),
@@ -441,7 +448,7 @@ impl TypeChecker {
         }
     }
 
-    fn collect_used_modules_expr(expr: &Expr, used: &mut std::collections::HashSet<String>) {
+    fn collect_used_modules_expr(expr: &Expr, used: &mut HashSet<String>) {
         match expr {
             Expr::Call { path, args } => {
                 let dotted = path.node.as_dotted();

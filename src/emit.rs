@@ -40,6 +40,12 @@ pub struct Emitter {
     module_aliases: HashMap<String, String>,
 }
 
+impl Default for Emitter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Emitter {
     pub fn new() -> Self {
         Self {
@@ -1217,7 +1223,7 @@ fn format_type_name(ty: &Type) -> String {
         Type::Digest => "Digest".to_string(),
         Type::Array(inner, n) => format!("[{}; {}]", format_type_name(inner), n),
         Type::Tuple(elems) => {
-            let parts: Vec<_> = elems.iter().map(|t| format_type_name(t)).collect();
+            let parts: Vec<_> = elems.iter().map(format_type_name).collect();
             format!("({})", parts.join(", "))
         }
         Type::Named(path) => path.0.join("."),
@@ -1230,7 +1236,7 @@ fn resolve_type_width(ty: &Type) -> u32 {
         Type::XField => 3,
         Type::Digest => 5,
         Type::Array(inner, n) => resolve_type_width(inner) * (*n as u32),
-        Type::Tuple(elems) => elems.iter().map(|t| resolve_type_width(t)).sum(),
+        Type::Tuple(elems) => elems.iter().map(resolve_type_width).sum(),
         Type::Named(_) => 1,
     }
 }

@@ -78,7 +78,7 @@ impl<'a> FormatCtx<'a> {
                 // Only take the first trailing comment right after this node
                 let text = self.comments[i].text.clone();
                 self.comments[i].used = true;
-                self.output.push_str(" ");
+                self.output.push(' ');
                 self.output.push_str(&text);
                 break;
             }
@@ -158,7 +158,7 @@ impl<'a> FormatCtx<'a> {
         // Items
         for item in &file.items {
             self.output.push('\n');
-            self.emit_item(&item, "");
+            self.emit_item(item, "");
         }
 
         // Any remaining comments at end of file
@@ -314,7 +314,7 @@ impl<'a> FormatCtx<'a> {
     fn emit_block(&mut self, block: &Block, outer_indent: &str) {
         let indent = format!("{}{}", outer_indent, INDENT);
         for stmt in &block.stmts {
-            self.emit_stmt(&stmt, &indent);
+            self.emit_stmt(stmt, &indent);
         }
         if let Some(tail) = &block.tail_expr {
             self.emit_leading_comments(tail.span.start, &indent);
@@ -598,7 +598,7 @@ fn format_type(ty: &Type) -> String {
         Type::Digest => "Digest".to_string(),
         Type::Array(inner, size) => format!("[{}; {}]", format_type(inner), size),
         Type::Tuple(elems) => {
-            let inner: Vec<String> = elems.iter().map(|t| format_type(t)).collect();
+            let inner: Vec<String> = elems.iter().map(format_type).collect();
             format!("({})", inner.join(", "))
         }
         Type::Named(path) => path.as_dotted(),

@@ -105,7 +105,7 @@ impl Parser {
                         // Parse address (integer literal)
                         let addr_tok = self.advance();
                         let addr = if let Lexeme::Integer(n) = &addr_tok.node {
-                            *n as u64
+                            *n
                         } else {
                             0 // error recovery
                         };
@@ -756,7 +756,7 @@ impl Parser {
                         },
                         span,
                     )
-                } else if self.at(&Lexeme::LBrace) && path.0.len() > 0 {
+                } else if self.at(&Lexeme::LBrace) && !path.0.is_empty() {
                     // Could be struct init — but only if it looks like one
                     // Struct names start with uppercase; lowercase idents are variables
                     let first_char = path.0.last().unwrap().chars().next().unwrap_or('a');

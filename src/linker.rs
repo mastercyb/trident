@@ -63,8 +63,7 @@ fn mangle_labels(tasm: &str, prefix: &str, is_program: bool) -> String {
         }
 
         // Call instruction: `call __foo` → `call prefix__foo`
-        if trimmed.starts_with("call __") {
-            let target = &trimmed[7..]; // after "call __"
+        if let Some(target) = trimmed.strip_prefix("call __") {
             result.push(format!("    call {}{}", prefix, target));
             continue;
         }

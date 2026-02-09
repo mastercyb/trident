@@ -384,10 +384,7 @@ pub fn format_source(source: &str, _filename: &str) -> Result<String, Vec<Diagno
     if !lex_errors.is_empty() {
         return Err(lex_errors);
     }
-    let file = match Parser::new(tokens).parse_file() {
-        Ok(f) => f,
-        Err(errors) => return Err(errors),
-    };
+    let file = Parser::new(tokens).parse_file()?;
     Ok(format::format_file(&file, &comments, source))
 }
 
@@ -395,9 +392,7 @@ pub fn format_source(source: &str, _filename: &str) -> Result<String, Vec<Diagno
 /// Used by the LSP server to get structured errors.
 pub fn check_silent(source: &str, filename: &str) -> Result<(), Vec<Diagnostic>> {
     let file = parse_source_silent(source, filename)?;
-    if let Err(errors) = TypeChecker::new().check_file(&file) {
-        return Err(errors);
-    }
+    TypeChecker::new().check_file(&file)?;
     Ok(())
 }
 
@@ -483,8 +478,5 @@ fn parse_source_silent(source: &str, filename: &str) -> Result<ast::File, Vec<Di
     if !lex_errors.is_empty() {
         return Err(lex_errors);
     }
-    match Parser::new(tokens).parse_file() {
-        Ok(file) => Ok(file),
-        Err(errors) => Err(errors),
-    }
+    Parser::new(tokens).parse_file()
 }

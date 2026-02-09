@@ -78,7 +78,7 @@ fn main() {
                 };
                 let out = input.join(format!("{}.tasm", project.name));
                 (tasm, out)
-            } else if input.extension().map_or(false, |e| e == "tri") {
+            } else if input.extension().is_some_and(|e| e == "tri") {
                 // Check for trident.toml in parent directories
                 if let Some(toml_path) = trident::project::Project::find(
                     input.parent().unwrap_or(std::path::Path::new(".")),
@@ -122,14 +122,11 @@ fn main() {
                 if let Some(source_path) = find_program_source(&input) {
                     let source = std::fs::read_to_string(&source_path).unwrap_or_default();
                     let filename = source_path.to_string_lossy().to_string();
-                    match trident::analyze_costs(&source, &filename) {
-                        Ok(program_cost) => {
-                            eprintln!("\n{}", program_cost.format_report());
-                            if hotspots {
-                                eprintln!("{}", program_cost.format_hotspots(5));
-                            }
+                    if let Ok(program_cost) = trident::analyze_costs(&source, &filename) {
+                        eprintln!("\n{}", program_cost.format_report());
+                        if hotspots {
+                            eprintln!("{}", program_cost.format_hotspots(5));
                         }
-                        Err(_) => {} // errors already printed
                     }
                 }
             }
@@ -184,7 +181,7 @@ fn main() {
                     }
                 };
                 project.entry
-            } else if input.extension().map_or(false, |e| e == "tri") {
+            } else if input.extension().is_some_and(|e| e == "tri") {
                 if let Some(toml_path) = trident::project::Project::find(
                     input.parent().unwrap_or(std::path::Path::new(".")),
                 ) {
@@ -217,11 +214,8 @@ fn main() {
                 if let Some(source_path) = find_program_source(&input) {
                     let source = std::fs::read_to_string(&source_path).unwrap_or_default();
                     let filename = source_path.to_string_lossy().to_string();
-                    match trident::analyze_costs(&source, &filename) {
-                        Ok(program_cost) => {
-                            eprintln!("\n{}", program_cost.format_report());
-                        }
-                        Err(_) => {}
+                    if let Ok(program_cost) = trident::analyze_costs(&source, &filename) {
+                        eprintln!("\n{}", program_cost.format_report());
                     }
                 }
             }
@@ -231,7 +225,7 @@ fn main() {
 
 /// Find the program source file for cost analysis.
 fn find_program_source(input: &std::path::Path) -> Option<PathBuf> {
-    if input.is_file() && input.extension().map_or(false, |e| e == "tri") {
+    if input.is_file() && input.extension().is_some_and(|e| e == "tri") {
         return Some(input.to_path_buf());
     }
     if input.is_dir() {
