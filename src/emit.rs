@@ -71,6 +71,12 @@ impl Emitter {
         self
     }
 
+    /// Set external constants (from imported modules).
+    pub fn with_constants(mut self, constants: HashMap<String, u64>) -> Self {
+        self.constants.extend(constants);
+        self
+    }
+
     pub fn emit_file(mut self, file: &File) -> String {
         // Pre-scan: collect return widths for all user-defined functions.
         for item in &file.items {
@@ -249,7 +255,7 @@ impl Emitter {
                                     }
                                 }
                             }
-                            // If this is a struct init, record the field layout
+                            // Record struct field layout from type annotation or struct init
                             if let Expr::StructInit { fields, .. } = &init.node {
                                 let mut field_map = HashMap::new();
                                 let widths = self.compute_struct_field_widths(ty, fields);
@@ -262,6 +268,10 @@ impl Emitter {
                                     offset += fw;
                                 }
                                 self.struct_layouts.insert(name.node.clone(), field_map);
+                            } else if let Some(sp_ty) = ty {
+                                // Resolve struct layout from type annotation
+                                // (covers function returns, divine, etc.)
+                                self.register_struct_layout_from_type(&name.node, &sp_ty.node);
                             }
                         }
                     }
@@ -1084,6 +1094,29 @@ impl Emitter {
         let r = self.stack.find_var_depth_and_width(name);
         self.flush_stack_effects();
         r
+    }
+
+    /// Register struct field layout from a type annotation.
+    fn register_struct_layout_from_type(&mut self, var_name: &str, ty: &Type) {
+        if let Type::Named(path) = ty {
+            let struct_name = path.0.last().map(|s| s.as_str()).unwrap_or("");
+            if let Some(sdef) = self.struct_types.get(struct_name).cloned() {
+                let mut field_map = HashMap::new();
+                let total: u32 = sdef
+                    .fields
+                    .iter()
+                    .map(|f| resolve_type_width(&f.ty.node))
+                    .sum();
+                let mut offset = 0u32;
+                for sf in &sdef.fields {
+                    let fw = resolve_type_width(&sf.ty.node);
+                    let from_top = total - offset - fw;
+                    field_map.insert(sf.name.node.clone(), (from_top, fw));
+                    offset += fw;
+                }
+                self.struct_layouts.insert(var_name.to_string(), field_map);
+            }
+        }
     }
 
     /// Look up field offset within a struct variable.

@@ -119,6 +119,22 @@ pub fn compile_project(entry_path: &Path) -> Result<String, Vec<Diagnostic>> {
         }
     }
 
+    // Build external constants map from all module exports
+    let mut external_constants = std::collections::HashMap::new();
+    for exports in &all_exports {
+        let full = &exports.module_name;
+        let short = full.rsplit('.').next().unwrap_or(full);
+        let has_short = short != full;
+        for (const_name, _ty, value) in &exports.constants {
+            let qualified = format!("{}.{}", full, const_name);
+            external_constants.insert(qualified, *value);
+            if has_short {
+                let short_qualified = format!("{}.{}", short, const_name);
+                external_constants.insert(short_qualified, *value);
+            }
+        }
+    }
+
     // Emit TASM for each module
     let mut tasm_modules = Vec::new();
     for (_module_name, _file_path, file) in &parsed_modules {
@@ -126,6 +142,7 @@ pub fn compile_project(entry_path: &Path) -> Result<String, Vec<Diagnostic>> {
         let tasm = Emitter::new()
             .with_intrinsics(intrinsic_map.clone())
             .with_module_aliases(module_aliases.clone())
+            .with_constants(external_constants.clone())
             .emit_file(file);
         tasm_modules.push(ModuleTasm {
             module_name: file.name.node.clone(),

@@ -8,4 +8,6 @@ fn main() {
     pub_write(doubled)
     let sq: Field = helpers.square(a)
     pub_write(sq)
+    // Test module constant resolution
+    pub_write(helpers.MAGIC)
 }

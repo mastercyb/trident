@@ -1,5 +1,7 @@
 module helpers
 
+pub const MAGIC: Field = 42
+
 pub fn double(x: Field) -> Field {
     x + x
 }
