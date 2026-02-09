@@ -57,8 +57,9 @@ fn mangle_labels(tasm: &str, prefix: &str, is_program: bool) -> String {
 
         // Label definition: `__foo:` → `prefix__foo:`
         if trimmed.ends_with(':') && trimmed.starts_with("__") {
-            let label = &trimmed[..trimmed.len() - 1]; // strip ':'
-            result.push(format!("{}{}:", prefix, &label[2..])); // strip __ prefix, add module prefix
+            let label = trimmed.trim_end_matches(':');
+            let body = label.strip_prefix("__").unwrap_or(label);
+            result.push(format!("{}{}:", prefix, body));
             continue;
         }
 

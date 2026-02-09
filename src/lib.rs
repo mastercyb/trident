@@ -210,6 +210,108 @@ pub fn analyze_costs(source: &str, filename: &str) -> Result<cost::ProgramCost, 
     Ok(cost)
 }
 
+/// Format Trident source code, preserving comments.
+pub fn format_source(source: &str, _filename: &str) -> Result<String, Vec<Diagnostic>> {
+    let (tokens, comments, lex_errors) = Lexer::new(source, 0).tokenize();
+    if !lex_errors.is_empty() {
+        return Err(lex_errors);
+    }
+    let file = Parser::new(tokens).parse_file()?;
+    Ok(format::format_file(&file, &comments, source))
+}
+
+/// Type-check only, without rendering diagnostics to stderr.
+/// Used by the LSP server to get structured errors.
+pub fn check_silent(source: &str, filename: &str) -> Result<(), Vec<Diagnostic>> {
+    let file = parse_source_silent(source, filename)?;
+    TypeChecker::new().check_file(&file)?;
+    Ok(())
+}
+
+/// Project-aware type-check for the LSP.
+/// Finds trident.toml, resolves dependencies, and type-checks
+/// the given file with full module context.
+/// Falls back to single-file check if no project is found.
+pub fn check_file_in_project(source: &str, file_path: &Path) -> Result<(), Vec<Diagnostic>> {
+    let dir = file_path.parent().unwrap_or(Path::new("."));
+    let entry = match project::Project::find(dir) {
+        Some(toml_path) => match project::Project::load(&toml_path) {
+            Ok(p) => p.entry,
+            Err(_) => file_path.to_path_buf(),
+        },
+        None => file_path.to_path_buf(),
+    };
+
+    // Resolve all modules from the entry point (handles std.* even without project)
+    let modules = match resolve_modules(&entry) {
+        Ok(m) => m,
+        Err(_) => return check_silent(source, &file_path.to_string_lossy()),
+    };
+
+    // Parse and type-check all modules in dependency order
+    let mut all_exports: Vec<ModuleExports> = Vec::new();
+    let file_path_canon = file_path
+        .canonicalize()
+        .unwrap_or_else(|_| file_path.to_path_buf());
+
+    for module in &modules {
+        let mod_path_canon = module
+            .file_path
+            .canonicalize()
+            .unwrap_or_else(|_| module.file_path.clone());
+        let is_target = mod_path_canon == file_path_canon;
+
+        // Use live buffer for the file being edited
+        let src = if is_target { source } else { &module.source };
+        let parsed = parse_source_silent(src, &module.file_path.to_string_lossy())?;
+
+        let mut tc = TypeChecker::new();
+        for exports in &all_exports {
+            tc.import_module(exports);
+        }
+
+        match tc.check_file(&parsed) {
+            Ok(exports) => {
+                all_exports.push(exports);
+            }
+            Err(errors) => {
+                if is_target {
+                    return Err(errors);
+                }
+                // Dep has errors — stop, but don't report
+                // dep errors as if they're in this file
+                return Ok(());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn parse_source(source: &str, filename: &str) -> Result<ast::File, Vec<Diagnostic>> {
+    let (tokens, _comments, lex_errors) = Lexer::new(source, 0).tokenize();
+    if !lex_errors.is_empty() {
+        render_diagnostics(&lex_errors, filename, source);
+        return Err(lex_errors);
+    }
+
+    match Parser::new(tokens).parse_file() {
+        Ok(file) => Ok(file),
+        Err(errors) => {
+            render_diagnostics(&errors, filename, source);
+            Err(errors)
+        }
+    }
+}
+
+fn parse_source_silent(source: &str, _filename: &str) -> Result<ast::File, Vec<Diagnostic>> {
+    let (tokens, _comments, lex_errors) = Lexer::new(source, 0).tokenize();
+    if !lex_errors.is_empty() {
+        return Err(lex_errors);
+    }
+    Parser::new(tokens).parse_file()
+}
+
 #[cfg(test)]
 mod integration_tests {
     use super::*;
@@ -376,107 +478,4 @@ fn main() {
 
         eprintln!("Events TASM:\n{}", tasm);
     }
-}
-
-/// Format Trident source code, preserving comments.
-pub fn format_source(source: &str, _filename: &str) -> Result<String, Vec<Diagnostic>> {
-    let (tokens, comments, lex_errors) = Lexer::new(source, 0).tokenize();
-    if !lex_errors.is_empty() {
-        return Err(lex_errors);
-    }
-    let file = Parser::new(tokens).parse_file()?;
-    Ok(format::format_file(&file, &comments, source))
-}
-
-/// Type-check only, without rendering diagnostics to stderr.
-/// Used by the LSP server to get structured errors.
-pub fn check_silent(source: &str, filename: &str) -> Result<(), Vec<Diagnostic>> {
-    let file = parse_source_silent(source, filename)?;
-    TypeChecker::new().check_file(&file)?;
-    Ok(())
-}
-
-/// Project-aware type-check for the LSP.
-/// Finds trident.toml, resolves dependencies, and type-checks
-/// the given file with full module context.
-/// Falls back to single-file check if no project is found.
-pub fn check_file_in_project(source: &str, file_path: &Path) -> Result<(), Vec<Diagnostic>> {
-    let dir = file_path.parent().unwrap_or(Path::new("."));
-    let entry = match project::Project::find(dir) {
-        Some(toml_path) => match project::Project::load(&toml_path) {
-            Ok(p) => p.entry,
-            Err(_) => file_path.to_path_buf(),
-        },
-        None => file_path.to_path_buf(),
-    };
-
-    // Resolve all modules from the entry point (handles std.* even without project)
-    let modules = match resolve_modules(&entry) {
-        Ok(m) => m,
-        Err(_) => return check_silent(source, &file_path.to_string_lossy()),
-    };
-
-    // Parse and type-check all modules in dependency order
-    let mut all_exports: Vec<ModuleExports> = Vec::new();
-    let file_path_canon = file_path
-        .canonicalize()
-        .unwrap_or_else(|_| file_path.to_path_buf());
-
-    for module in &modules {
-        let mod_path_canon = module
-            .file_path
-            .canonicalize()
-            .unwrap_or_else(|_| module.file_path.clone());
-        let is_target = mod_path_canon == file_path_canon;
-
-        // Use live buffer for the file being edited
-        let src = if is_target { source } else { &module.source };
-        let parsed = parse_source_silent(src, &module.file_path.to_string_lossy())?;
-
-        let mut tc = TypeChecker::new();
-        for exports in &all_exports {
-            tc.import_module(exports);
-        }
-
-        match tc.check_file(&parsed) {
-            Ok(exports) => {
-                all_exports.push(exports);
-            }
-            Err(errors) => {
-                if is_target {
-                    return Err(errors);
-                }
-                // Dep has errors — stop, but don't report
-                // dep errors as if they're in this file
-                return Ok(());
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn parse_source(source: &str, filename: &str) -> Result<ast::File, Vec<Diagnostic>> {
-    let (tokens, _comments, lex_errors) = Lexer::new(source, 0).tokenize();
-    if !lex_errors.is_empty() {
-        render_diagnostics(&lex_errors, filename, source);
-        return Err(lex_errors);
-    }
-
-    match Parser::new(tokens).parse_file() {
-        Ok(file) => Ok(file),
-        Err(errors) => {
-            render_diagnostics(&errors, filename, source);
-            Err(errors)
-        }
-    }
-}
-
-fn parse_source_silent(source: &str, filename: &str) -> Result<ast::File, Vec<Diagnostic>> {
-    let _ = filename;
-    let (tokens, _comments, lex_errors) = Lexer::new(source, 0).tokenize();
-    if !lex_errors.is_empty() {
-        return Err(lex_errors);
-    }
-    Parser::new(tokens).parse_file()
 }

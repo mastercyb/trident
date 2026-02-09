@@ -1072,9 +1072,14 @@ impl Emitter {
                 } else {
                     (format!("call __{}", name), name.to_string())
                 };
-                let ret_width = self.fn_return_widths.get(&base_name).copied().unwrap_or(1);
-                let ret_width = ret_width.max(1); // at least 1 for stack model
-                self.emit_and_push(&call_inst, ret_width);
+                let ret_width = self.fn_return_widths.get(&base_name).copied().unwrap_or(0);
+                if ret_width > 0 {
+                    self.emit_and_push(&call_inst, ret_width);
+                } else {
+                    // Void function — emit call but don't push a stack entry
+                    self.inst(&call_inst);
+                    self.push_temp(0);
+                }
             }
         }
     }

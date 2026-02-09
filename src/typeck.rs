@@ -703,6 +703,10 @@ impl TypeChecker {
                         value.span,
                     );
                 }
+                // Invalidate U32-proven status on reassignment
+                if let Place::Var(name) = &place.node {
+                    self.u32_proven.remove(name);
+                }
             }
             Stmt::If {
                 cond,
@@ -1220,7 +1224,10 @@ impl TypeChecker {
                 if let Some(sty) = self.structs.get(&name) {
                     Ty::Struct(sty.clone())
                 } else {
-                    Ty::Field // fallback for unknown types
+                    // Unknown named type — treated as Field to allow forward
+                    // references in type annotations, but struct init/field access
+                    // will catch actual errors downstream.
+                    Ty::Field
                 }
             }
         }

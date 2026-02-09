@@ -772,8 +772,17 @@ impl CostAnalyzer {
                     .iter()
                     .fold(TableCost::ZERO, |acc, a| acc.add(&self.cost_expr(&a.node)));
 
-                // Check if it's a builtin.
-                let fn_cost = cost_builtin(&fn_name);
+                // Check if it's a builtin — try full name first, then short name
+                // to handle cross-module calls like "hash.tip5" → "tip5" → "hash"
+                let base_name = fn_name.rsplit('.').next().unwrap_or(&fn_name);
+                let fn_cost = {
+                    let c = cost_builtin(&fn_name);
+                    if c.processor > 0 || c.hash > 0 || c.u32_table > 0 || c.ram > 0 {
+                        c
+                    } else {
+                        cost_builtin(base_name)
+                    }
+                };
                 if fn_cost.processor > 0
                     || fn_cost.hash > 0
                     || fn_cost.u32_table > 0
@@ -783,7 +792,6 @@ impl CostAnalyzer {
                     args_cost.add(&fn_cost)
                 } else {
                     // User-defined: look up body cost + call overhead.
-                    let base_name = fn_name.rsplit('.').next().unwrap_or(&fn_name);
                     let body_cost = if let Some(func) = self.fn_bodies.get(base_name).cloned() {
                         self.cost_fn(&func)
                     } else {
