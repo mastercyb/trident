@@ -1458,6 +1458,69 @@ mod tests {
     }
 
     #[test]
+    fn test_multi_width_array_element() {
+        // Array of Digest (width 5 per element)
+        let tasm = compile(
+            "program test\nfn main() {\n    let a: Digest = divine5()\n    let b: Digest = divine5()\n    let arr: [Digest; 2] = [a, b]\n    let first: Digest = arr[0]\n    let second: Digest = arr[1]\n    assert_digest(first, second)\n}",
+        );
+        eprintln!("=== multi-width array TASM ===\n{}", tasm);
+        assert!(!tasm.contains("ERROR"), "should not have errors");
+        assert!(tasm.contains("assert_vector"));
+    }
+
+    #[test]
+    fn test_runtime_array_index() {
+        // Access array element with a runtime-computed index
+        let tasm = compile(
+            "program test\nfn main() {\n    let a: Field = pub_read()\n    let b: Field = pub_read()\n    let c: Field = pub_read()\n    let arr: [Field; 3] = [a, b, c]\n    let idx: Field = pub_read()\n    let val: Field = arr[idx]\n    pub_write(val)\n}",
+        );
+        eprintln!("=== runtime index TASM ===\n{}", tasm);
+        assert!(!tasm.contains("ERROR"), "should not have errors");
+        // Runtime indexing uses RAM: write_mem to store, read_mem to load
+        assert!(tasm.contains("write_mem"));
+        assert!(tasm.contains("read_mem"));
+    }
+
+    #[test]
+    fn test_deep_variable_access_spill() {
+        // Access a variable when the stack is deeply loaded (>16 elements)
+        // The stack manager should spill/reload automatically
+        let tasm = compile(
+            "program test\nfn main() {\n    let a: Field = pub_read()\n    let b: Field = pub_read()\n    let c: Field = pub_read()\n    let d: Field = pub_read()\n    let e: Field = pub_read()\n    let f: Field = pub_read()\n    let g: Field = pub_read()\n    let h: Field = pub_read()\n    let i: Field = pub_read()\n    let j: Field = pub_read()\n    let k: Field = pub_read()\n    let l: Field = pub_read()\n    let m: Field = pub_read()\n    let n: Field = pub_read()\n    let o: Field = pub_read()\n    let p: Field = pub_read()\n    let q: Field = pub_read()\n    pub_write(a)\n    pub_write(q)\n}",
+        );
+        eprintln!("=== deep access TASM ===\n{}", tasm);
+        assert!(
+            !tasm.contains("ERROR"),
+            "deep variable should be accessible via spill/reload"
+        );
+        // Should have spill instructions (write_mem for eviction)
+        assert!(tasm.contains("write_mem"), "expected spill to RAM");
+    }
+
+    #[test]
+    fn test_struct_field_from_fn_return() {
+        // Struct field access on a value returned from a function call
+        let tasm = compile(
+            "program test\nstruct Point {\n    x: Field,\n    y: Field,\n}\nfn make_point(a: Field, b: Field) -> Point {\n    Point { x: a, y: b }\n}\nfn main() {\n    let a: Field = pub_read()\n    let b: Field = pub_read()\n    let p: Point = make_point(a, b)\n    pub_write(p.x)\n    pub_write(p.y)\n}",
+        );
+        eprintln!("=== struct fn return TASM ===\n{}", tasm);
+        assert!(!tasm.contains("ERROR"), "should not have unresolved field");
+        assert!(tasm.contains("write_io 1"));
+    }
+
+    #[test]
+    fn test_sec_ram_emission() {
+        // sec ram declarations should produce metadata comments in TASM
+        let tasm = compile(
+            "program test\n\nsec ram: {\n    17: Field,\n    42: Field,\n}\n\nfn main() {\n    let v: Field = ram_read(17)\n    pub_write(v)\n}",
+        );
+        eprintln!("=== sec ram TASM ===\n{}", tasm);
+        assert!(tasm.contains("sec ram"), "should have sec ram comment");
+        assert!(tasm.contains("ram[17]"), "should document address 17");
+        assert!(tasm.contains("ram[42]"), "should document address 42");
+    }
+
+    #[test]
     fn test_digest_destructuring() {
         // Decompose a Digest into 5 individual Field variables
         let tasm = compile(
