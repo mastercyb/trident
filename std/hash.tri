@@ -1,0 +1,40 @@
+module std.hash
+
+// Tip5 hash: 10 field elements -> 5-element Digest
+#[intrinsic(hash)]
+pub fn tip5(
+    x0: Field,
+    x1: Field,
+    x2: Field,
+    x3: Field,
+    x4: Field,
+    x5: Field,
+    x6: Field,
+    x7: Field,
+    x8: Field,
+    x9: Field
+) -> Digest
+
+// --- Sponge API (streaming hash) ---
+#[intrinsic(sponge_init)]
+pub fn sponge_init()
+
+#[intrinsic(sponge_absorb)]
+pub fn sponge_absorb(
+    x0: Field,
+    x1: Field,
+    x2: Field,
+    x3: Field,
+    x4: Field,
+    x5: Field,
+    x6: Field,
+    x7: Field,
+    x8: Field,
+    x9: Field
+)
+
+#[intrinsic(sponge_squeeze)]
+pub fn sponge_squeeze() -> Digest
+
+#[intrinsic(sponge_absorb_mem)]
+pub fn sponge_absorb_mem(ptr: Field)

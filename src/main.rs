@@ -97,16 +97,8 @@ fn main() {
                     let out = project.root_dir.join(format!("{}.tasm", project.name));
                     (tasm, out)
                 } else {
-                    // Single-file mode
-                    let source = match std::fs::read_to_string(&input) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            eprintln!("error: cannot read '{}': {}", input.display(), e);
-                            process::exit(1);
-                        }
-                    };
-                    let filename = input.to_string_lossy().to_string();
-                    let tasm = match trident::compile(&source, &filename) {
+                    // Single-file mode (also resolves std.* imports)
+                    let tasm = match trident::compile_project(&input) {
                         Ok(t) => t,
                         Err(_) => process::exit(1),
                     };
@@ -178,32 +170,58 @@ fn main() {
             }
         }
         Command::Check { input, costs } => {
-            let source = match std::fs::read_to_string(&input) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("error: cannot read '{}': {}", input.display(), e);
+            let entry = if input.is_dir() {
+                let toml_path = input.join("trident.toml");
+                if !toml_path.exists() {
+                    eprintln!("error: no trident.toml found in '{}'", input.display());
                     process::exit(1);
                 }
-            };
-
-            let filename = input.to_string_lossy().to_string();
-            if costs {
-                match trident::analyze_costs(&source, &filename) {
-                    Ok(program_cost) => {
-                        eprintln!("OK: {}", input.display());
-                        eprintln!("\n{}", program_cost.format_report());
-                    }
-                    Err(_) => {
+                let project = match trident::project::Project::load(&toml_path) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("error: {}", e.message);
                         process::exit(1);
                     }
+                };
+                project.entry
+            } else if input.extension().map_or(false, |e| e == "tri") {
+                if let Some(toml_path) = trident::project::Project::find(
+                    input.parent().unwrap_or(std::path::Path::new(".")),
+                ) {
+                    let project = match trident::project::Project::load(&toml_path) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!("error: {}", e.message);
+                            process::exit(1);
+                        }
+                    };
+                    project.entry
+                } else {
+                    input.clone()
                 }
             } else {
-                match trident::check(&source, &filename) {
-                    Ok(()) => {
-                        eprintln!("OK: {}", input.display());
-                    }
-                    Err(_) => {
-                        process::exit(1);
+                eprintln!("error: input must be a .tri file or project directory");
+                process::exit(1);
+            };
+
+            match trident::check_project(&entry) {
+                Ok(()) => {
+                    eprintln!("OK: {}", input.display());
+                }
+                Err(_) => {
+                    process::exit(1);
+                }
+            }
+
+            if costs {
+                if let Some(source_path) = find_program_source(&input) {
+                    let source = std::fs::read_to_string(&source_path).unwrap_or_default();
+                    let filename = source_path.to_string_lossy().to_string();
+                    match trident::analyze_costs(&source, &filename) {
+                        Ok(program_cost) => {
+                            eprintln!("\n{}", program_cost.format_report());
+                        }
+                        Err(_) => {}
                     }
                 }
             }

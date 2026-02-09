@@ -1,0 +1,40 @@
+module std.io
+
+#[intrinsic(pub_read)]
+pub fn read() -> Field
+
+#[intrinsic(pub_read2)]
+pub fn read2() -> (Field, Field)
+
+#[intrinsic(pub_read3)]
+pub fn read3() -> (Field, Field, Field)
+
+#[intrinsic(pub_read4)]
+pub fn read4() -> (Field, Field, Field, Field)
+
+#[intrinsic(pub_read5)]
+pub fn read5() -> Digest
+
+#[intrinsic(pub_write)]
+pub fn write(v: Field)
+
+#[intrinsic(pub_write2)]
+pub fn write2(a: Field, b: Field)
+
+#[intrinsic(pub_write3)]
+pub fn write3(a: Field, b: Field, c: Field)
+
+#[intrinsic(pub_write4)]
+pub fn write4(a: Field, b: Field, c: Field, d: Field)
+
+#[intrinsic(pub_write5)]
+pub fn write5(a: Field, b: Field, c: Field, d: Field, e: Field)
+
+#[intrinsic(divine)]
+pub fn divine() -> Field
+
+#[intrinsic(divine3)]
+pub fn divine3() -> (Field, Field, Field)
+
+#[intrinsic(divine5)]
+pub fn divine5() -> Digest

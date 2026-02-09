@@ -28,6 +28,16 @@ pub struct Emitter {
     event_tags: HashMap<String, u64>,
     /// Event field names in declaration order: event name → [field_name, ...].
     event_defs: HashMap<String, Vec<String>>,
+    /// Struct type definitions: struct_name → StructDef.
+    struct_types: HashMap<String, StructDef>,
+    /// Constants: qualified or short name → integer value.
+    constants: HashMap<String, u64>,
+    /// Next temporary RAM address for runtime array ops.
+    temp_ram_addr: u64,
+    /// Intrinsic map: function name → intrinsic TASM name.
+    intrinsic_map: HashMap<String, String>,
+    /// Module alias map: short name → full module name (e.g. "hash" → "std.hash").
+    module_aliases: HashMap<String, String>,
 }
 
 impl Emitter {
@@ -41,7 +51,24 @@ impl Emitter {
             fn_return_widths: HashMap::new(),
             event_tags: HashMap::new(),
             event_defs: HashMap::new(),
+            struct_types: HashMap::new(),
+            constants: HashMap::new(),
+            temp_ram_addr: 1 << 29,
+            intrinsic_map: HashMap::new(),
+            module_aliases: HashMap::new(),
         }
+    }
+
+    /// Set a pre-built intrinsic map (from all project modules).
+    pub fn with_intrinsics(mut self, map: HashMap<String, String>) -> Self {
+        self.intrinsic_map = map;
+        self
+    }
+
+    /// Set module alias map (short name → full dotted name).
+    pub fn with_module_aliases(mut self, aliases: HashMap<String, String>) -> Self {
+        self.module_aliases = aliases;
+        self
     }
 
     pub fn emit_file(mut self, file: &File) -> String {
@@ -54,6 +81,40 @@ impl Emitter {
                     .map(|t| resolve_type_width(&t.node))
                     .unwrap_or(0);
                 self.fn_return_widths.insert(func.name.node.clone(), width);
+            }
+        }
+
+        // Pre-scan: collect intrinsic mappings.
+        for item in &file.items {
+            if let Item::Fn(func) = &item.node {
+                if let Some(ref intrinsic) = func.intrinsic {
+                    // Extract inner value from "intrinsic(VALUE)"
+                    let intr_value = if let Some(start) = intrinsic.node.find('(') {
+                        let end = intrinsic.node.rfind(')').unwrap_or(intrinsic.node.len());
+                        intrinsic.node[start + 1..end].to_string()
+                    } else {
+                        intrinsic.node.clone()
+                    };
+                    self.intrinsic_map
+                        .insert(func.name.node.clone(), intr_value);
+                }
+            }
+        }
+
+        // Pre-scan: collect struct type definitions.
+        for item in &file.items {
+            if let Item::Struct(sdef) = &item.node {
+                self.struct_types
+                    .insert(sdef.name.node.clone(), sdef.clone());
+            }
+        }
+
+        // Pre-scan: collect constant values.
+        for item in &file.items {
+            if let Item::Const(cdef) = &item.node {
+                if let Expr::Literal(Literal::Integer(val)) = &cdef.value.node {
+                    self.constants.insert(cdef.name.node.clone(), *val);
+                }
             }
         }
 
@@ -178,6 +239,15 @@ impl Emitter {
                         if name.node != "_" {
                             if let Some(top) = self.stack.last_mut() {
                                 top.name = Some(name.node.clone());
+                            }
+                            // If type is an array, record elem_width
+                            if let Some(sp_ty) = ty {
+                                if let Type::Array(inner_ty, _) = &sp_ty.node {
+                                    let ew = resolve_type_width(inner_ty);
+                                    if let Some(top) = self.stack.last_mut() {
+                                        top.elem_width = Some(ew);
+                                    }
+                                }
                             }
                             // If this is a struct init, record the field layout
                             if let Expr::StructInit { fields, .. } = &init.node {
@@ -443,9 +513,15 @@ impl Emitter {
                             self.emit_and_push(&format!("dup {}", depth), 1);
                         }
                     } else {
-                        // Module constant — emit push with value
-                        self.inst(&format!("// TODO: module constant '{}'", name));
-                        self.emit_and_push("push 0", 1);
+                        // Module constant — look up value
+                        if let Some(&val) = self.constants.get(name) {
+                            self.emit_and_push(&format!("push {}", val), 1);
+                        } else if let Some(&val) = self.constants.get(suffix) {
+                            self.emit_and_push(&format!("push {}", val), 1);
+                        } else {
+                            self.inst(&format!("// ERROR: unresolved constant '{}'", name));
+                            self.emit_and_push("push 0", 1);
+                        }
                     }
                 } else {
                     // Ensure variable is on stack (reload if spilled)
@@ -471,10 +547,24 @@ impl Emitter {
                                 self.inst(&format!("dup {}", depth + width - 1));
                             }
                         } else {
-                            self.inst(&format!(
-                                "// TODO: variable '{}' too deep ({}+{})",
-                                name, depth, width
-                            ));
+                            // Too deep — force spill of other variables
+                            self.stack.ensure_space(width);
+                            self.flush_stack_effects();
+                            self.stack.access_var(name);
+                            self.flush_stack_effects();
+                            let depth2 = self.stack.find_var_depth(name);
+                            self.flush_stack_effects();
+                            if depth2 + width - 1 <= 15 {
+                                for _ in 0..width {
+                                    self.inst(&format!("dup {}", depth2 + width - 1));
+                                }
+                            } else {
+                                self.inst(&format!(
+                                    "// ERROR: variable '{}' unreachable \
+                                     (depth {}+{})",
+                                    name, depth2, width
+                                ));
+                            }
                         }
                         self.stack.push_temp(width);
                     } else {
@@ -541,6 +631,12 @@ impl Emitter {
                     }
                 }
                 self.stack.push_temp(total_width);
+                // Record element width for index operations
+                if n > 0 {
+                    if let Some(top) = self.stack.last_mut() {
+                        top.elem_width = Some(total_width / n as u32);
+                    }
+                }
                 self.flush_stack_effects();
             }
             Expr::FieldAccess { expr: inner, field } => {
@@ -564,10 +660,48 @@ impl Emitter {
                         self.stack.push_temp(field_width);
                         self.flush_stack_effects();
                     } else {
-                        self.inst(&format!("// TODO: field access {}", field.node));
-                        self.stack.pop();
-                        self.stack.push_temp(1);
-                        self.flush_stack_effects();
+                        // No layout from variable — search struct_types
+                        // Collect field info first to avoid borrow conflict
+                        let mut found: Option<(u32, u32)> = None;
+                        for sdef in self.struct_types.values() {
+                            let total: u32 = sdef
+                                .fields
+                                .iter()
+                                .map(|f| resolve_type_width(&f.ty.node))
+                                .sum();
+                            if total != struct_width {
+                                continue;
+                            }
+                            let mut off = 0u32;
+                            for sf in &sdef.fields {
+                                let fw = resolve_type_width(&sf.ty.node);
+                                if sf.name.node == field.node {
+                                    found = Some((total - off - fw, fw));
+                                    break;
+                                }
+                                off += fw;
+                            }
+                            if found.is_some() {
+                                break;
+                            }
+                        }
+                        if let Some((from_top, fw)) = found {
+                            for i in 0..fw {
+                                self.inst(&format!("dup {}", from_top + (fw - 1 - i)));
+                            }
+                            self.stack.pop();
+                            for _ in 0..fw {
+                                self.inst(&format!("swap {}", fw + struct_width - 1));
+                            }
+                            self.emit_pop(struct_width);
+                            self.stack.push_temp(fw);
+                            self.flush_stack_effects();
+                        } else {
+                            self.inst(&format!("// ERROR: unresolved field '{}'", field.node));
+                            self.stack.pop();
+                            self.stack.push_temp(1);
+                            self.flush_stack_effects();
+                        }
                     }
                 } else {
                     self.stack.push_temp(1);
@@ -582,13 +716,17 @@ impl Emitter {
                     let idx = *idx as u32;
                     if let Some(entry) = inner_entry {
                         let array_width = entry.width;
-                        let elem_width = 1u32; // TODO: support multi-width elements
-                        let offset = (array_width - (idx + 1) * elem_width) as u32;
-                        // Dup the element from within the array on stack
-                        self.inst(&format!("dup {}", offset));
+                        let elem_width = entry.elem_width.unwrap_or(1);
+                        let base_offset = array_width - (idx + 1) * elem_width;
+                        // Dup elem_width elements from within the array
+                        for i in 0..elem_width {
+                            self.inst(&format!("dup {}", base_offset + (elem_width - 1 - i)));
+                        }
                         // Pop the array, push the element
                         self.stack.pop();
-                        self.inst(&format!("swap {}", array_width));
+                        for _ in 0..elem_width {
+                            self.inst(&format!("swap {}", elem_width + array_width - 1));
+                        }
                         self.emit_pop(array_width);
                         self.stack.push_temp(elem_width);
                         self.flush_stack_effects();
@@ -597,10 +735,60 @@ impl Emitter {
                         self.flush_stack_effects();
                     }
                 } else {
-                    self.inst("// TODO: runtime index access");
-                    self.stack.pop();
-                    self.stack.push_temp(1);
-                    self.flush_stack_effects();
+                    // Runtime index — use RAM-based access
+                    self.emit_expr(&index.node);
+                    let _idx_entry = self.stack.pop();
+                    let arr_entry = self.stack.pop();
+
+                    if let Some(arr) = arr_entry {
+                        let array_width = arr.width;
+                        let elem_width = arr.elem_width.unwrap_or(1);
+                        let base = self.temp_ram_addr;
+                        self.temp_ram_addr += array_width as u64;
+
+                        // Store array elements to RAM
+                        // Stack has: [... array_elems index]
+                        // Save index, store array, restore index
+                        self.inst("swap 1"); // move index below top array elem
+                        for i in 0..array_width {
+                            let addr = base + i as u64;
+                            self.inst(&format!("push {}", addr));
+                            self.inst("swap 1");
+                            self.inst("write_mem 1");
+                            self.inst("pop 1");
+                            if i + 1 < array_width {
+                                self.inst("swap 1"); // bring next array elem to top
+                            }
+                        }
+                        // Stack now has: [... index]
+
+                        // Compute target address: base + idx * elem_width
+                        if elem_width > 1 {
+                            self.inst(&format!("push {}", elem_width));
+                            self.inst("mul");
+                        }
+                        self.inst(&format!("push {}", base));
+                        self.inst("add");
+
+                        // Read elem_width elements from computed address
+                        for i in 0..elem_width {
+                            self.inst("dup 0");
+                            if i > 0 {
+                                self.inst(&format!("push {}", i));
+                                self.inst("add");
+                            }
+                            self.inst("read_mem 1");
+                            self.inst("pop 1");
+                            self.inst("swap 1");
+                        }
+                        self.inst("pop 1"); // pop address
+
+                        self.stack.push_temp(elem_width);
+                        self.flush_stack_effects();
+                    } else {
+                        self.stack.push_temp(1);
+                        self.flush_stack_effects();
+                    }
                 }
             }
             Expr::StructInit { path: _, fields } => {
@@ -629,8 +817,18 @@ impl Emitter {
             self.stack.pop();
         }
 
+        // Resolve intrinsic name: check if this function has an #[intrinsic] mapping.
+        // For cross-module calls like "std_hash.tip5", extract the short name "tip5".
+        let resolved_name = self.intrinsic_map.get(name).cloned().or_else(|| {
+            // Cross-module: "module.func" → look up "func"
+            name.rsplit('.')
+                .next()
+                .and_then(|short| self.intrinsic_map.get(short).cloned())
+        });
+        let effective_name = resolved_name.as_deref().unwrap_or(name);
+
         // Emit the instruction and push result temp
-        match name {
+        match effective_name {
             // I/O
             "pub_read" => {
                 self.emit_and_push("read_io 1", 1);
@@ -696,6 +894,14 @@ impl Emitter {
             }
 
             // Field operations
+            "field_add" => {
+                self.inst("add");
+                self.push_temp(1);
+            }
+            "field_mul" => {
+                self.inst("mul");
+                self.push_temp(1);
+            }
             "inv" => {
                 self.inst("invert");
                 self.push_temp(1);
@@ -812,10 +1018,20 @@ impl Emitter {
             _ => {
                 let (call_inst, base_name) = if name.contains('.') {
                     // Cross-module call: "merkle.verify" → "call merkle__verify"
+                    // Resolve module aliases: "hash" → "std.hash" → "std_hash"
                     let parts: Vec<&str> = name.rsplitn(2, '.').collect();
                     let fn_name = parts[0];
-                    let module = parts[1].replace('.', "_");
-                    (format!("call {}__{}", module, fn_name), fn_name.to_string())
+                    let short_module = parts[1];
+                    let full_module = self
+                        .module_aliases
+                        .get(short_module)
+                        .map(|s| s.as_str())
+                        .unwrap_or(short_module);
+                    let mangled = full_module.replace('.', "_");
+                    (
+                        format!("call {}__{}", mangled, fn_name),
+                        fn_name.to_string(),
+                    )
                 } else {
                     (format!("call __{}", name), name.to_string())
                 };
@@ -890,10 +1106,24 @@ impl Emitter {
     /// Compute field widths for a struct init.
     fn compute_struct_field_widths(
         &self,
-        _ty: &Option<Spanned<Type>>,
+        ty: &Option<Spanned<Type>>,
         fields: &[(Spanned<String>, Spanned<Expr>)],
     ) -> Vec<u32> {
-        // TODO: use resolved type info for multi-element fields (Digest, XField, etc.)
+        // Try to resolve from struct type definition
+        if let Some(sp_ty) = ty {
+            if let Type::Named(path) = &sp_ty.node {
+                if let Some(name) = path.0.last() {
+                    if let Some(sdef) = self.struct_types.get(name) {
+                        return sdef
+                            .fields
+                            .iter()
+                            .map(|f| resolve_type_width(&f.ty.node))
+                            .collect();
+                    }
+                }
+            }
+        }
+        // Fallback: assume each field is width 1
         vec![1u32; fields.len()]
     }
 

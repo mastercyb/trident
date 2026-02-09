@@ -59,22 +59,44 @@ impl TypeChecker {
 
     /// Import exported signatures from another module.
     /// Makes them available as `module_name.fn_name`.
+    /// For dotted modules like `std.hash`, also registers under
+    /// the short alias `hash.fn_name` so `hash.tip5()` works.
     pub fn import_module(&mut self, exports: &ModuleExports) {
+        // Short alias: last segment of dotted module name
+        let short_prefix = exports
+            .module_name
+            .rsplit('.')
+            .next()
+            .unwrap_or(&exports.module_name);
+        let has_short = short_prefix != exports.module_name;
+
         for (fn_name, params, return_ty) in &exports.functions {
             let qualified = format!("{}.{}", exports.module_name, fn_name);
             let sig = FnSig {
                 params: params.clone(),
                 return_ty: return_ty.clone(),
             };
-            self.functions.insert(qualified, sig);
+            self.functions.insert(qualified, sig.clone());
+            if has_short {
+                let short = format!("{}.{}", short_prefix, fn_name);
+                self.functions.insert(short, sig);
+            }
         }
         for (const_name, _ty, value) in &exports.constants {
             let qualified = format!("{}.{}", exports.module_name, const_name);
             self.constants.insert(qualified, *value);
+            if has_short {
+                let short = format!("{}.{}", short_prefix, const_name);
+                self.constants.insert(short, *value);
+            }
         }
         for sty in &exports.structs {
             let qualified = format!("{}.{}", exports.module_name, sty.name);
             self.structs.insert(qualified, sty.clone());
+            if has_short {
+                let short = format!("{}.{}", short_prefix, sty.name);
+                self.structs.insert(short, sty.clone());
+            }
         }
     }
 
@@ -971,6 +993,20 @@ impl TypeChecker {
         );
 
         // Field operations
+        b.insert(
+            "field_add".into(),
+            FnSig {
+                params: vec![("a".into(), Ty::Field), ("b".into(), Ty::Field)],
+                return_ty: Ty::Field,
+            },
+        );
+        b.insert(
+            "field_mul".into(),
+            FnSig {
+                params: vec![("a".into(), Ty::Field), ("b".into(), Ty::Field)],
+                return_ty: Ty::Field,
+            },
+        );
         b.insert(
             "inv".into(),
             FnSig {

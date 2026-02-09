@@ -1,0 +1,41 @@
+module std.merkle
+
+use std.hash
+use std.io
+use std.assert
+use std.convert
+
+// One step up a Merkle tree: given a node index and digest,
+// divine the sibling and compute the parent.
+pub #[intrinsic(merkle_step)] fn step(
+    idx: U32,
+    d0: Field, d1: Field, d2: Field, d3: Field, d4: Field
+) -> (U32, Digest)
+
+// Verify a Merkle inclusion proof.
+// The prover supplies sibling digests via divine input.
+// Walks `depth` levels from `leaf` to `root`.
+pub fn verify(
+    leaf: Digest,
+    root: Digest,
+    idx: Field,
+    depth: Field
+) {
+    let mut current: Digest = leaf
+    let mut current_idx: Field = idx
+    let mut i: Field = 0
+    for _step in 0..32 {
+        if i == depth {
+        } else {
+            let sibling: Digest = io.divine5()
+            let idx_u32: U32 = convert.as_u32(current_idx)
+            let next: Digest = hash.tip5(
+                current_idx, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            )
+            current = next
+            current_idx = current_idx + 1
+            i = i + 1
+        }
+    }
+    assert.digest(current, root)
+}

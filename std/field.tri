@@ -1,0 +1,21 @@
+module std.field
+
+// Addition: a + b (mod p)
+#[intrinsic(field_add)]
+pub fn add(a: Field, b: Field) -> Field
+
+// Multiplication: a * b (mod p)
+#[intrinsic(field_mul)]
+pub fn mul(a: Field, b: Field) -> Field
+
+// Subtraction: a - b (mod p)
+#[intrinsic(sub)]
+pub fn sub(a: Field, b: Field) -> Field
+
+// Negation: -a (mod p)
+#[intrinsic(neg)]
+pub fn neg(a: Field) -> Field
+
+// Multiplicative inverse: 1/a (mod p)
+#[intrinsic(inv)]
+pub fn inv(a: Field) -> Field

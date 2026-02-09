@@ -1,0 +1,17 @@
+module std.mem
+
+// Read one field element from RAM
+#[intrinsic(ram_read)]
+pub fn read(addr: Field) -> Field
+
+// Write one field element to RAM
+#[intrinsic(ram_write)]
+pub fn write(addr: Field, val: Field)
+
+// Read 5 consecutive field elements (Digest-sized block)
+#[intrinsic(ram_read_block)]
+pub fn read_block(addr: Field) -> Digest
+
+// Write 5 consecutive field elements (Digest-sized block)
+#[intrinsic(ram_write_block)]
+pub fn write_block(addr: Field, d: Digest)

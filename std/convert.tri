@@ -1,0 +1,13 @@
+module std.convert
+
+// Field -> U32 (truncate, assert fits in 32 bits)
+#[intrinsic(as_u32)]
+pub fn as_u32(a: Field) -> U32
+
+// U32 -> Field (widen, lossless)
+#[intrinsic(as_field)]
+pub fn as_field(a: U32) -> Field
+
+// Split field element into (hi: U32, lo: U32)
+#[intrinsic(split)]
+pub fn split(a: Field) -> (U32, U32)

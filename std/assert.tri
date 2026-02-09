@@ -1,0 +1,13 @@
+module std.assert
+
+// Assert condition is true (halts VM if false)
+#[intrinsic(assert)]
+pub fn is_true(cond: Bool)
+
+// Assert two field elements are equal
+#[intrinsic(assert_eq)]
+pub fn eq(a: Field, b: Field)
+
+// Assert two digests are equal (5-element vector comparison)
+#[intrinsic(assert_digest)]
+pub fn digest(a: Digest, b: Digest)

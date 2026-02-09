@@ -25,9 +25,58 @@ pub fn resolve_modules(entry_path: &Path) -> Result<Vec<ModuleInfo>, Vec<Diagnos
     resolver.topological_sort()
 }
 
+/// Find the standard library directory.
+/// Search order:
+///   1. TRIDENT_STDLIB environment variable
+///   2. `std/` relative to the compiler binary
+///   3. `std/` in the repository root (development)
+pub fn find_stdlib_dir() -> Option<PathBuf> {
+    // 1. Environment variable
+    if let Ok(p) = std::env::var("TRIDENT_STDLIB") {
+        let path = PathBuf::from(p);
+        if path.is_dir() {
+            return Some(path);
+        }
+    }
+
+    // 2. Relative to the compiler binary
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let path = dir.join("std");
+            if path.is_dir() {
+                return Some(path);
+            }
+            // Also check one level up (e.g. target/debug/../std)
+            if let Some(parent) = dir.parent() {
+                let path = parent.join("std");
+                if path.is_dir() {
+                    return Some(path);
+                }
+                // Two levels up for target/debug/../../std
+                if let Some(grandparent) = parent.parent() {
+                    let path = grandparent.join("std");
+                    if path.is_dir() {
+                        return Some(path);
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Current working directory
+    let cwd_std = PathBuf::from("std");
+    if cwd_std.is_dir() {
+        return Some(cwd_std);
+    }
+
+    None
+}
+
 struct ModuleResolver {
     /// Root directory of the project.
     root_dir: PathBuf,
+    /// Standard library directory (if found).
+    stdlib_dir: Option<PathBuf>,
     /// All discovered modules by name.
     modules: HashMap<String, ModuleInfo>,
     /// Queue of modules to process.
@@ -38,10 +87,7 @@ struct ModuleResolver {
 
 impl ModuleResolver {
     fn new(entry_path: &Path) -> Result<Self, Vec<Diagnostic>> {
-        let root_dir = entry_path
-            .parent()
-            .unwrap_or(Path::new("."))
-            .to_path_buf();
+        let root_dir = entry_path.parent().unwrap_or(Path::new(".")).to_path_buf();
 
         let source = std::fs::read_to_string(entry_path).map_err(|e| {
             vec![Diagnostic::error(
@@ -66,6 +112,7 @@ impl ModuleResolver {
 
         Ok(Self {
             root_dir,
+            stdlib_dir: find_stdlib_dir(),
             modules,
             queue: deps,
             diagnostics: Vec::new(),
@@ -124,9 +171,22 @@ impl ModuleResolver {
     }
 
     /// Resolve a dotted module name to a file path.
+    /// "std.hash" → stdlib_dir/hash.tri
     /// "crypto.sponge" → root_dir/crypto/sponge.tri
     /// "merkle" → root_dir/merkle.tri
     fn resolve_path(&self, module_name: &str) -> PathBuf {
+        // Standard library modules resolve from stdlib_dir
+        if let Some(rest) = module_name.strip_prefix("std.") {
+            if let Some(ref stdlib_dir) = self.stdlib_dir {
+                let parts: Vec<&str> = rest.split('.').collect();
+                let mut path = stdlib_dir.clone();
+                for part in &parts {
+                    path = path.join(part);
+                }
+                return path.with_extension("tri");
+            }
+        }
+
         let parts: Vec<&str> = module_name.split('.').collect();
         let mut path = self.root_dir.clone();
         for part in &parts {
@@ -219,10 +279,7 @@ fn scan_module_header(source: &str) -> (Option<String>, Vec<String>) {
             name = Some(rest.trim().to_string());
         } else if let Some(rest) = trimmed.strip_prefix("use ") {
             let dep = rest.trim().to_string();
-            // Don't add std.* as file dependencies — they're built-in
-            if !dep.starts_with("std.") && !dep.starts_with("std") {
-                deps.push(dep);
-            }
+            deps.push(dep);
         } else {
             // Once we hit a non-header line, stop scanning for use statements
             // (use must come before items per the grammar)
@@ -245,16 +302,18 @@ mod tests {
 
     #[test]
     fn test_scan_module_header_program() {
-        let (name, deps) = scan_module_header("program my_app\n\nuse merkle\nuse crypto.sponge\n\nfn main() {}");
+        let (name, deps) =
+            scan_module_header("program my_app\n\nuse merkle\nuse crypto.sponge\n\nfn main() {}");
         assert_eq!(name, Some("my_app".to_string()));
         assert_eq!(deps, vec!["merkle", "crypto.sponge"]);
     }
 
     #[test]
     fn test_scan_module_header_module() {
-        let (name, deps) = scan_module_header("module merkle\n\nuse std.convert\n\npub fn verify() {}");
+        let (name, deps) =
+            scan_module_header("module merkle\n\nuse std.convert\n\npub fn verify() {}");
         assert_eq!(name, Some("merkle".to_string()));
-        assert!(deps.is_empty()); // std.* is filtered out
+        assert_eq!(deps, vec!["std.convert"]);
     }
 
     #[test]

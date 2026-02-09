@@ -1,0 +1,36 @@
+program stdlib_test
+
+use std.io
+
+use std.hash
+
+use std.field
+
+use std.assert
+
+use std.convert
+
+use std.mem
+
+fn main() {
+    // Test std.io
+    let x: Field = io.read()
+    let y: Field = io.read()
+    // Test std.field
+    let sum: Field = field.add(x, y)
+    let prod: Field = field.mul(x, y)
+    let diff: Field = field.sub(x, y)
+    let neg_y: Field = field.neg(y)
+    let inv_x: Field = field.inv(x)
+    // Test std.hash
+    let d: Digest = hash.tip5(x, y, diff, 0, 0, 0, 0, 0, 0, 0)
+    // Test std.assert
+    assert.eq(x, x)
+    // Test std.convert
+    let u: U32 = convert.as_u32(x)
+    // Test std.mem
+    mem.write(100, x)
+    let loaded: Field = mem.read(100)
+    // Output
+    io.write(loaded)
+}

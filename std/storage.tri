@@ -1,0 +1,23 @@
+module std.storage
+
+use std.mem
+
+// Read a single field element from storage at `key`.
+pub fn read(key: Field) -> Field {
+    mem.read(key)
+}
+
+// Write a single field element to storage at `key`.
+pub fn write(key: Field, value: Field) {
+    mem.write(key, value)
+}
+
+// Read a Digest (5 field elements) from storage at `key`.
+pub fn read_digest(key: Field) -> Digest {
+    mem.read_block(key)
+}
+
+// Write a Digest (5 field elements) to storage at `key`.
+pub fn write_digest(key: Field, value: Digest) {
+    mem.write_block(key, value)
+}

@@ -1,0 +1,28 @@
+module std.xfield
+
+// Construct extension field element from 3 base field elements
+#[intrinsic(xfield)]
+pub fn new(a: Field, b: Field, c: Field) -> XField
+
+// Multiplicative inverse in extension field
+#[intrinsic(xinvert)]
+pub fn inv(a: XField) -> XField
+
+// Dot product steps (for IPA / FRI)
+#[intrinsic(xx_dot_step)]
+pub fn xx_dot_step(
+    acc0: Field,
+    acc1: Field,
+    acc2: Field,
+    ptr_a: Field,
+    ptr_b: Field
+) -> Digest
+
+#[intrinsic(xb_dot_step)]
+pub fn xb_dot_step(
+    acc0: Field,
+    acc1: Field,
+    acc2: Field,
+    ptr_a: Field,
+    ptr_b: Field
+) -> Digest

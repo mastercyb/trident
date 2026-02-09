@@ -157,6 +157,17 @@ impl Parser {
         let mut items = Vec::new();
         while !self.at(&Lexeme::Eof) {
             let start = self.current_span();
+
+            // Handle #[attr] before pub: #[intrinsic(name)] pub fn ...
+            if self.at(&Lexeme::Hash) {
+                let attr = self.parse_attribute();
+                let is_pub = self.eat(&Lexeme::Pub);
+                let item = self.parse_fn_with_attr(is_pub, Some(attr));
+                let span = start.merge(self.prev_span());
+                items.push(Spanned::new(Item::Fn(item), span));
+                continue;
+            }
+
             let is_pub = self.eat(&Lexeme::Pub);
 
             if self.at(&Lexeme::Const) {
@@ -231,7 +242,10 @@ impl Parser {
         } else {
             None
         };
+        self.parse_fn_with_attr(is_pub, intrinsic)
+    }
 
+    fn parse_fn_with_attr(&mut self, is_pub: bool, intrinsic: Option<Spanned<String>>) -> FnDef {
         self.expect(&Lexeme::Fn);
         let name = self.expect_ident();
         self.expect(&Lexeme::LParen);
@@ -723,8 +737,9 @@ impl Parser {
                     )
                 } else if self.at(&Lexeme::LBrace) && path.0.len() > 0 {
                     // Could be struct init — but only if it looks like one
-                    // Peek inside: if next is `ident:` then it's struct init
-                    if self.is_struct_init_ahead() {
+                    // Struct names start with uppercase; lowercase idents are variables
+                    let first_char = path.0.last().unwrap().chars().next().unwrap_or('a');
+                    if first_char.is_uppercase() && self.is_struct_init_ahead() {
                         self.advance(); // consume {
                         let fields = self.parse_struct_init_fields();
                         self.expect(&Lexeme::RBrace);

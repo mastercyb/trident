@@ -77,11 +77,56 @@ pub fn compile_project(entry_path: &Path) -> Result<String, Vec<Diagnostic>> {
         }
     }
 
+    // Build global intrinsic map from all modules
+    let mut intrinsic_map = std::collections::HashMap::new();
+    for (_module_name, _file_path, file) in &parsed_modules {
+        for item in &file.items {
+            if let ast::Item::Fn(func) = &item.node {
+                if let Some(ref intrinsic) = func.intrinsic {
+                    // Extract the inner value from "intrinsic(VALUE)"
+                    let intr_value = if let Some(start) = intrinsic.node.find('(') {
+                        let end = intrinsic.node.rfind(')').unwrap_or(intrinsic.node.len());
+                        intrinsic.node[start + 1..end].to_string()
+                    } else {
+                        intrinsic.node.clone()
+                    };
+                    // Register under short function name
+                    intrinsic_map.insert(func.name.node.clone(), intr_value.clone());
+                    // Register under qualified name (module.func)
+                    let qualified = format!("{}.{}", file.name.node, func.name.node);
+                    intrinsic_map.insert(qualified, intr_value.clone());
+                    // For dotted module names like std.hash, also
+                    // register under short alias (hash.func)
+                    if let Some(short) = file.name.node.rsplit('.').next() {
+                        if short != file.name.node {
+                            let short_qualified = format!("{}.{}", short, func.name.node);
+                            intrinsic_map.insert(short_qualified, intr_value.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Build module alias map: short name → full name for dotted modules
+    let mut module_aliases = std::collections::HashMap::new();
+    for (_module_name, _file_path, file) in &parsed_modules {
+        let full_name = &file.name.node;
+        if let Some(short) = full_name.rsplit('.').next() {
+            if short != full_name.as_str() {
+                module_aliases.insert(short.to_string(), full_name.clone());
+            }
+        }
+    }
+
     // Emit TASM for each module
     let mut tasm_modules = Vec::new();
     for (_module_name, _file_path, file) in &parsed_modules {
         let is_program = file.kind == FileKind::Program;
-        let tasm = Emitter::new().emit_file(file);
+        let tasm = Emitter::new()
+            .with_intrinsics(intrinsic_map.clone())
+            .with_module_aliases(module_aliases.clone())
+            .emit_file(file);
         tasm_modules.push(ModuleTasm {
             module_name: file.name.node.clone(),
             is_program,
@@ -101,6 +146,35 @@ pub fn check(source: &str, filename: &str) -> Result<(), Vec<Diagnostic>> {
     if let Err(errors) = TypeChecker::new().check_file(&file) {
         render_diagnostics(&errors, filename, source);
         return Err(errors);
+    }
+
+    Ok(())
+}
+
+/// Project-aware type-check from an entry point path.
+/// Resolves all modules (including std.*) and type-checks in dependency order.
+pub fn check_project(entry_path: &Path) -> Result<(), Vec<Diagnostic>> {
+    let modules = resolve_modules(entry_path)?;
+
+    let mut all_exports: Vec<ModuleExports> = Vec::new();
+
+    for module in &modules {
+        let file = parse_source(&module.source, &module.file_path.to_string_lossy())?;
+
+        let mut tc = TypeChecker::new();
+        for exports in &all_exports {
+            tc.import_module(exports);
+        }
+
+        match tc.check_file(&file) {
+            Ok(exports) => {
+                all_exports.push(exports);
+            }
+            Err(errors) => {
+                render_diagnostics(&errors, &module.file_path.to_string_lossy(), &module.source);
+                return Err(errors);
+            }
+        }
     }
 
     Ok(())
@@ -316,18 +390,16 @@ pub fn check_silent(source: &str, filename: &str) -> Result<(), Vec<Diagnostic>>
 /// Falls back to single-file check if no project is found.
 pub fn check_file_in_project(source: &str, file_path: &Path) -> Result<(), Vec<Diagnostic>> {
     let dir = file_path.parent().unwrap_or(Path::new("."));
-    let toml_path = match project::Project::find(dir) {
-        Some(p) => p,
-        None => return check_silent(source, &file_path.to_string_lossy()),
+    let entry = match project::Project::find(dir) {
+        Some(toml_path) => match project::Project::load(&toml_path) {
+            Ok(p) => p.entry,
+            Err(_) => file_path.to_path_buf(),
+        },
+        None => file_path.to_path_buf(),
     };
 
-    let project = match project::Project::load(&toml_path) {
-        Ok(p) => p,
-        Err(_) => return check_silent(source, &file_path.to_string_lossy()),
-    };
-
-    // Resolve all modules from the project entry
-    let modules = match resolve_modules(&project.entry) {
+    // Resolve all modules from the entry point (handles std.* even without project)
+    let modules = match resolve_modules(&entry) {
         Ok(m) => m,
         Err(_) => return check_silent(source, &file_path.to_string_lossy()),
     };

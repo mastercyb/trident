@@ -1,0 +1,13 @@
+module std.u32
+
+// Floor of base-2 logarithm
+#[intrinsic(log2)]
+pub fn log2(a: U32) -> U32
+
+// Exponentiation: base^exp
+#[intrinsic(pow)]
+pub fn pow(base: U32, exp: U32) -> U32
+
+// Population count (number of set bits)
+#[intrinsic(popcount)]
+pub fn popcount(a: U32) -> U32

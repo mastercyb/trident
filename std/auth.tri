@@ -1,0 +1,25 @@
+module std.auth
+
+use std.hash
+
+use std.io
+
+use std.assert
+
+// Verify knowledge of a hash preimage.
+// The prover supplies the secret via divine input.
+// Checks that hash(secret, 0..0) matches the expected digest.
+pub fn verify_preimage(expected: Digest) {
+    let secret: Field = io.divine()
+    let computed: Digest = hash.tip5(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    assert.digest(computed, expected)
+}
+
+// Verify knowledge of a secret whose hash matches a witness.
+// Used for account-level authorization.
+pub fn verify_auth(auth_hash: Field) {
+    let secret: Field = io.divine()
+    let computed: Digest = hash.tip5(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    let witness: Digest = io.divine5()
+    assert.digest(computed, witness)
+}

@@ -14,6 +14,8 @@ const MAX_STACK_DEPTH: u32 = 16;
 pub struct ManagedVar {
     pub name: Option<String>,
     pub width: u32,
+    /// For array entries: the width of a single element.
+    pub elem_width: Option<u32>,
     /// Where this variable currently lives.
     pub location: VarLocation,
     /// Monotonic access counter for LRU eviction.
@@ -82,6 +84,7 @@ impl StackManager {
         self.on_stack.push(ManagedVar {
             name: None,
             width,
+            elem_width: None,
             location: VarLocation::Stack,
             last_access: ts,
         });
@@ -97,6 +100,7 @@ impl StackManager {
         self.on_stack.push(ManagedVar {
             name: Some(name.to_string()),
             width,
+            elem_width: None,
             location: VarLocation::Stack,
             last_access: ts,
         });
@@ -133,7 +137,11 @@ impl StackManager {
         }
 
         // Check if it's spilled
-        if let Some(idx) = self.spilled.iter().position(|v| v.name.as_deref() == Some(name)) {
+        if let Some(idx) = self
+            .spilled
+            .iter()
+            .position(|v| v.name.as_deref() == Some(name))
+        {
             let var = self.spilled.remove(idx);
             self.reload_var(var);
             return 0; // reloaded to top of stack
@@ -155,7 +163,11 @@ impl StackManager {
             depth += entry.width;
         }
         // Check spilled
-        if let Some(idx) = self.spilled.iter().position(|v| v.name.as_deref() == Some(name)) {
+        if let Some(idx) = self
+            .spilled
+            .iter()
+            .position(|v| v.name.as_deref() == Some(name))
+        {
             let var = self.spilled.remove(idx);
             let width = var.width;
             self.reload_var(var);
