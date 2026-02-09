@@ -37,10 +37,11 @@
 - [x] Deep variable access beyond stack (emit.rs:475 TODO)
 - [x] sec ram declarations (parsed but not emitted)
 - [x] Power-of-2 boundary proximity warnings (spec section 12.6)
-- [x] Optimization hints H0001, H0002 (spec section 13.10)
+- [x] Optimization hints H0001–H0004 (spec section 13.10)
       H0001: hash table dominance warning
       H0002: headroom hint (room to grow at zero cost)
-      H0003/H0004: require runtime data, deferred
+      H0003: redundant as_u32 range check detection
+      H0004: loop bound waste (declared bound >> actual iterations)
 
 ## CLI
 
@@ -60,7 +61,7 @@
 
 ## Tests
 
-103 tests across 10 files. Missing coverage for:
+107 tests across 10 files. Missing coverage for:
 - [ ] Formatter (format.rs — 0 tests)
 - [ ] Diagnostic rendering (diagnostic.rs — 0 tests)
 - [ ] LSP server (trident-lsp.rs — 0 tests)
