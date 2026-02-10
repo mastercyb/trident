@@ -163,140 +163,123 @@ impl TableCost {
 /// Worst-case U32 table rows for 32-bit operations.
 const U32_WORST: u64 = 33;
 
+/// Simple arithmetic/logic op: 1 processor cycle, 1 op_stack row.
+/// Used for add, mul, eq, xfield_mul, pub_read, pub_write, divine, assert, etc.
+const SIMPLE_OP: TableCost = TableCost {
+    processor: 1,
+    hash: 0,
+    u32_table: 0,
+    op_stack: 1,
+    ram: 0,
+    jump_stack: 0,
+};
+
+/// U32-table op with stack effect: 1 processor cycle, worst-case u32, 1 op_stack.
+/// Used for lt, bit_and, bit_xor, split, pow.
+const U32_OP: TableCost = TableCost {
+    processor: 1,
+    hash: 0,
+    u32_table: U32_WORST,
+    op_stack: 1,
+    ram: 0,
+    jump_stack: 0,
+};
+
+/// U32-table op without stack growth: 1 processor cycle, worst-case u32, 0 op_stack.
+/// Used for div_mod, log2, popcount.
+const U32_NOSTACK: TableCost = TableCost {
+    processor: 1,
+    hash: 0,
+    u32_table: U32_WORST,
+    op_stack: 0,
+    ram: 0,
+    jump_stack: 0,
+};
+
+/// Hash-table op with stack effect: 1 processor cycle, 6 hash rows, 1 op_stack.
+/// Used for hash, sponge_absorb, sponge_squeeze.
+const HASH_OP: TableCost = TableCost {
+    processor: 1,
+    hash: 6,
+    u32_table: 0,
+    op_stack: 1,
+    ram: 0,
+    jump_stack: 0,
+};
+
+/// Two-element assertion: 2 processor cycles, 2 op_stack rows.
+/// Used for assert_eq, assert_digest.
+const ASSERT2: TableCost = TableCost {
+    processor: 2,
+    hash: 0,
+    u32_table: 0,
+    op_stack: 2,
+    ram: 0,
+    jump_stack: 0,
+};
+
+/// Single RAM read/write: 2 processor cycles, 2 op_stack, 1 ram.
+/// Used for ram_read, ram_write.
+const RAM_RW: TableCost = TableCost {
+    processor: 2,
+    hash: 0,
+    u32_table: 0,
+    op_stack: 2,
+    ram: 1,
+    jump_stack: 0,
+};
+
+/// Block RAM read/write: 2 processor cycles, 2 op_stack, 5 ram.
+/// Used for ram_read_block, ram_write_block.
+const RAM_BLOCK_RW: TableCost = TableCost {
+    processor: 2,
+    hash: 0,
+    u32_table: 0,
+    op_stack: 2,
+    ram: 5,
+    jump_stack: 0,
+};
+
+/// Pure processor op (no stack/ram/hash effect): 1 processor cycle only.
+/// Used for inv, xinvert.
+const PURE_PROC: TableCost = TableCost {
+    processor: 1,
+    hash: 0,
+    u32_table: 0,
+    op_stack: 0,
+    ram: 0,
+    jump_stack: 0,
+};
+
 fn cost_binop(op: &BinOp) -> TableCost {
     match op {
-        BinOp::Add => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        BinOp::Mul => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        BinOp::Eq => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        BinOp::Lt => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: U32_WORST,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        BinOp::BitAnd => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: U32_WORST,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        BinOp::BitXor => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: U32_WORST,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        BinOp::DivMod => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: U32_WORST,
-            op_stack: 0,
-            ram: 0,
-            jump_stack: 0,
-        },
-        BinOp::XFieldMul => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
+        BinOp::Add => SIMPLE_OP,
+        BinOp::Mul => SIMPLE_OP,
+        BinOp::Eq => SIMPLE_OP,
+        BinOp::Lt => U32_OP,
+        BinOp::BitAnd => U32_OP,
+        BinOp::BitXor => U32_OP,
+        BinOp::DivMod => U32_NOSTACK,
+        BinOp::XFieldMul => SIMPLE_OP,
     }
 }
 
 pub fn cost_builtin(name: &str) -> TableCost {
     match name {
         // I/O
-        "pub_read" | "pub_read2" | "pub_read3" | "pub_read4" | "pub_read5" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "pub_write" | "pub_write2" | "pub_write3" | "pub_write4" | "pub_write5" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
+        "pub_read" | "pub_read2" | "pub_read3" | "pub_read4" | "pub_read5" => SIMPLE_OP,
+        "pub_write" | "pub_write2" | "pub_write3" | "pub_write4" | "pub_write5" => SIMPLE_OP,
 
         // Non-deterministic input
-        "divine" | "divine3" | "divine5" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
+        "divine" | "divine3" | "divine5" => SIMPLE_OP,
 
         // Assertions
-        "assert" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "assert_eq" => TableCost {
-            processor: 2,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 2,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "assert_digest" => TableCost {
-            processor: 2,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 2,
-            ram: 0,
-            jump_stack: 0,
-        },
+        "assert" => SIMPLE_OP,
+        "assert_eq" => ASSERT2,
+        "assert_digest" => ASSERT2,
 
         // Field ops
-        "inv" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 0,
-            ram: 0,
-            jump_stack: 0,
-        },
+        "inv" => PURE_PROC,
         "neg" => TableCost {
             processor: 2,
             hash: 0,
@@ -315,48 +298,13 @@ pub fn cost_builtin(name: &str) -> TableCost {
         },
 
         // U32 ops
-        "split" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: U32_WORST,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "log2" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: U32_WORST,
-            op_stack: 0,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "pow" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: U32_WORST,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "popcount" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: U32_WORST,
-            op_stack: 0,
-            ram: 0,
-            jump_stack: 0,
-        },
+        "split" => U32_OP,
+        "log2" => U32_NOSTACK,
+        "pow" => U32_OP,
+        "popcount" => U32_NOSTACK,
 
         // Hash ops (6 hash table rows each for Tip5 permutation)
-        "hash" => TableCost {
-            processor: 1,
-            hash: 6,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
+        "hash" => HASH_OP,
         "sponge_init" => TableCost {
             processor: 1,
             hash: 6,
@@ -365,22 +313,8 @@ pub fn cost_builtin(name: &str) -> TableCost {
             ram: 0,
             jump_stack: 0,
         },
-        "sponge_absorb" => TableCost {
-            processor: 1,
-            hash: 6,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "sponge_squeeze" => TableCost {
-            processor: 1,
-            hash: 6,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
+        "sponge_absorb" => HASH_OP,
+        "sponge_squeeze" => HASH_OP,
         "sponge_absorb_mem" => TableCost {
             processor: 1,
             hash: 6,
@@ -409,38 +343,10 @@ pub fn cost_builtin(name: &str) -> TableCost {
         },
 
         // RAM
-        "ram_read" => TableCost {
-            processor: 2,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 2,
-            ram: 1,
-            jump_stack: 0,
-        },
-        "ram_write" => TableCost {
-            processor: 2,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 2,
-            ram: 1,
-            jump_stack: 0,
-        },
-        "ram_read_block" => TableCost {
-            processor: 2,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 2,
-            ram: 5,
-            jump_stack: 0,
-        },
-        "ram_write_block" => TableCost {
-            processor: 2,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 2,
-            ram: 5,
-            jump_stack: 0,
-        },
+        "ram_read" => RAM_RW,
+        "ram_write" => RAM_RW,
+        "ram_read_block" => RAM_BLOCK_RW,
+        "ram_write_block" => RAM_BLOCK_RW,
 
         // Dot steps
         "xx_dot_step" => TableCost {
@@ -469,32 +375,11 @@ pub fn cost_builtin(name: &str) -> TableCost {
             ram: 0,
             jump_stack: 0,
         },
-        "as_field" => TableCost {
-            processor: 0,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 0,
-            ram: 0,
-            jump_stack: 0,
-        },
+        "as_field" => TableCost::ZERO,
 
         // XField
-        "xfield" => TableCost {
-            processor: 0,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 0,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "xinvert" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 0,
-            ram: 0,
-            jump_stack: 0,
-        },
+        "xfield" => TableCost::ZERO,
+        "xinvert" => PURE_PROC,
 
         _ => TableCost::ZERO,
     }
@@ -754,24 +639,10 @@ impl CostAnalyzer {
             Stmt::Emit { fields, .. } => {
                 // push tag + write_io 1 + (field expr + write_io 1) per field
                 let mut cost = STACK_OP; // push tag
-                cost = cost.add(&TableCost {
-                    processor: 1,
-                    hash: 0,
-                    u32_table: 0,
-                    op_stack: 1,
-                    ram: 0,
-                    jump_stack: 0,
-                }); // write_io 1 for tag
+                cost = cost.add(&SIMPLE_OP); // write_io 1 for tag
                 for (_name, val) in fields {
                     cost = cost.add(&self.cost_expr(&val.node));
-                    cost = cost.add(&TableCost {
-                        processor: 1,
-                        hash: 0,
-                        u32_table: 0,
-                        op_stack: 1,
-                        ram: 0,
-                        jump_stack: 0,
-                    }); // write_io 1
+                    cost = cost.add(&SIMPLE_OP); // write_io 1
                 }
                 cost
             }
@@ -813,23 +684,9 @@ impl CostAnalyzer {
                     cost = cost.add(&STACK_OP); // push 0 padding
                 }
                 // hash: 6 hash table rows
-                cost = cost.add(&TableCost {
-                    processor: 1,
-                    hash: 6,
-                    u32_table: 0,
-                    op_stack: 1,
-                    ram: 0,
-                    jump_stack: 0,
-                });
+                cost = cost.add(&HASH_OP);
                 // write_io 5
-                cost = cost.add(&TableCost {
-                    processor: 1,
-                    hash: 0,
-                    u32_table: 0,
-                    op_stack: 1,
-                    ram: 0,
-                    jump_stack: 0,
-                });
+                cost = cost.add(&SIMPLE_OP);
                 cost
             }
         }

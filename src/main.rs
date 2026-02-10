@@ -208,6 +208,7 @@ fn resolve_target(
     trident::CompileOptions::for_target(target)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_build(
     input: PathBuf,
     output: Option<PathBuf>,

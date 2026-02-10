@@ -15,7 +15,7 @@ pub mod stack;
 pub mod typeck;
 pub mod types;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use ast::FileKind;
@@ -138,7 +138,7 @@ pub fn compile_project_with_options(
     }
 
     // Build global intrinsic map from all modules
-    let mut intrinsic_map = std::collections::HashMap::new();
+    let mut intrinsic_map = HashMap::new();
     for (_module_name, _file_path, _source, file) in &parsed_modules {
         for item in &file.items {
             if let ast::Item::Fn(func) = &item.node {
@@ -169,7 +169,7 @@ pub fn compile_project_with_options(
     }
 
     // Build module alias map: short name → full name for dotted modules
-    let mut module_aliases = std::collections::HashMap::new();
+    let mut module_aliases = HashMap::new();
     for (_module_name, _file_path, _source, file) in &parsed_modules {
         let full_name = &file.name.node;
         if let Some(short) = full_name.rsplit('.').next() {
@@ -180,7 +180,7 @@ pub fn compile_project_with_options(
     }
 
     // Build external constants map from all module exports
-    let mut external_constants = std::collections::HashMap::new();
+    let mut external_constants = HashMap::new();
     for exports in &all_exports {
         let full = &exports.module_name;
         let short = full.rsplit('.').next().unwrap_or(full);
@@ -585,7 +585,7 @@ pub fn generate_docs(
 
     // --- Structs ---
     let mut struct_entries: Vec<String> = Vec::new();
-    for (_i, (_module_name, _file_path, _source, file)) in parsed_modules.iter().enumerate() {
+    for (_module_name, _file_path, _source, file) in parsed_modules.iter() {
         for item in &file.items {
             if let ast::Item::Struct(sdef) = &item.node {
                 if file.kind == FileKind::Module && !sdef.is_pub {
@@ -626,7 +626,7 @@ pub fn generate_docs(
 
     // --- Constants ---
     let mut const_entries: Vec<(String, String, String)> = Vec::new(); // (name, type, value)
-    for (_i, (_module_name, _file_path, _source, file)) in parsed_modules.iter().enumerate() {
+    for (_module_name, _file_path, _source, file) in parsed_modules.iter() {
         for item in &file.items {
             if let ast::Item::Const(cdef) = &item.node {
                 if file.kind == FileKind::Module && !cdef.is_pub {
@@ -656,7 +656,7 @@ pub fn generate_docs(
 
     // --- Events ---
     let mut event_entries: Vec<String> = Vec::new();
-    for (_i, (_module_name, _file_path, _source, file)) in parsed_modules.iter().enumerate() {
+    for (_module_name, _file_path, _source, file) in parsed_modules.iter() {
         for item in &file.items {
             if let ast::Item::Event(edef) = &item.node {
                 if let Some(ref cfg) = edef.cfg {
@@ -698,10 +698,8 @@ pub fn generate_docs(
     } else {
         // Sum across all modules
         let mut total = cost::TableCost::ZERO;
-        for mc in &module_costs {
-            if let Some(pc) = mc {
-                total = total.add(&pc.total);
-            }
+        for pc in module_costs.iter().flatten() {
+            total = total.add(&pc.total);
         }
         total
     };
@@ -733,7 +731,7 @@ fn format_ast_type(ty: &ast::Type) -> String {
         ast::Type::Digest => "Digest".to_string(),
         ast::Type::Array(inner, size) => format!("[{}; {}]", format_ast_type(inner), size),
         ast::Type::Tuple(elems) => {
-            let parts: Vec<_> = elems.iter().map(|t| format_ast_type(t)).collect();
+            let parts: Vec<_> = elems.iter().map(format_ast_type).collect();
             format!("({})", parts.join(", "))
         }
         ast::Type::Named(path) => path.as_dotted(),
@@ -751,7 +749,7 @@ fn ast_type_width(ty: &ast::Type) -> u32 {
             let n = size.as_literal().unwrap_or(1) as u32;
             inner_w * n
         }
-        ast::Type::Tuple(elems) => elems.iter().map(|t| ast_type_width(t)).sum(),
+        ast::Type::Tuple(elems) => elems.iter().map(ast_type_width).sum(),
         ast::Type::Named(_) => 1, // unknown, default to 1
     }
 }
@@ -809,8 +807,7 @@ pub fn annotate_source(source: &str, filename: &str) -> Result<String, Vec<Diagn
     let stmt_costs = analyzer.stmt_costs(&file, source);
 
     // Build a map from line number to aggregated cost
-    let mut line_costs: std::collections::HashMap<u32, cost::TableCost> =
-        std::collections::HashMap::new();
+    let mut line_costs: HashMap<u32, cost::TableCost> = HashMap::new();
     for (line, cost) in &stmt_costs {
         line_costs
             .entry(*line)
