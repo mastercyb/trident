@@ -3,6 +3,8 @@ pub mod cost;
 pub mod diagnostic;
 pub mod emit;
 pub mod format;
+#[allow(dead_code)]
+pub mod hash;
 pub mod lexeme;
 pub mod lexer;
 pub mod linker;

@@ -7,6 +7,7 @@ description = "A minimal, security-first universal language for provable computa
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 ariadne = "0.4"
+blake3 = "1"
 tower-lsp = "0.20"
 tokio = { version = "1", features = ["io-std", "rt-multi-thread", "macros"] }
 
