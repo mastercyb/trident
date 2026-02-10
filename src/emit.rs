@@ -69,6 +69,12 @@ pub(crate) trait StackBackend {
     fn inst_recurse(&self) -> &'static str;
     fn inst_halt(&self) -> &'static str;
 
+    /// Push the additive inverse of 1 (i.e., p − 1 in the field).
+    /// Default: "push -1" (Triton assembler syntax).
+    fn inst_push_neg_one(&self) -> &'static str {
+        "push -1"
+    }
+
     // --- STARK-specific (optional, default to hash) ---
     fn inst_xx_dot_step(&self) -> &'static str {
         "xx_dot_step"
@@ -356,6 +362,9 @@ impl StackBackend for MidenBackend {
     fn inst_halt(&self) -> &'static str {
         "end  # halt"
     }
+    fn inst_push_neg_one(&self) -> &'static str {
+        "push.18446744069414584320" // Goldilocks p - 1
+    }
 }
 
 // ─── OpenVM Backend (RISC-V) ──────────────────────────────────────
@@ -488,6 +497,9 @@ impl StackBackend for OpenVMBackend {
     }
     fn inst_halt(&self) -> &'static str {
         "ebreak  # halt"
+    }
+    fn inst_push_neg_one(&self) -> &'static str {
+        "li t0, -1  # field neg one"
     }
 }
 
@@ -622,6 +634,9 @@ impl StackBackend for SP1Backend {
     fn inst_halt(&self) -> &'static str {
         "ecall  # halt"
     }
+    fn inst_push_neg_one(&self) -> &'static str {
+        "li t0, -1  # field neg one"
+    }
 }
 
 // ─── Cairo Backend (Sierra) ───────────────────────────────────────
@@ -755,6 +770,9 @@ impl StackBackend for CairoBackend {
     fn inst_halt(&self) -> &'static str {
         "return([0])  // halt"
     }
+    fn inst_push_neg_one(&self) -> &'static str {
+        "felt252_const<-1>()  // neg one"
+    }
 }
 
 // ─── Backend Factory ──────────────────────────────────────────────
@@ -839,8 +857,34 @@ impl Emitter {
         backend: Box<dyn StackBackend>,
         target_config: TargetConfig,
     ) -> Self {
-        let stack =
-            StackManager::with_config(target_config.stack_depth, target_config.spill_ram_base);
+        // Build a SpillFormatter from the backend's instruction methods.
+        let swap_fn = {
+            let swap_sample_1 = backend.inst_swap(1);
+            // Extract prefix before the number: "    swap " or "    dup." etc.
+            // We parse "swap 1" → prefix="swap ", or "swap.1" → prefix="swap."
+            let prefix = swap_sample_1.trim_end_matches('1').to_string();
+            Box::new(move |d: u32| format!("    {}{}", prefix, d)) as Box<dyn Fn(u32) -> String>
+        };
+        let push_fn = {
+            let push_sample_1 = backend.inst_push(1);
+            let prefix = push_sample_1.trim_end_matches('1').to_string();
+            Box::new(move |v: u64| format!("    {}{}", prefix, v)) as Box<dyn Fn(u64) -> String>
+        };
+        let pop1 = format!("    {}", backend.inst_pop(1));
+        let write_mem1 = format!("    {}", backend.inst_write_mem(1));
+        let read_mem1 = format!("    {}", backend.inst_read_mem(1));
+        let formatter = crate::stack::SpillFormatter {
+            fmt_swap: swap_fn,
+            fmt_push: push_fn,
+            fmt_pop1: pop1,
+            fmt_write_mem1: write_mem1,
+            fmt_read_mem1: read_mem1,
+        };
+        let stack = StackManager::with_formatter(
+            target_config.stack_depth,
+            target_config.spill_ram_base,
+            formatter,
+        );
         Self {
             output: Vec::new(),
             label_counter: 0,
@@ -1126,14 +1170,14 @@ impl Emitter {
                 .unwrap_or(0);
             let to_pop = total_width.saturating_sub(ret_width);
             for _ in 0..to_pop {
-                self.inst("swap 1");
-                self.inst("pop 1");
+                self.b_swap(1);
+                self.b_pop(1);
             }
         } else if !has_return {
             self.emit_pop(total_width);
         }
 
-        self.inst("return");
+        self.b_return();
         self.raw("");
 
         // Emit deferred blocks
@@ -1186,14 +1230,14 @@ impl Emitter {
                 .unwrap_or(0);
             let to_pop = total_width.saturating_sub(ret_width);
             for _ in 0..to_pop {
-                self.inst("swap 1");
-                self.inst("pop 1");
+                self.b_swap(1);
+                self.b_pop(1);
             }
         } else if !has_return {
             self.emit_pop(total_width);
         }
 
-        self.inst("return");
+        self.b_return();
         self.raw("");
 
         self.flush_deferred();
@@ -1207,13 +1251,13 @@ impl Emitter {
             for block in deferred {
                 self.emit_label(&block.label);
                 if block.clears_flag {
-                    self.inst("pop 1");
+                    self.b_pop(1);
                 }
                 self.emit_block(&block.block);
                 if block.clears_flag {
-                    self.inst("push 0");
+                    self.b_push(0);
                 }
-                self.inst("return");
+                self.b_return();
                 self.raw("");
             }
         }
@@ -1303,8 +1347,8 @@ impl Emitter {
                     // Old value is below it. Find it (accounting for the temp).
                     let depth = self.find_var_depth(name);
                     if depth <= 15 {
-                        self.inst(&format!("swap {}", depth));
-                        self.inst("pop 1");
+                        self.b_swap(depth);
+                        self.b_pop(1);
                     }
                     // Pop the temp and update the model: the variable's value was swapped
                     self.stack.pop(); // remove the anonymous temp
@@ -1322,12 +1366,12 @@ impl Emitter {
                     let then_label = self.fresh_label("then");
                     let else_label = self.fresh_label("else");
 
-                    self.inst("push 1");
-                    self.inst("swap 1");
-                    self.inst("skiz");
-                    self.inst(&format!("call {}", then_label));
-                    self.inst("skiz");
-                    self.inst(&format!("call {}", else_label));
+                    self.b_push(1);
+                    self.b_swap(1);
+                    self.b_skiz();
+                    self.b_call(&then_label);
+                    self.b_skiz();
+                    self.b_call(&else_label);
 
                     self.deferred.push(DeferredBlock {
                         label: then_label,
@@ -1341,8 +1385,8 @@ impl Emitter {
                     });
                 } else {
                     let then_label = self.fresh_label("then");
-                    self.inst("skiz");
-                    self.inst(&format!("call {}", then_label));
+                    self.b_skiz();
+                    self.b_call(&then_label);
 
                     self.deferred.push(DeferredBlock {
                         label: then_label,
@@ -1363,8 +1407,8 @@ impl Emitter {
                 self.emit_expr(&end.node);
                 // counter is now on top as a temp
 
-                self.inst(&format!("call {}", loop_label));
-                self.inst("pop 1");
+                self.b_call(&loop_label);
+                self.b_pop(1);
                 self.stack.pop(); // counter consumed
 
                 let loop_body = &body.node;
@@ -1383,8 +1427,8 @@ impl Emitter {
                     for name in names.iter().rev() {
                         let depth = self.find_var_depth(&name.node);
                         if elem_width == 1 {
-                            self.inst(&format!("swap {}", depth));
-                            self.inst("pop 1");
+                            self.b_swap(depth);
+                            self.b_pop(1);
                         }
                     }
                 }
@@ -1417,15 +1461,15 @@ impl Emitter {
                     .unwrap_or_default();
 
                 // Push tag and write it
-                self.inst(&format!("push {}", tag));
-                self.inst("write_io 1");
+                self.b_push(tag);
+                self.b_write_io(1);
 
                 // Emit each field in declaration order, write one at a time
                 for def_name in &decl_order {
                     if let Some((_name, val)) = fields.iter().find(|(n, _)| n.node == *def_name) {
                         self.emit_expr(&val.node);
                         self.stack.pop(); // consumed by write_io
-                        self.inst("write_io 1");
+                        self.b_write_io(1);
                     }
                 }
             }
@@ -1485,28 +1529,28 @@ impl Emitter {
 
                             // dup the scrutinee for comparison
                             let depth = self.find_var_depth("__match_scrutinee");
-                            self.inst(&format!("dup {}", depth));
+                            self.b_dup(depth);
 
                             // push the pattern value
                             match lit {
                                 Literal::Integer(n) => {
-                                    self.inst(&format!("push {}", n));
+                                    self.b_push(*n);
                                 }
                                 Literal::Bool(b) => {
-                                    self.inst(&format!("push {}", if *b { 1 } else { 0 }));
+                                    self.b_push(if *b { 1 } else { 0 });
                                 }
                             }
 
                             // eq → produces bool on stack
-                            self.inst("eq");
+                            self.b_eq();
 
                             // Use the flag pattern: push 1, swap, skiz call arm, skiz call rest
-                            self.inst("push 1");
-                            self.inst("swap 1");
-                            self.inst("skiz");
-                            self.inst(&format!("call {}", arm_label));
-                            self.inst("skiz");
-                            self.inst(&format!("call {}", rest_label));
+                            self.b_push(1);
+                            self.b_swap(1);
+                            self.b_skiz();
+                            self.b_call(&arm_label);
+                            self.b_skiz();
+                            self.b_call(&rest_label);
 
                             // Build arm body: pop scrutinee then run original body
                             let mut arm_stmts = vec![Spanned::new(
@@ -1539,7 +1583,7 @@ impl Emitter {
                         }
                         MatchPattern::Wildcard => {
                             let w_label = self.fresh_label("match_wild");
-                            self.inst(&format!("call {}", w_label));
+                            self.b_call(&w_label);
 
                             let mut arm_stmts = vec![Spanned::new(
                                 Stmt::Asm {
@@ -1564,7 +1608,7 @@ impl Emitter {
 
                 // Pop the scrutinee after match completes
                 self.stack.pop(); // remove scrutinee from model
-                self.inst("pop 1");
+                self.b_pop(1);
 
                 // Emit deferred blocks for each arm
                 for (label, block, is_literal) in deferred_arms {
@@ -1591,7 +1635,7 @@ impl Emitter {
                 // Push zero padding first (deepest)
                 let padding = 9usize.saturating_sub(num_fields); // 10 elements minus 1 tag minus fields
                 for _ in 0..padding {
-                    self.inst("push 0");
+                    self.b_push(0);
                 }
 
                 // Push fields in reverse declaration order
@@ -1603,26 +1647,26 @@ impl Emitter {
                 }
 
                 // Push tag (will be on top, consumed first by hash)
-                self.inst(&format!("push {}", tag));
+                self.b_push(tag);
 
                 // Hash: consumes 10, produces 5 (Digest)
-                self.inst("hash");
+                self.b_hash();
 
                 // Write the 5-element digest commitment
-                self.inst("write_io 5");
+                self.b_write_io(5);
             }
         }
     }
 
     fn emit_loop_subroutine(&mut self, label: &str, body: &Block, _var_name: &str) {
         self.emit_label(label);
-        self.inst("dup 0");
-        self.inst("push 0");
-        self.inst("eq");
-        self.inst("skiz");
-        self.inst("return");
-        self.inst("push -1");
-        self.inst("add");
+        self.b_dup(0);
+        self.b_push(0);
+        self.b_eq();
+        self.b_skiz();
+        self.b_return();
+        self.b_push_neg_one();
+        self.b_add();
 
         // Save and restore stack model since loop body is a separate context
         let saved = self.stack.save_state();
@@ -1630,7 +1674,7 @@ impl Emitter {
         self.emit_block(body);
         self.stack.restore_state(saved);
 
-        self.inst("recurse");
+        self.b_recurse();
         self.raw("");
     }
 
@@ -1638,10 +1682,12 @@ impl Emitter {
     fn emit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Literal(Literal::Integer(n)) => {
-                self.emit_and_push(&format!("push {}", n), 1);
+                let s = self.backend.inst_push(*n as u64);
+                self.emit_and_push(&s, 1);
             }
             Expr::Literal(Literal::Bool(b)) => {
-                self.emit_and_push(&format!("push {}", if *b { 1 } else { 0 }), 1);
+                let s = self.backend.inst_push(if *b { 1 } else { 0 });
+                self.emit_and_push(&s, 1);
             }
             Expr::Var(name) => {
                 if name.contains('.') {
@@ -1659,22 +1705,26 @@ impl Emitter {
                             self.stack.ensure_space(field_width);
                             self.flush_stack_effects();
                             for _ in 0..field_width {
-                                self.inst(&format!("dup {}", real_depth + field_width - 1));
+                                self.b_dup(real_depth + field_width - 1);
                             }
                             self.stack.push_temp(field_width);
                         } else {
                             let depth = base_depth;
-                            self.emit_and_push(&format!("dup {}", depth), 1);
+                            let s = self.backend.inst_dup(depth);
+                            self.emit_and_push(&s, 1);
                         }
                     } else {
                         // Module constant — look up value
                         if let Some(&val) = self.constants.get(name) {
-                            self.emit_and_push(&format!("push {}", val), 1);
+                            let s = self.backend.inst_push(val);
+                            self.emit_and_push(&s, 1);
                         } else if let Some(&val) = self.constants.get(suffix) {
-                            self.emit_and_push(&format!("push {}", val), 1);
+                            let s = self.backend.inst_push(val);
+                            self.emit_and_push(&s, 1);
                         } else {
                             self.inst(&format!("// ERROR: unresolved constant '{}'", name));
-                            self.emit_and_push("push 0", 1);
+                            let s = self.backend.inst_push(0);
+                            self.emit_and_push(&s, 1);
                         }
                     }
                 } else {
@@ -1698,7 +1748,7 @@ impl Emitter {
                             // dup (depth + width - 1) repeated `width` times
                             // copies the variable's elements bottom-to-top
                             for _ in 0..width {
-                                self.inst(&format!("dup {}", depth + width - 1));
+                                self.b_dup(depth + width - 1);
                             }
                         } else {
                             // Too deep — force spill of other variables
@@ -1710,21 +1760,21 @@ impl Emitter {
                             self.flush_stack_effects();
                             if depth2 + width - 1 <= 15 {
                                 for _ in 0..width {
-                                    self.inst(&format!("dup {}", depth2 + width - 1));
+                                    self.b_dup(depth2 + width - 1);
                                 }
                             } else {
                                 self.inst(&format!(
                                     "// BUG: variable '{}' unreachable (depth {}+{}), aborting",
                                     name, depth2, width
                                 ));
-                                self.inst("push 0");
-                                self.inst("assert"); // halt: stack depth exceeded
+                                self.b_push(0);
+                                self.b_assert(); // halt: stack depth exceeded
                             }
                         }
                         self.stack.push_temp(width);
                     } else {
                         // Variable not found — fallback
-                        self.inst("dup 0");
+                        self.b_dup(0);
                         self.stack.push_temp(1);
                     }
                 }
@@ -1733,14 +1783,14 @@ impl Emitter {
                 self.emit_expr(&lhs.node); // pushes temp for lhs
                 self.emit_expr(&rhs.node); // pushes temp for rhs
                 match op {
-                    BinOp::Add => self.inst("add"),
-                    BinOp::Mul => self.inst("mul"),
-                    BinOp::Eq => self.inst("eq"),
-                    BinOp::Lt => self.inst("lt"),
-                    BinOp::BitAnd => self.inst("and"),
-                    BinOp::BitXor => self.inst("xor"),
-                    BinOp::DivMod => self.inst("div_mod"),
-                    BinOp::XFieldMul => self.inst("xb_mul"),
+                    BinOp::Add => self.b_add(),
+                    BinOp::Mul => self.b_mul(),
+                    BinOp::Eq => self.b_eq(),
+                    BinOp::Lt => self.b_lt(),
+                    BinOp::BitAnd => self.b_and(),
+                    BinOp::BitXor => self.b_xor(),
+                    BinOp::DivMod => self.b_div_mod(),
+                    BinOp::XFieldMul => self.b_xb_mul(),
                 }
                 // Pop both temps, push result
                 self.stack.pop(); // rhs temp
@@ -1808,12 +1858,12 @@ impl Emitter {
                     if let Some((offset, field_width)) = field_offset {
                         // Dup the field from within the struct block on top of stack
                         for i in 0..field_width {
-                            self.inst(&format!("dup {}", offset + (field_width - 1 - i)));
+                            self.b_dup(offset + (field_width - 1 - i));
                         }
                         // Pop the struct temp, push field temp
                         self.stack.pop();
                         for _ in 0..field_width {
-                            self.inst(&format!("swap {}", field_width + struct_width - 1));
+                            self.b_swap(field_width + struct_width - 1);
                         }
                         self.emit_pop(struct_width);
                         self.stack.push_temp(field_width);
@@ -1846,11 +1896,11 @@ impl Emitter {
                         }
                         if let Some((from_top, fw)) = found {
                             for i in 0..fw {
-                                self.inst(&format!("dup {}", from_top + (fw - 1 - i)));
+                                self.b_dup(from_top + (fw - 1 - i));
                             }
                             self.stack.pop();
                             for _ in 0..fw {
-                                self.inst(&format!("swap {}", fw + struct_width - 1));
+                                self.b_swap(fw + struct_width - 1);
                             }
                             self.emit_pop(struct_width);
                             self.stack.push_temp(fw);
@@ -1879,12 +1929,12 @@ impl Emitter {
                         let base_offset = array_width - (idx + 1) * elem_width;
                         // Dup elem_width elements from within the array
                         for i in 0..elem_width {
-                            self.inst(&format!("dup {}", base_offset + (elem_width - 1 - i)));
+                            self.b_dup(base_offset + (elem_width - 1 - i));
                         }
                         // Pop the array, push the element
                         self.stack.pop();
                         for _ in 0..elem_width {
-                            self.inst(&format!("swap {}", elem_width + array_width - 1));
+                            self.b_swap(elem_width + array_width - 1);
                         }
                         self.emit_pop(array_width);
                         self.stack.push_temp(elem_width);
@@ -1908,39 +1958,39 @@ impl Emitter {
                         // Store array elements to RAM
                         // Stack has: [... array_elems index]
                         // Save index, store array, restore index
-                        self.inst("swap 1"); // move index below top array elem
+                        self.b_swap(1); // move index below top array elem
                         for i in 0..array_width {
                             let addr = base + i as u64;
-                            self.inst(&format!("push {}", addr));
-                            self.inst("swap 1");
-                            self.inst("write_mem 1");
-                            self.inst("pop 1");
+                            self.b_push(addr);
+                            self.b_swap(1);
+                            self.b_write_mem(1);
+                            self.b_pop(1);
                             if i + 1 < array_width {
-                                self.inst("swap 1"); // bring next array elem to top
+                                self.b_swap(1); // bring next array elem to top
                             }
                         }
                         // Stack now has: [... index]
 
                         // Compute target address: base + idx * elem_width
                         if elem_width > 1 {
-                            self.inst(&format!("push {}", elem_width));
-                            self.inst("mul");
+                            self.b_push(elem_width as u64);
+                            self.b_mul();
                         }
-                        self.inst(&format!("push {}", base));
-                        self.inst("add");
+                        self.b_push(base);
+                        self.b_add();
 
                         // Read elem_width elements from computed address
                         for i in 0..elem_width {
-                            self.inst("dup 0");
+                            self.b_dup(0);
                             if i > 0 {
-                                self.inst(&format!("push {}", i));
-                                self.inst("add");
+                                self.b_push(i as u64);
+                                self.b_add();
                             }
-                            self.inst("read_mem 1");
-                            self.inst("pop 1");
-                            self.inst("swap 1");
+                            self.b_read_mem(1);
+                            self.b_pop(1);
+                            self.b_swap(1);
                         }
-                        self.inst("pop 1"); // pop address
+                        self.b_pop(1); // pop address
 
                         self.stack.push_temp(elem_width);
                         self.flush_stack_effects();
@@ -1995,168 +2045,179 @@ impl Emitter {
         match effective_name {
             // I/O
             "pub_read" => {
-                self.emit_and_push("read_io 1", 1);
+                let s = self.backend.inst_read_io(1);
+                self.emit_and_push(&s, 1);
             }
             "pub_read2" => {
-                self.emit_and_push("read_io 2", 2);
+                let s = self.backend.inst_read_io(2);
+                self.emit_and_push(&s, 2);
             }
             "pub_read3" => {
-                self.emit_and_push("read_io 3", 3);
+                let s = self.backend.inst_read_io(3);
+                self.emit_and_push(&s, 3);
             }
             "pub_read4" => {
-                self.emit_and_push("read_io 4", 4);
+                let s = self.backend.inst_read_io(4);
+                self.emit_and_push(&s, 4);
             }
             "pub_read5" => {
-                self.emit_and_push("read_io 5", 5);
+                let s = self.backend.inst_read_io(5);
+                self.emit_and_push(&s, 5);
             }
             "pub_write" => {
-                self.inst("write_io 1");
+                self.b_write_io(1);
                 self.push_temp(0);
             }
             "pub_write2" => {
-                self.inst("write_io 2");
+                self.b_write_io(2);
                 self.push_temp(0);
             }
             "pub_write3" => {
-                self.inst("write_io 3");
+                self.b_write_io(3);
                 self.push_temp(0);
             }
             "pub_write4" => {
-                self.inst("write_io 4");
+                self.b_write_io(4);
                 self.push_temp(0);
             }
             "pub_write5" => {
-                self.inst("write_io 5");
+                self.b_write_io(5);
                 self.push_temp(0);
             }
 
             // Non-deterministic input
             "divine" => {
-                self.emit_and_push("divine 1", 1);
+                let s = self.backend.inst_divine(1);
+                self.emit_and_push(&s, 1);
             }
             "divine3" => {
-                self.emit_and_push("divine 3", 3);
+                let s = self.backend.inst_divine(3);
+                self.emit_and_push(&s, 3);
             }
             "divine5" => {
-                self.emit_and_push("divine 5", 5);
+                let s = self.backend.inst_divine(5);
+                self.emit_and_push(&s, 5);
             }
 
             // Assertions — consume arg, produce nothing
             "assert" => {
-                self.inst("assert");
+                self.b_assert();
                 self.push_temp(0);
             }
             "assert_eq" => {
-                self.inst("eq");
-                self.inst("assert");
+                self.b_eq();
+                self.b_assert();
                 self.push_temp(0);
             }
             "assert_digest" => {
-                self.inst("assert_vector");
-                self.inst("pop 5");
+                self.b_assert_vector();
+                self.b_pop(5);
                 self.push_temp(0);
             }
 
             // Field operations
             "field_add" => {
-                self.inst("add");
+                self.b_add();
                 self.push_temp(1);
             }
             "field_mul" => {
-                self.inst("mul");
+                self.b_mul();
                 self.push_temp(1);
             }
             "inv" => {
-                self.inst("invert");
+                self.b_invert();
                 self.push_temp(1);
             }
             "neg" => {
-                self.inst("push -1");
-                self.inst("mul");
+                self.b_push_neg_one();
+                self.b_mul();
                 self.push_temp(1);
             }
             "sub" => {
-                self.inst("push -1");
-                self.inst("mul");
-                self.inst("add");
+                self.b_push_neg_one();
+                self.b_mul();
+                self.b_add();
                 self.push_temp(1);
             }
 
             // U32 operations
             "split" => {
-                self.inst("split");
+                self.b_split();
                 self.push_temp(2);
             }
             "log2" => {
-                self.inst("log_2_floor");
+                self.b_log2();
                 self.push_temp(1);
             }
             "pow" => {
-                self.inst("pow");
+                self.b_pow();
                 self.push_temp(1);
             }
             "popcount" => {
-                self.inst("pop_count");
+                self.b_pop_count();
                 self.push_temp(1);
             }
 
             // Hash operations
             "hash" => {
-                self.inst("hash");
+                self.b_hash();
                 self.push_temp(5);
             }
             "sponge_init" => {
-                self.inst("sponge_init");
+                self.b_sponge_init();
                 self.push_temp(0);
             }
             "sponge_absorb" => {
-                self.inst("sponge_absorb");
+                self.b_sponge_absorb();
                 self.push_temp(0);
             }
             "sponge_squeeze" => {
-                self.emit_and_push("sponge_squeeze", 10);
+                let s = self.backend.inst_sponge_squeeze().to_string();
+                self.emit_and_push(&s, 10);
             }
             "sponge_absorb_mem" => {
-                self.inst("sponge_absorb_mem");
+                self.b_sponge_absorb_mem();
                 self.push_temp(0);
             }
 
             // Merkle
             "merkle_step" => {
-                self.emit_and_push("merkle_step", 6);
+                let s = self.backend.inst_merkle_step().to_string();
+                self.emit_and_push(&s, 6);
             }
             "merkle_step_mem" => {
-                self.emit_and_push("merkle_step_mem", 7);
+                let s = self.backend.inst_merkle_step_mem().to_string();
+                self.emit_and_push(&s, 7);
             }
 
             // RAM
             "ram_read" => {
-                self.inst("read_mem 1");
-                self.inst("pop 1");
+                self.b_read_mem(1);
+                self.b_pop(1);
                 self.push_temp(1);
             }
             "ram_write" => {
-                self.inst("write_mem 1");
-                self.inst("pop 1");
+                self.b_write_mem(1);
+                self.b_pop(1);
                 self.push_temp(0);
             }
             "ram_read_block" => {
                 // Read 5 consecutive elements (Digest-sized block)
-                self.inst("read_mem 5");
-                self.inst("pop 1");
+                self.b_read_mem(5);
+                self.b_pop(1);
                 self.push_temp(5);
             }
             "ram_write_block" => {
                 // Write 5 consecutive elements (Digest-sized block)
-                self.inst("write_mem 5");
-                self.inst("pop 1");
+                self.b_write_mem(5);
+                self.b_pop(1);
                 self.push_temp(0);
             }
 
             // Conversion
             "as_u32" => {
-                self.inst("split");
-                self.inst("pop 1");
+                self.b_split();
+                self.b_pop(1);
                 self.push_temp(1);
             }
             "as_field" => {
@@ -2168,14 +2229,16 @@ impl Emitter {
                 self.push_temp(3);
             }
             "xinvert" => {
-                self.inst("x_invert");
+                self.b_x_invert();
                 self.push_temp(3);
             }
             "xx_dot_step" => {
-                self.emit_and_push("xx_dot_step", 5);
+                let s = self.backend.inst_xx_dot_step().to_string();
+                self.emit_and_push(&s, 5);
             }
             "xb_dot_step" => {
-                self.emit_and_push("xb_dot_step", 5);
+                let s = self.backend.inst_xb_dot_step().to_string();
+                self.emit_and_push(&s, 5);
             }
 
             // User-defined function
@@ -2183,7 +2246,7 @@ impl Emitter {
                 // Check if this is a generic function call.
                 let is_generic = self.generic_fn_defs.contains_key(name);
 
-                let (call_inst, base_name) = if is_generic {
+                let (call_label, base_name) = if is_generic {
                     // Resolve size args: explicit from call site, current_subs
                     // for calls inside generic bodies, or call_resolutions
                     // from the type checker for inferred calls.
@@ -2234,7 +2297,7 @@ impl Emitter {
                     };
                     let mangled = inst.mangled_name();
                     let base = mangled.clone();
-                    (format!("call {}", mangled), base)
+                    (mangled, base)
                 } else if name.contains('.') {
                     // Cross-module call: "merkle.verify" → "call merkle__verify"
                     let parts: Vec<&str> = name.rsplitn(2, '.').collect();
@@ -2246,19 +2309,17 @@ impl Emitter {
                         .map(|s| s.as_str())
                         .unwrap_or(short_module);
                     let mangled = full_module.replace('.', "_");
-                    (
-                        format!("call {}__{}", mangled, fn_name),
-                        fn_name.to_string(),
-                    )
+                    (format!("{}__{}", mangled, fn_name), fn_name.to_string())
                 } else {
-                    (format!("call __{}", name), name.to_string())
+                    (format!("__{}", name), name.to_string())
                 };
                 let ret_width = self.fn_return_widths.get(&base_name).copied().unwrap_or(0);
+                let call_inst = self.backend.inst_call(&call_label);
                 if ret_width > 0 {
                     self.emit_and_push(&call_inst, ret_width);
                 } else {
                     // Void function — emit call but don't push a stack entry
-                    self.inst(&call_inst);
+                    self.b_call(&call_label);
                     self.push_temp(0);
                 }
             }
@@ -2377,7 +2438,7 @@ impl Emitter {
         let mut remaining = n;
         while remaining > 0 {
             let batch = remaining.min(5);
-            self.inst(&format!("pop {}", batch));
+            self.b_pop(batch);
             remaining -= batch;
         }
     }
@@ -2386,6 +2447,144 @@ impl Emitter {
         self.label_counter += 1;
         format!("__{}__{}", prefix, self.label_counter)
     }
+
+    // ── Backend-delegating instruction helpers ──────────────────────
+    fn b_push(&mut self, value: u64) {
+        let s = self.backend.inst_push(value);
+        self.inst(&s);
+    }
+    fn b_pop(&mut self, count: u32) {
+        let s = self.backend.inst_pop(count);
+        self.inst(&s);
+    }
+    fn b_dup(&mut self, depth: u32) {
+        let s = self.backend.inst_dup(depth);
+        self.inst(&s);
+    }
+    fn b_swap(&mut self, depth: u32) {
+        let s = self.backend.inst_swap(depth);
+        self.inst(&s);
+    }
+    fn b_push_neg_one(&mut self) {
+        self.inst(self.backend.inst_push_neg_one());
+    }
+    fn b_add(&mut self) {
+        self.inst(self.backend.inst_add());
+    }
+    fn b_mul(&mut self) {
+        self.inst(self.backend.inst_mul());
+    }
+    fn b_eq(&mut self) {
+        self.inst(self.backend.inst_eq());
+    }
+    fn b_lt(&mut self) {
+        self.inst(self.backend.inst_lt());
+    }
+    fn b_and(&mut self) {
+        self.inst(self.backend.inst_and());
+    }
+    fn b_xor(&mut self) {
+        self.inst(self.backend.inst_xor());
+    }
+    fn b_div_mod(&mut self) {
+        self.inst(self.backend.inst_div_mod());
+    }
+    fn b_xb_mul(&mut self) {
+        self.inst(self.backend.inst_xb_mul());
+    }
+    fn b_invert(&mut self) {
+        self.inst(self.backend.inst_invert());
+    }
+    fn b_x_invert(&mut self) {
+        self.inst(self.backend.inst_x_invert());
+    }
+    fn b_split(&mut self) {
+        self.inst(self.backend.inst_split());
+    }
+    fn b_log2(&mut self) {
+        self.inst(self.backend.inst_log2());
+    }
+    fn b_pow(&mut self) {
+        self.inst(self.backend.inst_pow());
+    }
+    fn b_pop_count(&mut self) {
+        self.inst(self.backend.inst_pop_count());
+    }
+    fn b_skiz(&mut self) {
+        self.inst(self.backend.inst_skiz());
+    }
+    fn b_assert(&mut self) {
+        self.inst(self.backend.inst_assert());
+    }
+    fn b_assert_vector(&mut self) {
+        self.inst(self.backend.inst_assert_vector());
+    }
+    fn b_hash(&mut self) {
+        self.inst(self.backend.inst_hash());
+    }
+    fn b_sponge_init(&mut self) {
+        self.inst(self.backend.inst_sponge_init());
+    }
+    fn b_sponge_absorb(&mut self) {
+        self.inst(self.backend.inst_sponge_absorb());
+    }
+    #[allow(dead_code)]
+    fn b_sponge_squeeze(&mut self) {
+        self.inst(self.backend.inst_sponge_squeeze());
+    }
+    fn b_sponge_absorb_mem(&mut self) {
+        self.inst(self.backend.inst_sponge_absorb_mem());
+    }
+    #[allow(dead_code)]
+    fn b_merkle_step(&mut self) {
+        self.inst(self.backend.inst_merkle_step());
+    }
+    #[allow(dead_code)]
+    fn b_merkle_step_mem(&mut self) {
+        self.inst(self.backend.inst_merkle_step_mem());
+    }
+    fn b_call(&mut self, label: &str) {
+        let s = self.backend.inst_call(label);
+        self.inst(&s);
+    }
+    fn b_return(&mut self) {
+        self.inst(self.backend.inst_return());
+    }
+    fn b_recurse(&mut self) {
+        self.inst(self.backend.inst_recurse());
+    }
+    #[allow(dead_code)]
+    fn b_read_io(&mut self, count: u32) {
+        let s = self.backend.inst_read_io(count);
+        self.inst(&s);
+    }
+    fn b_write_io(&mut self, count: u32) {
+        let s = self.backend.inst_write_io(count);
+        self.inst(&s);
+    }
+    #[allow(dead_code)]
+    fn b_divine(&mut self, count: u32) {
+        let s = self.backend.inst_divine(count);
+        self.inst(&s);
+    }
+    fn b_read_mem(&mut self, count: u32) {
+        let s = self.backend.inst_read_mem(count);
+        self.inst(&s);
+    }
+    fn b_write_mem(&mut self, count: u32) {
+        let s = self.backend.inst_write_mem(count);
+        self.inst(&s);
+    }
+    #[allow(dead_code)]
+    fn b_xx_dot_step(&mut self) {
+        self.inst(self.backend.inst_xx_dot_step());
+    }
+    #[allow(dead_code)]
+    fn b_xb_dot_step(&mut self) {
+        self.inst(self.backend.inst_xb_dot_step());
+    }
+
+    // ── Low-level output helpers ──────────────────────────────────
 
     fn inst(&mut self, instruction: &str) {
         self.output.push(format!("    {}", instruction));
