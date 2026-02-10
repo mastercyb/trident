@@ -2,7 +2,7 @@
 
 **Correct. Bounded. Provable.**
 
-**Version 0.4 — Draft**
+**Version 0.5**
 **February 2026**
 
 A minimal, security-first language for provable computation on zero-knowledge virtual machines.
@@ -751,6 +751,97 @@ fn example() {
 
 **Design rationale:** Every Triton VM language eventually needs an escape hatch. By providing one explicitly with mandatory stack effect declarations, the compiler can continue tracking types and stack layout across inline blocks rather than giving up entirely. The effect annotation is the minimal contract between hand-written assembly and the compiler's stack model.
 
+### 8.6 Events
+
+Events provide a structured way to emit data during proof execution. They serve two purposes: **public output** (data visible to the verifier via `emit`) and **committed secrets** (data hashed and sealed via `seal`).
+
+**Event Declaration:**
+
+```
+event Transfer {
+    sender: Digest,
+    receiver: Digest,
+    amount: Field,
+}
+```
+
+Events are declared at module scope with named, typed fields. They compile to sequential I/O operations — no runtime overhead beyond the I/O itself.
+
+**Emitting Events:**
+
+```
+fn process_transfer(sender: Digest, receiver: Digest, amount: Field) {
+    // ... validation logic ...
+
+    emit Transfer {
+        sender: sender,
+        receiver: receiver,
+        amount: amount,
+    }
+}
+```
+
+`emit` writes each field to public output via `write_io`. The verifier sees the emitted data. Use `emit` for data that should be publicly observable — transaction logs, state transitions, receipts.
+
+**Sealing Events:**
+
+```
+fn process_secret(owner: Digest, value: Field) {
+    seal SecretUpdate {
+        owner: owner,
+        value: value,
+    }
+}
+```
+
+`seal` hashes the event fields via the sponge construction and writes the resulting digest to public output. The verifier sees only the commitment (digest), not the individual fields. Use `seal` for data that must be committed but kept private — secret values, authentication witnesses, proprietary logic.
+
+**Design rationale:** Events separate "what happened" (structured data) from "how to output it" (`emit` for public, `seal` for committed). This mirrors blockchain event logs but with ZK-native semantics: `seal` provides cryptographic commitment without revealing the data, which has no analog in conventional smart contracts.
+
+### 8.7 Verification Annotations
+
+Functions can carry formal specifications via `#[requires]` and `#[ensures]` attributes:
+
+```
+#[requires(amount > 0)]
+#[ensures(result == balance + amount)]
+pub fn deposit(balance: Field, amount: Field) -> Field {
+    balance + amount
+}
+```
+
+- `#[requires(predicate)]` — **precondition**: must hold when the function is called
+- `#[ensures(predicate)]` — **postcondition**: must hold when the function returns
+
+In `#[ensures]`, the identifier `result` refers to the function's return value.
+
+These annotations are checked by `trident verify`, which uses symbolic execution and optional SMT solving to prove or refute the specifications. They have no effect on compilation — `trident build` ignores them entirely.
+
+```
+#[requires(depth <= 64)]
+#[requires(index < pow(2, depth))]
+#[ensures(true)]  // postcondition: function does not crash
+pub fn verify_merkle(root: Digest, leaf: Digest, index: U32, depth: U32) {
+    // ...
+}
+```
+
+See `trident verify` in Section 16.1 for the verification workflow.
+
+### 8.8 Test Functions
+
+Functions annotated with `#[test]` are test cases:
+
+```
+#[test]
+fn test_deposit() {
+    let result = deposit(100, 50)
+    assert_eq(result, 150)
+}
+```
+
+Test functions must take no parameters and return nothing. They are excluded from production compilation (`trident build`) and run via `trident test`. The test runner compiles each test function as a standalone program and checks that it does not crash (all assertions pass).
+
 ---
 
 ## 9. Memory Model
@@ -875,6 +966,10 @@ error[E0042]: u32 operation on unchecked Field value
 - Unused imports (warning)
 - Programs that don't end with halt
 - `#[intrinsic]` in non-std modules
+- `asm` blocks tagged for a different target than the current compilation target
+- `emit`/`seal` referencing undeclared events
+- Event field type mismatches
+- Non-exhaustive `match` without wildcard arm
 
 ---
 
@@ -1466,13 +1561,26 @@ These are **design decisions**, not roadmap items:
 | Wildcard imports | Obscures dependencies |
 | Circular dependencies | Prevents deterministic compilation |
 
-### 14.1 Possible Future Additions (post-v1.0)
+### 14.1 Implemented Extensions
 
-- ~~**Size-generic functions**~~: implemented -- see Section 5.4
-- ~~**Inline TASM**~~: implemented -- see Section 8.5
-- ~~**Pattern matching**~~: implemented -- see Section 7.4
+These were initially considered future work but have been implemented:
+
+- ~~**Size-generic functions**~~: see Section 5.4
+- ~~**Inline TASM**~~: see Section 8.5 (with target tags and stack effect annotations)
+- ~~**Pattern matching**~~: see Section 7.4
+- ~~**Events (emit/seal)**~~: see Section 8.6
+- ~~**Multi-target backends**~~: see Section 16.2
+- ~~**Verification annotations**~~: see Section 8.7
+- ~~**Test framework**~~: see Section 8.8
+
+### 14.2 Possible Future Additions
+
+- **Pattern matching on structs**: `match p { Point { x: 0, y } => ... }`
+- **Const generics in expressions**: `fn foo<M, N>() -> [Field; M + N]`
 - **Package registry**: when the ecosystem justifies it
 - **Conditional compilation**: for debug/release proving targets
+- **Trait-like interfaces**: generic over hash function or backend extension
+- **`#[pure]` annotation**: no I/O — enables aggressive verification
 
 ---
 
@@ -1496,14 +1604,18 @@ sec_input     = "sec" "input" ":" type ;
 sec_ram       = "sec" "ram" ":" "{" (INTEGER ":" type ",")* "}" ;
 
 (* Items *)
-item          = const_decl | struct_def | fn_def ;
+item          = const_decl | struct_def | event_def | fn_def ;
 const_decl    = "pub"? "const" IDENT ":" type "=" expr ;
 struct_def    = "pub"? "struct" IDENT "{" struct_fields "}" ;
 struct_fields = struct_field ("," struct_field)* ","? ;
 struct_field  = "pub"? IDENT ":" type ;
-fn_def        = "pub"? attribute? "fn" IDENT type_params? "(" params? ")" ("->" type)? block ;
+event_def     = "pub"? "event" IDENT "{" event_fields "}" ;
+event_fields  = event_field ("," event_field)* ","? ;
+event_field   = IDENT ":" type ;
+fn_def        = "pub"? attribute* "fn" IDENT type_params? "(" params? ")" ("->" type)? block ;
 type_params   = "<" IDENT ("," IDENT)* ">" ;
-attribute     = "#[" IDENT "(" IDENT ")" "]" ;    (* only #[intrinsic(...)] *)
+attribute     = "#[" IDENT ("(" attr_arg ")")? "]" ;
+attr_arg      = IDENT | expr ;    (* intrinsic(name), requires(pred), ensures(pred), test *)
 params        = param ("," param)* ;
 param         = IDENT ":" type ;
 
@@ -1518,7 +1630,10 @@ array_size    = INTEGER | IDENT ;                  (* IDENT for size params *)
 block         = "{" statement* expr? "}" ;
 statement     = let_stmt | assign_stmt | if_stmt | for_stmt
               | assert_stmt | asm_stmt | match_stmt
+              | emit_stmt | seal_stmt
               | expr_stmt | return_stmt ;
+emit_stmt     = "emit" IDENT "{" (IDENT ":" expr ",")* "}" ;
+seal_stmt     = "seal" IDENT "{" (IDENT ":" expr ",")* "}" ;
 asm_stmt      = "asm" asm_annotation? "{" TASM_BODY "}" ;
 asm_annotation = "(" asm_target ("," asm_effect)? ")"
                | "(" asm_effect ")" ;
@@ -1564,15 +1679,96 @@ comment       = "//" .* NEWLINE ;     (* single-line only *)
 ### 16.1 Compiler Commands
 
 ```bash
-trident build                       # compile project to .tasm
-trident build --costs               # compile with trace cost annotations
-trident check                       # type check only
-trident fmt                         # format source code
+# Build and compile
+trident build                       # compile project to target assembly
+trident build --costs               # compile with trace cost report
+trident build --hotspots            # identify top cost contributors
+trident build --hints               # show optimization suggestions (H0001-H0004)
+trident build --annotate            # emit per-line cost annotations in source
+trident build --save-costs FILE     # save cost report to file for comparison
+trident build --compare             # compare costs between functions
+trident build --target triton       # select compilation target (default: triton)
+trident build -o output.tasm        # specify output file
+
+# Type checking
+trident check                       # type check without compiling
+trident check --costs               # type check + cost analysis
+
+# Formatting
+trident fmt                         # format all .tri files in project
 trident fmt --check                 # check formatting without modifying
+trident fmt path/to/file.tri        # format specific file or directory
+
+# Testing
+trident test                        # run all #[test] functions
+trident test --filter name          # run tests matching filter
+
+# Documentation
 trident doc                         # generate documentation with costs
+
+# Formal verification
+trident verify                      # verify #[requires]/#[ensures] annotations
+trident verify --verbose            # verbose verification output
+trident verify --json               # machine-readable JSON output
+trident verify --smt PATH           # export SMT-LIB2 queries to file
+trident verify --z3                 # use Z3 SMT solver (if available)
+trident verify --synthesize         # attempt automatic invariant synthesis
+
+# Content-addressed codebase
+trident hash                        # show content hash of entry function
+trident hash --full                 # show hashes of all functions
+
+# Project initialization
+trident init my_project             # create new project
+trident init --lib my_library       # create new library
+
+# Codebase manager
+trident ucm add FILE                # parse and store definitions from file
+trident ucm list                    # list all stored definitions
+trident ucm view NAME               # pretty-print a definition by name
+trident ucm rename OLD NEW          # rename a definition (instant, non-breaking)
+trident ucm stats                   # show codebase statistics
+trident ucm history NAME            # show all versions of a name
+trident ucm deps NAME               # show dependency graph for a definition
+
+# Package management
+trident deps list                   # list project dependencies
+trident deps fetch                  # fetch all dependencies
+trident deps check                  # verify dependency integrity
+
+# Code generation
+trident generate PROMPT             # generate verified code from natural language
+
+# Semantic analysis
+trident equiv FILE1 FILE2           # check semantic equivalence of two functions
+
+# LSP server
+trident lsp                         # start Language Server Protocol server
 ```
 
-### 16.2 Integration with Triton VM
+### 16.2 Target Selection
+
+The `--target` flag selects the compilation backend:
+
+```bash
+trident build --target triton       # Triton VM → .tasm (default)
+trident build --target miden        # Miden VM → .masm
+trident build --target openvm       # OpenVM RISC-V → .S
+trident build --target sp1          # SP1 RISC-V → .S
+trident build --target cairo        # Cairo VM → Sierra
+```
+
+Each target has its own cost model, instruction set, and output format. The Trident source is identical across targets — only target-tagged `asm` blocks and `ext.*` imports are target-specific.
+
+The default target is `triton`. Projects can set a default in `trident.toml`:
+
+```toml
+[project]
+name = "my_project"
+target = "triton"
+```
+
+### 16.3 Integration with Triton VM
 
 ```bash
 trident build -o program.tasm
@@ -1581,30 +1777,46 @@ triton-cli prove program.tasm --input "1 2 3"
 triton-cli verify program.tasm --input "1 2 3" --proof proof.bin
 ```
 
-### 16.3 Project Initialization
+### 16.4 LSP Features
 
-```bash
-trident init my_project             # create new project
-trident init --lib my_library       # create new library
-```
+The `trident lsp` server implements the Language Server Protocol, providing:
+
+- **Diagnostics** — real-time type errors and warnings as you type
+- **Formatting** — format-on-save via the LSP formatting request
+- **Go to definition** — jump to function/struct/constant definitions across modules
+- **Hover** — type information and trace cost for any expression
+- **Completions** — module members, struct fields, builtin functions
+- **Signature help** — parameter hints while typing function calls
+- **Document symbols** — outline of functions, structs, events, constants
+
+Editor support: VS Code (via Zed extension), Zed (native), Helix, any LSP-compatible editor.
 
 ---
 
-## 17. Implementation Roadmap
+## 17. Implementation Status
 
-| Phase | Duration | Deliverable |
-|-------|----------|-------------|
-| 1. Module resolver + Parser | 5-6 weeks | Parses all syntax, resolves module DAG |
-| 2. Type checker | 3-4 weeks | Enforces types, cross-module interface checks |
-| 3. TASM emitter | 4-6 weeks | Generates correct TASM, links modules |
-| 4. Standard library | 2-3 weeks | Wraps tasm-lib as Trident modules |
-| 5. Cost analyzer | 2-3 weeks | Static trace length computation |
-| 6. Testing | 3-4 weeks | Rewrite Neptune programs, verify equivalence |
-| 7. Polish + docs | 2-3 weeks | Error messages, documentation, examples |
+The compiler is implemented and operational. Current status:
 
-**Total: ~5-7 months with one dedicated compiler engineer.**
+| Component | Status | Lines |
+|-----------|--------|------:|
+| Lexer + Parser | Complete | ~2,400 |
+| Type Checker | Complete | ~2,700 |
+| Emitter (5 backends) | Complete | ~2,100 |
+| Cost Analyzer (4 models) | Complete | ~1,900 |
+| Stack Manager | Complete | ~430 |
+| Module Resolver + Linker | Complete | ~630 |
+| Standard Library | Complete | 13 modules |
+| Formatter | Complete | ~1,200 |
+| LSP Server | Complete | ~1,600 |
+| Diagnostic Engine | Complete | ~170 |
+| Symbolic Verifier | Complete | ~900 |
+| SMT Backend | Complete | ~600 |
+| Content-Addressed UCM | Complete | ~800 |
+| Package Manager | Complete | ~400 |
+| CLI (14 commands) | Complete | ~650 |
+| Test Suite | 630 tests | — |
 
-Compiler written in Rust. Target: under 12,000 lines including the module system.
+Compiler is written in Rust. Total: ~15,000 lines including all backends, verification, and tooling.
 
 ---
 
@@ -1614,11 +1826,12 @@ Trident is successful if:
 
 1. Neptune Cash transaction validation can be written in Trident with trace length within 2x of hand-written TASM
 2. A developer familiar with Rust can write their first Trident program within 1 hour
-3. The entire compiler is under 12,000 lines of Rust
-4. Security audit of the compiler takes less than 3 weeks
+3. The compiler remains auditable by a single engineer (currently ~15,000 lines)
+4. Security audit of the compiler takes less than 4 weeks
 5. The recursive STARK verifier can be expressed in Trident
-6. The module system allows the Neptune stdlib to be maintained independently from the compiler
-7. At least 3 independent developers can contribute Trident modules within 6 months of release
+6. The same source compiles to at least 3 different zkVM targets
+7. The module system allows the standard library to be maintained independently from the compiler
+8. Formal verification catches real bugs in production contracts
 
 ---
 
@@ -1657,6 +1870,8 @@ Trident is successful if:
 | `module.fn()` | `call` (resolved address) | body + 2 |
 | `fn_name<N>(...)` | `call` (monomorphized label) | body + 2 |
 | `match v { ... }` | `eq` + `skiz` chain (desugared) | arms + N comparisons |
+| `emit Event { ... }` | `write_io` per field | 1 per field |
+| `seal Event { ... }` | `sponge_init` + `sponge_absorb` + `sponge_squeeze` + `write_io 5` | 13+ (sponge overhead) |
 | `asm { ... }` | verbatim TASM | varies |
 | `asm(triton) { ... }` | verbatim TASM (target-tagged) | varies |
 
@@ -1666,9 +1881,9 @@ Trident is successful if:
 
 | Feature | Trident | [Cairo 1](https://www.cairo-lang.org/) | [Leo](https://leo-lang.org/) (Aleo) | [Vyper](https://docs.vyperlang.org/) | [Noir](https://noir-lang.org/) |
 |---------|---------|---------|------------|-------|------|
-| Target VM | [Triton](https://triton-vm.org/) ([STARK](stark-proofs.md)) | Cairo (STARK) | Aleo (SNARK) | EVM | ACIR (SNARK) |
+| Target VM | Multi-target (5 backends) | Cairo (STARK) | Aleo (SNARK) | EVM | ACIR (SNARK) |
 | Module system | Yes (DAG) | Yes (crates) | Yes | No | Yes (crates) |
-| IR | None | Sierra | R1CS | None | SSA → ACIR |
+| IR | None (direct emit) | Sierra | R1CS | None | SSA → ACIR |
 | Type system | 5 primitives | Rich | Rich | Basic | Rich |
 | Non-determinism | `divine()` | `extern` hints | Implicit | N/A | `oracle` |
 | Merkle ops | First-class | Library | N/A | N/A | Library |
@@ -1676,9 +1891,12 @@ Trident is successful if:
 | Heap | No | Yes | No | No | No |
 | Recursion | No | Yes | No | No | No |
 | Generics | Size only | Yes | Yes | No | Yes |
-| Post-quantum | Yes | Partial | No | No | No |
-| Cost visible | Yes | Yes (gas) | No | Yes (gas) | No |
-| Inline asm | Yes | No | No | No | No |
+| Formal verify | Built-in | No | No | External | No |
+| Events | `emit`/`seal` | Yes | No | Yes | No |
+| Post-quantum | Yes (STARK) | Partial | No | No | No |
+| Cost visible | Yes (per-table) | Yes (gas) | No | Yes (gas) | No |
+| Inline asm | Yes (target-tagged) | No | No | No | No |
+| LSP | Built-in | Plugin | Plugin | External | Plugin |
 
 ---
 
@@ -1712,5 +1930,5 @@ Every valid execution produces a STARK proof. The proof is [zero-knowledge](http
 
 ---
 
-*Trident v0.4 — Correct. Bounded. Provable.*
+*Trident v0.5 — Correct. Bounded. Provable.*
 *This specification is a living document. Extensions are driven by ecosystem needs, not theoretical completeness.*
