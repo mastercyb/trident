@@ -47,7 +47,7 @@ Trident has five primitive types, all with known compile-time widths:
 
 ### Field
 
-The base type. A prime field element modulo p = 2^64 - 2^32 + 1 (the [Goldilocks prime](https://en.wikipedia.org/wiki/Goldilocks_(polynomial))). Supports `+`, `*`, `==`.
+The base type. A prime field element modulo p = 2^64 - 2^32 + 1 (the [Goldilocks prime](https://xn--2-umb.com/22/goldilocks/)). Supports `+`, `*`, `==`.
 
 ```
 let x: Field = 42

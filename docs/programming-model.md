@@ -311,7 +311,7 @@ auth.verify_preimage(expected_hash)
 ## Arithmetic
 
 All arithmetic in [Triton VM](https://triton-vm.org/) operates in the [prime field](https://en.wikipedia.org/wiki/Finite_field) with
-`p = 2^64 - 2^32 + 1` elements (the [Goldilocks prime](https://en.wikipedia.org/wiki/Goldilocks_(polynomial))). This means:
+`p = 2^64 - 2^32 + 1` elements (the [Goldilocks prime](https://xn--2-umb.com/22/goldilocks/)). This means:
 
 - Field elements range from 0 to p-1
 - Addition, multiplication wrap modulo p

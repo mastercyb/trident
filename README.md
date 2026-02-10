@@ -65,7 +65,7 @@ trident build hello.tri -o hello.tasm
 
 | Type | Width | Description |
 |------|-------|-------------|
-| `Field` | 1 | Base field element (mod p, [Goldilocks prime](https://en.wikipedia.org/wiki/Goldilocks_(polynomial)) p = 2^64 - 2^32 + 1) |
+| `Field` | 1 | Base field element (mod p, [Goldilocks prime](https://xn--2-umb.com/22/goldilocks/) p = 2^64 - 2^32 + 1) |
 | `XField` | 3 | Extension field element |
 | `Bool` | 1 | Boolean (0 or 1) |
 | `U32` | 1 | Unsigned 32-bit integer (range-checked) |
