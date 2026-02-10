@@ -10,7 +10,7 @@ are the remaining roadmap.
 - [ ] Rewrite Neptune transaction validation in Trident (target: < 2x hand-written TASM)
 - [x] Benchmark suite: Trident vs hand-optimized TASM for standard patterns
 - [x] Gadget library: SHA-256, Keccak (needed for bridge verification)
-- [ ] Recursive STARK verifier via `xx_dot_step` / `xb_dot_step` builtins
+- [x] Recursive STARK verifier via `xx_dot_step` / `xb_dot_step` builtins
 - [x] Language spec: clean up spec.md for public release (v0.5)
 - [ ] Landing page + web playground (compile .tri to TASM in browser)
 

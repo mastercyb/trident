@@ -2324,4 +2324,191 @@ fn main() {
             "formatted output should contain #[pure]"
         );
     }
+
+    #[test]
+    fn test_recursive_verifier_compiles() {
+        let path = std::path::Path::new("examples/neptune/recursive_verifier.tri");
+        if !path.exists() {
+            return; // skip if running from different cwd
+        }
+        let result = compile_project(path);
+        assert!(
+            result.is_ok(),
+            "recursive verifier should compile: {:?}",
+            result.err()
+        );
+        let tasm = result.unwrap();
+        assert!(
+            tasm.contains("xx_dot_step"),
+            "should emit xx_dot_step instruction"
+        );
+    }
+
+    #[test]
+    fn test_xfield_dot_step_intrinsics() {
+        let dir = tempfile::tempdir().unwrap();
+        // Write the entry program that uses xx_dot_step via ext.triton.xfield
+        let main_path = dir.path().join("main.tri");
+        std::fs::write(
+            &main_path,
+            r#"program test
+use ext.triton.xfield
+
+fn main() {
+    let ptr_a: Field = divine()
+    let ptr_b: Field = divine()
+    let result: Digest = xfield.xx_dot_step(0, 0, 0, ptr_a, ptr_b)
+    let (r0, r1, r2, r3, r4) = result
+    pub_write(r0)
+}
+"#,
+        )
+        .unwrap();
+        // Create ext/triton directory and copy xfield.tri
+        let ext_dir = dir.path().join("ext").join("triton");
+        std::fs::create_dir_all(&ext_dir).unwrap();
+        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+
+        let result = compile_project(&main_path);
+        assert!(
+            result.is_ok(),
+            "xx_dot_step intrinsic should compile: {:?}",
+            result.err()
+        );
+        let tasm = result.unwrap();
+        assert!(
+            tasm.contains("xx_dot_step"),
+            "emitted TASM should contain xx_dot_step"
+        );
+    }
+
+    #[test]
+    fn test_xb_dot_step_intrinsic() {
+        let dir = tempfile::tempdir().unwrap();
+        let main_path = dir.path().join("main.tri");
+        std::fs::write(
+            &main_path,
+            r#"program test
+use ext.triton.xfield
+
+fn main() {
+    let ptr_a: Field = divine()
+    let ptr_b: Field = divine()
+    let result: Digest = xfield.xb_dot_step(0, 0, 0, ptr_a, ptr_b)
+    let (r0, r1, r2, r3, r4) = result
+    pub_write(r0)
+}
+"#,
+        )
+        .unwrap();
+        let ext_dir = dir.path().join("ext").join("triton");
+        std::fs::create_dir_all(&ext_dir).unwrap();
+        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+
+        let result = compile_project(&main_path);
+        assert!(
+            result.is_ok(),
+            "xb_dot_step intrinsic should compile: {:?}",
+            result.err()
+        );
+        let tasm = result.unwrap();
+        assert!(
+            tasm.contains("xb_dot_step"),
+            "emitted TASM should contain xb_dot_step"
+        );
+    }
+
+    #[test]
+    fn test_xfe_inner_product_library() {
+        let dir = tempfile::tempdir().unwrap();
+        let main_path = dir.path().join("main.tri");
+        std::fs::write(
+            &main_path,
+            r#"program test
+use ext.triton.recursive
+
+fn main() {
+    let ptr_a: Field = divine()
+    let ptr_b: Field = divine()
+    let count: Field = divine()
+    let result: Digest = recursive.xfe_inner_product(ptr_a, ptr_b, count)
+    let (r0, r1, r2, r3, r4) = result
+    pub_write(r0)
+    pub_write(r1)
+    pub_write(r2)
+}
+"#,
+        )
+        .unwrap();
+        // Copy library files
+        let ext_dir = dir.path().join("ext").join("triton");
+        std::fs::create_dir_all(&ext_dir).unwrap();
+        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+        std::fs::copy("ext/triton/recursive.tri", ext_dir.join("recursive.tri"))
+            .unwrap_or_default();
+        // Copy std files that recursive.tri depends on
+        let std_io = dir.path().join("std").join("io");
+        let std_core = dir.path().join("std").join("core");
+        std::fs::create_dir_all(&std_io).unwrap();
+        std::fs::create_dir_all(&std_core).unwrap();
+        std::fs::copy("std/io/io.tri", std_io.join("io.tri")).unwrap_or_default();
+        std::fs::copy("std/core/assert.tri", std_core.join("assert.tri")).unwrap_or_default();
+
+        let result = compile_project(&main_path);
+        assert!(
+            result.is_ok(),
+            "xfe_inner_product should compile: {:?}",
+            result.err()
+        );
+        let tasm = result.unwrap();
+        assert!(
+            tasm.contains("xx_dot_step"),
+            "inner product should use xx_dot_step"
+        );
+    }
+
+    #[test]
+    fn test_xb_inner_product_library() {
+        let dir = tempfile::tempdir().unwrap();
+        let main_path = dir.path().join("main.tri");
+        std::fs::write(
+            &main_path,
+            r#"program test
+use ext.triton.recursive
+
+fn main() {
+    let ptr_a: Field = divine()
+    let ptr_b: Field = divine()
+    let count: Field = divine()
+    let result: Digest = recursive.xb_inner_product(ptr_a, ptr_b, count)
+    let (r0, r1, r2, r3, r4) = result
+    pub_write(r0)
+}
+"#,
+        )
+        .unwrap();
+        let ext_dir = dir.path().join("ext").join("triton");
+        std::fs::create_dir_all(&ext_dir).unwrap();
+        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+        std::fs::copy("ext/triton/recursive.tri", ext_dir.join("recursive.tri"))
+            .unwrap_or_default();
+        let std_io = dir.path().join("std").join("io");
+        let std_core = dir.path().join("std").join("core");
+        std::fs::create_dir_all(&std_io).unwrap();
+        std::fs::create_dir_all(&std_core).unwrap();
+        std::fs::copy("std/io/io.tri", std_io.join("io.tri")).unwrap_or_default();
+        std::fs::copy("std/core/assert.tri", std_core.join("assert.tri")).unwrap_or_default();
+
+        let result = compile_project(&main_path);
+        assert!(
+            result.is_ok(),
+            "xb_inner_product should compile: {:?}",
+            result.err()
+        );
+        let tasm = result.unwrap();
+        assert!(
+            tasm.contains("xb_dot_step"),
+            "xb inner product should use xb_dot_step"
+        );
+    }
 }
