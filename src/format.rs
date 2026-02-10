@@ -455,6 +455,31 @@ impl<'a> FormatCtx<'a> {
             Stmt::Seal { event_name, fields } => {
                 self.emit_event_stmt("seal", event_name, fields, indent, stmt.span.end);
             }
+            Stmt::Asm { body, effect } => {
+                self.output.push_str(indent);
+                self.output.push_str("asm");
+                if *effect != 0 {
+                    if *effect > 0 {
+                        self.output.push_str(&format!("(+{})", effect));
+                    } else {
+                        self.output.push_str(&format!("({})", effect));
+                    }
+                }
+                self.output.push_str(" {\n");
+                let inner = format!("{}{}", indent, INDENT);
+                for line in body.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        self.output.push('\n');
+                    } else {
+                        self.output.push_str(&inner);
+                        self.output.push_str(trimmed);
+                        self.output.push('\n');
+                    }
+                }
+                self.output.push_str(indent);
+                self.output.push_str("}\n");
+            }
         }
     }
 
@@ -1045,5 +1070,39 @@ fn main() {
         let first = fmt(src);
         let second = fmt(&first);
         assert_eq!(first, second, "token.tri formatting should be idempotent");
+    }
+
+    #[test]
+    fn test_asm_basic_formatting() {
+        let src = "program test\n\nfn main() {\n    asm {\n        push 1\n        add\n    }\n}\n";
+        assert_eq!(fmt(src), src);
+    }
+
+    #[test]
+    fn test_asm_positive_effect_formatting() {
+        let src = "program test\n\nfn main() {\n    asm(+1) {\n        push 42\n    }\n}\n";
+        assert_eq!(fmt(src), src);
+    }
+
+    #[test]
+    fn test_asm_negative_effect_formatting() {
+        let src =
+            "program test\n\nfn main() {\n    asm(-2) {\n        pop 1\n        pop 1\n    }\n}\n";
+        assert_eq!(fmt(src), src);
+    }
+
+    #[test]
+    fn test_asm_idempotent() {
+        let src = "program test\n\nfn main() {\n    let x: Field = pub_read()\n    asm {\n        dup 0\n        add\n    }\n    pub_write(x)\n}\n";
+        let first = fmt(src);
+        let second = fmt(&first);
+        assert_eq!(first, second, "asm formatting should be idempotent");
+    }
+
+    #[test]
+    fn test_asm_with_negative_literal() {
+        let src =
+            "program test\n\nfn main() {\n    asm {\n        push -1\n        mul\n    }\n}\n";
+        assert_eq!(fmt(src), src);
     }
 }

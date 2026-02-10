@@ -191,6 +191,20 @@ impl StackManager {
         std::mem::take(&mut self.side_effects)
     }
 
+    /// Spill every named variable on the operand stack to RAM.
+    /// Used before inline asm blocks to isolate the managed stack.
+    pub fn spill_all_named(&mut self) {
+        loop {
+            let has_named = self.on_stack.iter().any(|v| v.name.is_some());
+            if !has_named {
+                break;
+            }
+            if !self.spill_lru() {
+                break;
+            }
+        }
+    }
+
     /// Get all on-stack entries (for iteration).
     pub fn entries(&self) -> &[ManagedVar] {
         &self.on_stack
@@ -382,5 +396,39 @@ mod tests {
         // Digest with width 5 should have 5 write_mem instructions
         let write_count = effects.iter().filter(|l| l.contains("write_mem")).count();
         assert_eq!(write_count, 5, "expected 5 write_mem for Digest spill");
+    }
+
+    #[test]
+    fn test_spill_all_named() {
+        let mut sm = StackManager::new();
+        sm.push_named("a", 1);
+        sm.push_named("b", 1);
+        sm.push_named("c", 1);
+        sm.push_temp(1); // anonymous temp
+        assert_eq!(sm.stack_depth(), 4);
+
+        sm.spill_all_named();
+        let effects = sm.drain_side_effects();
+        // 3 named variables spilled → 3 write_mem instructions
+        let write_count = effects.iter().filter(|l| l.contains("write_mem")).count();
+        assert_eq!(write_count, 3, "expected 3 write_mem for 3 named vars");
+
+        // Only the anonymous temp should remain on stack
+        assert_eq!(sm.stack_len(), 1, "only anonymous temp should remain");
+        assert!(
+            sm.last().unwrap().name.is_none(),
+            "remaining entry should be anonymous"
+        );
+    }
+
+    #[test]
+    fn test_spill_all_named_empty() {
+        let mut sm = StackManager::new();
+        sm.push_temp(1);
+        sm.push_temp(1);
+        sm.spill_all_named();
+        let effects = sm.drain_side_effects();
+        assert!(effects.is_empty(), "no named vars → no spill");
+        assert_eq!(sm.stack_len(), 2);
     }
 }

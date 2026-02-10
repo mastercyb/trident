@@ -400,6 +400,19 @@ impl Parser {
                 stmts.push(self.parse_emit_stmt());
             } else if self.at(&Lexeme::Seal) {
                 stmts.push(self.parse_seal_stmt());
+            } else if matches!(self.peek(), Lexeme::AsmBlock { .. }) {
+                let start = self.current_span();
+                let tok = self.advance().clone();
+                if let Lexeme::AsmBlock { body, effect } = &tok.node {
+                    let span = start.merge(tok.span);
+                    stmts.push(Spanned::new(
+                        Stmt::Asm {
+                            body: body.clone(),
+                            effect: *effect,
+                        },
+                        span,
+                    ));
+                }
             } else {
                 // Parse as expression statement or tail expression
                 let expr = self.parse_expr();
@@ -1122,6 +1135,48 @@ mod tests {
             } else {
                 panic!("expected seal statement");
             }
+        }
+    }
+
+    #[test]
+    fn test_asm_basic() {
+        let file = parse("program test\nfn main() {\n    asm { dup 0\n    add }\n}");
+        if let Item::Fn(f) = &file.items[0].node {
+            let block = f.body.as_ref().unwrap();
+            assert_eq!(block.node.stmts.len(), 1);
+            if let Stmt::Asm { body, effect } = &block.node.stmts[0].node {
+                assert!(body.contains("dup 0"));
+                assert!(body.contains("add"));
+                assert_eq!(*effect, 0);
+            } else {
+                panic!("expected asm statement");
+            }
+        }
+    }
+
+    #[test]
+    fn test_asm_with_effect() {
+        let file = parse("program test\nfn main() {\n    asm(+1) { push 42 }\n}");
+        if let Item::Fn(f) = &file.items[0].node {
+            let block = f.body.as_ref().unwrap();
+            if let Stmt::Asm { effect, .. } = &block.node.stmts[0].node {
+                assert_eq!(*effect, 1);
+            } else {
+                panic!("expected asm statement");
+            }
+        }
+    }
+
+    #[test]
+    fn test_asm_between_statements() {
+        // pub_write(x) is the last expr before }, so it becomes tail_expr
+        let file = parse("program test\nfn main() {\n    let x: Field = pub_read()\n    asm { dup 0\nadd }\n    pub_write(x)\n}");
+        if let Item::Fn(f) = &file.items[0].node {
+            let block = f.body.as_ref().unwrap();
+            assert_eq!(block.node.stmts.len(), 2);
+            assert!(matches!(&block.node.stmts[0].node, Stmt::Let { .. }));
+            assert!(matches!(&block.node.stmts[1].node, Stmt::Asm { .. }));
+            assert!(block.node.tail_expr.is_some(), "pub_write(x) is tail expr");
         }
     }
 }

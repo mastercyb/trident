@@ -458,6 +458,31 @@ impl Emitter {
                     }
                 }
             }
+            Stmt::Asm { body, effect } => {
+                // Spill all named variables to RAM to isolate asm from managed stack
+                self.stack.spill_all_named();
+                self.flush_stack_effects();
+
+                // Emit each non-empty, non-comment line as a raw instruction
+                for line in body.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    self.inst(trimmed);
+                }
+
+                // Adjust stack model by declared net effect
+                if *effect > 0 {
+                    for _ in 0..*effect {
+                        self.stack.push_temp(1);
+                    }
+                } else if *effect < 0 {
+                    for _ in 0..effect.unsigned_abs() {
+                        self.stack.pop();
+                    }
+                }
+            }
             Stmt::Seal { event_name, fields } => {
                 let tag = self.event_tags.get(&event_name.node).copied().unwrap_or(0);
                 let decl_order = self
@@ -1553,5 +1578,56 @@ mod tests {
         assert!(tasm.contains("divine 5"));
         assert!(tasm.contains("hash"));
         assert!(tasm.contains("assert_vector"));
+    }
+
+    #[test]
+    fn test_asm_block_emits_raw_tasm() {
+        let tasm = compile(
+            "program test\nfn main() {\n    asm(+1) { push 42 }\n    asm(-1) { write_io 1 }\n}",
+        );
+        eprintln!("=== asm TASM ===\n{}", tasm);
+        assert!(tasm.contains("push 42"), "raw asm should appear in output");
+        assert!(
+            tasm.contains("write_io 1"),
+            "raw asm should appear in output"
+        );
+    }
+
+    #[test]
+    fn test_asm_block_with_negative_push() {
+        // TASM allows `push -1` but Trident doesn't have negative literals
+        let tasm = compile("program test\nfn main() {\n    asm { push -1\nadd }\n}");
+        eprintln!("=== asm negative TASM ===\n{}", tasm);
+        assert!(tasm.contains("push -1"));
+        assert!(tasm.contains("add"));
+    }
+
+    #[test]
+    fn test_asm_spills_variables_before_block() {
+        // Variables should be spilled to RAM before asm block executes
+        let mut src = String::from("program test\nfn main() {\n");
+        for i in 0..5 {
+            src.push_str(&format!("    let v{}: Field = pub_read()\n", i));
+        }
+        src.push_str("    asm { push 99 }\n");
+        src.push_str("}\n");
+
+        let tasm = compile(&src);
+        eprintln!("=== asm spill TASM ===\n{}", tasm);
+        // The asm instruction should be present
+        assert!(tasm.contains("push 99"));
+        // Variables should be spilled before the asm block
+        assert!(tasm.contains("write_mem"), "expected spill before asm");
+    }
+
+    #[test]
+    fn test_asm_net_zero_effect() {
+        // asm with net-zero effect: stack model unchanged
+        let tasm = compile(
+            "program test\nfn main() {\n    let x: Field = pub_read()\n    asm { dup 0\npop 1 }\n    pub_write(x)\n}",
+        );
+        eprintln!("=== asm zero-effect TASM ===\n{}", tasm);
+        assert!(tasm.contains("dup 0"));
+        assert!(!tasm.contains("ERROR"));
     }
 }

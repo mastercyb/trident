@@ -174,6 +174,10 @@ pub enum Stmt {
         event_name: Spanned<String>,
         fields: Vec<(Spanned<String>, Spanned<Expr>)>,
     },
+    Asm {
+        body: String,
+        effect: i32,
+    },
 }
 
 /// L-value places (can appear on left side of assignment).

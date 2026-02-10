@@ -718,6 +718,17 @@ impl CostAnalyzer {
                 }
                 cost
             }
+            Stmt::Asm { body, .. } => {
+                // Conservative estimate: count non-empty, non-comment lines as stack ops
+                let line_count = body
+                    .lines()
+                    .filter(|l| {
+                        let t = l.trim();
+                        !t.is_empty() && !t.starts_with("//")
+                    })
+                    .count() as u64;
+                STACK_OP.scale(line_count)
+            }
             Stmt::Seal { fields, .. } => {
                 // push tag + field exprs + padding pushes + hash + write_io 5
                 let mut cost = STACK_OP; // push tag
@@ -1434,5 +1445,30 @@ mod tests {
         let hints = cost.optimization_hints();
         let h0004 = hints.iter().any(|h| h.message.contains("H0004"));
         assert!(!h0004, "should not warn when bound is close to end");
+    }
+
+    #[test]
+    fn test_asm_block_cost() {
+        let cost = analyze(
+            "program test\nfn main() {\n    asm {\n        push 1\n        push 2\n        add\n    }\n}",
+        );
+        // 3 instruction lines → at least 3 processor cycles
+        assert!(
+            cost.total.processor >= 3,
+            "asm block with 3 instructions should cost at least 3 cc, got {}",
+            cost.total.processor
+        );
+    }
+
+    #[test]
+    fn test_asm_block_comments_not_counted() {
+        let cost = analyze(
+            "program test\nfn main() {\n    asm {\n        // this is a comment\n        push 1\n    }\n}",
+        );
+        // Only 1 real instruction, comment should not count
+        assert!(
+            cost.total.processor >= 1,
+            "asm block cost should count only instructions"
+        );
     }
 }

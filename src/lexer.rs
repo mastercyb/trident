@@ -111,8 +111,102 @@ impl<'src> Lexer<'src> {
             self.pos += 1;
         }
         let text = std::str::from_utf8(&self.source[start..self.pos]).unwrap();
+        if text == "asm" {
+            return self.scan_asm_block(start);
+        }
         let token = Lexeme::from_keyword(text).unwrap_or_else(|| Lexeme::Ident(text.to_string()));
         self.make_token(token, start, self.pos)
+    }
+
+    /// Scan an inline asm block: `asm { ... }` or `asm(+N) { ... }` or `asm(-N) { ... }`.
+    /// Collects the raw body between braces as a single token.
+    fn scan_asm_block(&mut self, start: usize) -> Spanned<Lexeme> {
+        // Skip whitespace
+        while self.pos < self.source.len() && self.source[self.pos].is_ascii_whitespace() {
+            self.pos += 1;
+        }
+
+        // Optional effect annotation: (+N) or (-N)
+        let mut effect: i32 = 0;
+        if self.pos < self.source.len() && self.source[self.pos] == b'(' {
+            self.pos += 1; // skip '('
+                           // Parse sign and digits
+            let neg = if self.pos < self.source.len() && self.source[self.pos] == b'-' {
+                self.pos += 1;
+                true
+            } else {
+                if self.pos < self.source.len() && self.source[self.pos] == b'+' {
+                    self.pos += 1;
+                }
+                false
+            };
+            let num_start = self.pos;
+            while self.pos < self.source.len() && self.source[self.pos].is_ascii_digit() {
+                self.pos += 1;
+            }
+            let num_text = std::str::from_utf8(&self.source[num_start..self.pos]).unwrap();
+            let n: i32 = num_text.parse().unwrap_or(0);
+            effect = if neg { -n } else { n };
+            // Expect ')'
+            if self.pos < self.source.len() && self.source[self.pos] == b')' {
+                self.pos += 1;
+            } else {
+                self.diagnostics.push(Diagnostic::error(
+                    "expected ')' after asm effect annotation".to_string(),
+                    Span::new(self.file_id, self.pos as u32, self.pos as u32),
+                ));
+            }
+            // Skip whitespace after annotation
+            while self.pos < self.source.len() && self.source[self.pos].is_ascii_whitespace() {
+                self.pos += 1;
+            }
+        }
+
+        // Expect '{'
+        if self.pos >= self.source.len() || self.source[self.pos] != b'{' {
+            self.diagnostics.push(Diagnostic::error(
+                "expected '{' after asm".to_string(),
+                Span::new(self.file_id, self.pos as u32, self.pos as u32),
+            ));
+            return self.make_token(
+                Lexeme::AsmBlock {
+                    body: String::new(),
+                    effect,
+                },
+                start,
+                self.pos,
+            );
+        }
+        self.pos += 1; // skip '{'
+
+        // Collect raw bytes until matching '}', tracking brace depth
+        let body_start = self.pos;
+        let mut depth = 1u32;
+        while self.pos < self.source.len() && depth > 0 {
+            match self.source[self.pos] {
+                b'{' => depth += 1,
+                b'}' => depth -= 1,
+                _ => {}
+            }
+            if depth > 0 {
+                self.pos += 1;
+            }
+        }
+        let body = std::str::from_utf8(&self.source[body_start..self.pos])
+            .unwrap()
+            .trim()
+            .to_string();
+
+        if self.pos < self.source.len() {
+            self.pos += 1; // skip closing '}'
+        } else {
+            self.diagnostics.push(Diagnostic::error(
+                "unterminated asm block".to_string(),
+                Span::new(self.file_id, start as u32, self.pos as u32),
+            ));
+        }
+
+        self.make_token(Lexeme::AsmBlock { body, effect }, start, self.pos)
     }
 
     fn scan_number(&mut self) -> Spanned<Lexeme> {
@@ -382,5 +476,76 @@ mod tests {
             tokens,
             vec![Lexeme::Event, Lexeme::Emit, Lexeme::Seal, Lexeme::Eof,]
         );
+    }
+
+    #[test]
+    fn test_asm_block_basic() {
+        let tokens = lex("asm { push 1\nadd }");
+        assert_eq!(
+            tokens,
+            vec![
+                Lexeme::AsmBlock {
+                    body: "push 1\nadd".to_string(),
+                    effect: 0,
+                },
+                Lexeme::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_asm_block_positive_effect() {
+        let tokens = lex("asm(+1) { push 42 }");
+        assert_eq!(
+            tokens,
+            vec![
+                Lexeme::AsmBlock {
+                    body: "push 42".to_string(),
+                    effect: 1,
+                },
+                Lexeme::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_asm_block_negative_effect() {
+        let tokens = lex("asm(-2) { pop 1\npop 1 }");
+        assert_eq!(
+            tokens,
+            vec![
+                Lexeme::AsmBlock {
+                    body: "pop 1\npop 1".to_string(),
+                    effect: -2,
+                },
+                Lexeme::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_asm_block_with_negative_literal() {
+        // Raw TASM can contain `push -1` which is NOT valid Trident
+        let tokens = lex("asm { push -1\nadd }");
+        assert_eq!(
+            tokens,
+            vec![
+                Lexeme::AsmBlock {
+                    body: "push -1\nadd".to_string(),
+                    effect: 0,
+                },
+                Lexeme::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_asm_block_in_function() {
+        // fn main() { asm { ... } }
+        // Tokens: Fn, Ident("main"), LParen, RParen, LBrace, AsmBlock, RBrace, Eof
+        let tokens = lex("fn main() {\n    asm { dup 0\nadd }\n}");
+        assert_eq!(tokens[0], Lexeme::Fn);
+        assert!(matches!(tokens[5], Lexeme::AsmBlock { .. }));
+        assert_eq!(tokens[6], Lexeme::RBrace);
     }
 }

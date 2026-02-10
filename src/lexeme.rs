@@ -60,6 +60,9 @@ pub enum Lexeme {
     Integer(u64),
     Ident(String),
 
+    // Inline assembly
+    AsmBlock { body: String, effect: i32 },
+
     // End of file
     Eof,
 }
@@ -151,6 +154,7 @@ impl Lexeme {
             Lexeme::Underscore => "'_'",
             Lexeme::Integer(_) => "integer literal",
             Lexeme::Ident(_) => "identifier",
+            Lexeme::AsmBlock { .. } => "asm block",
             Lexeme::Eof => "end of file",
         }
     }

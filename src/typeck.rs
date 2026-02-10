@@ -401,6 +401,7 @@ impl TypeChecker {
                     Self::collect_calls_expr(&val.node, calls);
                 }
             }
+            Stmt::Asm { .. } => {}
         }
     }
 
@@ -445,6 +446,7 @@ impl TypeChecker {
                     Self::collect_used_modules_expr(&val.node, used);
                 }
             }
+            Stmt::Asm { .. } => {}
         }
     }
 
@@ -818,6 +820,7 @@ impl TypeChecker {
             Stmt::Emit { event_name, fields } | Stmt::Seal { event_name, fields } => {
                 self.check_event_stmt(event_name, fields);
             }
+            Stmt::Asm { .. } => {}
         }
     }
 
@@ -1830,5 +1833,21 @@ mod tests {
         let exports = result.unwrap();
         let h0003 = exports.warnings.iter().any(|w| w.message.contains("H0003"));
         assert!(!h0003, "should not warn on first as_u32 call");
+    }
+
+    #[test]
+    fn test_asm_block_type_checks() {
+        // asm blocks should pass type checking without errors
+        let result = check(
+            "program test\nfn main() {\n    let x: Field = pub_read()\n    asm { dup 0\nadd }\n    pub_write(x)\n}",
+        );
+        assert!(result.is_ok(), "asm block should not cause type errors");
+    }
+
+    #[test]
+    fn test_asm_block_with_effect() {
+        let result =
+            check("program test\nfn main() {\n    asm(+1) { push 42 }\n    asm(-1) { pop 1 }\n}");
+        assert!(result.is_ok(), "asm with effect should type check");
     }
 }
