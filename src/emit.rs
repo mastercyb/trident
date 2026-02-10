@@ -769,7 +769,7 @@ impl Emitter {
                 // Stack order: push in reverse so first element is deepest
 
                 // Push zero padding first (deepest)
-                let padding = 10 - 1 - num_fields; // 1 for tag
+                let padding = 9usize.saturating_sub(num_fields); // 10 elements minus 1 tag minus fields
                 for _ in 0..padding {
                     self.inst("push 0");
                 }
@@ -894,10 +894,11 @@ impl Emitter {
                                 }
                             } else {
                                 self.inst(&format!(
-                                    "// ERROR: variable '{}' unreachable \
-                                     (depth {}+{})",
+                                    "// BUG: variable '{}' unreachable (depth {}+{}), aborting",
                                     name, depth2, width
                                 ));
+                                self.inst("push 0");
+                                self.inst("assert"); // halt: stack depth exceeded
                             }
                         }
                         self.stack.push_temp(width);

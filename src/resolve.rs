@@ -182,6 +182,19 @@ impl ModuleResolver {
     /// "crypto.sponge" → root_dir/crypto/sponge.tri
     /// "merkle" → root_dir/merkle.tri
     fn resolve_path(&self, module_name: &str) -> PathBuf {
+        // Validate: reject path traversal components
+        let raw_parts: Vec<&str> = module_name.split('.').collect();
+        for part in &raw_parts {
+            if part.is_empty()
+                || *part == ".."
+                || part.starts_with('.')
+                || part.contains('/')
+                || part.contains('\\')
+            {
+                return self.root_dir.join("<invalid-module-name>");
+            }
+        }
+
         // Standard library modules resolve from stdlib_dir
         if let Some(rest) = module_name.strip_prefix("std.") {
             if let Some(ref stdlib_dir) = self.stdlib_dir {
@@ -386,6 +399,34 @@ mod tests {
         assert!(has_help, "module-not-found error should have help text");
 
         // Cleanup
+        let _ = std::fs::remove_file(&entry);
+    }
+
+    #[test]
+    fn test_path_traversal_rejected() {
+        // A module name with ".." should not escape the project directory
+        let dir = std::env::temp_dir().join("trident_test_traversal");
+        let _ = std::fs::create_dir_all(&dir);
+        let entry = dir.join("test_traversal.tri");
+        std::fs::write(
+            &entry,
+            "program test_traversal\nuse ....etc.passwd\nfn main() {}\n",
+        )
+        .unwrap();
+
+        let result = resolve_modules(&entry);
+        assert!(result.is_err(), "path traversal module should fail");
+        let diags = result.unwrap_err();
+        // Should get a "cannot find module" error, NOT actually read outside project
+        let has_error = diags
+            .iter()
+            .any(|d| d.message.contains("cannot find module"));
+        assert!(
+            has_error,
+            "should report module not found, got: {:?}",
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+
         let _ = std::fs::remove_file(&entry);
     }
 }

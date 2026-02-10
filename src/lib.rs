@@ -1994,6 +1994,46 @@ fn main() {
     // --- Comparison formatting integration test ---
 
     #[test]
+    fn test_error_max_nesting_depth() {
+        // Generate deeply nested blocks via nested if statements.
+        // Each `if true { ... }` adds one nesting level; 260 > MAX_NESTING_DEPTH (256).
+        // The parser recurses to depth 256 before the guard triggers, which
+        // needs more stack than the default test-thread provides in debug
+        // builds.  Run the actual work on a thread with an explicit 16 MB stack.
+        let handle = std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024)
+            .spawn(|| {
+                let depth = 260u32;
+                let mut src = String::from("program t\nfn main() {\n");
+                for _ in 0..depth {
+                    src.push_str("if true {\n");
+                }
+                src.push_str("pub_write(0)\n");
+                for _ in 0..depth {
+                    src.push_str("}\n");
+                }
+                src.push_str("}\n");
+
+                let (tokens, _comments, lex_errs) = crate::lexer::Lexer::new(&src, 0).tokenize();
+                assert!(lex_errs.is_empty(), "lex errors: {:?}", lex_errs);
+                let result = crate::parser::Parser::new(tokens).parse_file();
+                assert!(
+                    result.is_err(),
+                    "deeply nested input should produce an error"
+                );
+                let diags = result.unwrap_err();
+                let has_depth = diags.iter().any(|d| d.message.contains("nesting depth"));
+                assert!(
+                    has_depth,
+                    "should report nesting depth exceeded, got: {:?}",
+                    diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+                );
+            })
+            .expect("failed to spawn test thread");
+        handle.join().expect("test thread panicked");
+    }
+
+    #[test]
     fn test_comparison_formatting_integration() {
         let source_v1 =
             "program test\nfn main() {\n    let x: Field = pub_read()\n    pub_write(x)\n}";

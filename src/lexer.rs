@@ -46,29 +46,34 @@ impl<'src> Lexer<'src> {
     }
 
     fn next_token(&mut self) -> Spanned<Lexeme> {
-        self.skip_whitespace_and_comments();
+        loop {
+            self.skip_whitespace_and_comments();
 
-        if self.pos >= self.source.len() {
-            return self.make_token(Lexeme::Eof, self.pos, self.pos);
+            if self.pos >= self.source.len() {
+                return self.make_token(Lexeme::Eof, self.pos, self.pos);
+            }
+
+            let start = self.pos;
+            let ch = self.source[self.pos];
+
+            self.token_on_line = true;
+
+            // Identifiers and keywords
+            if is_ident_start(ch) {
+                return self.scan_ident_or_keyword();
+            }
+
+            // Integer literals
+            if ch.is_ascii_digit() {
+                return self.scan_number();
+            }
+
+            // Symbols
+            if let Some(tok) = self.scan_symbol(start) {
+                return tok;
+            }
+            // scan_symbol returned None → error was recorded, try again
         }
-
-        let start = self.pos;
-        let ch = self.source[self.pos];
-
-        self.token_on_line = true;
-
-        // Identifiers and keywords
-        if is_ident_start(ch) {
-            return self.scan_ident_or_keyword();
-        }
-
-        // Integer literals
-        if ch.is_ascii_digit() {
-            return self.scan_number();
-        }
-
-        // Symbols
-        self.scan_symbol(start)
     }
 
     fn skip_whitespace_and_comments(&mut self) {
@@ -241,7 +246,7 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    fn scan_symbol(&mut self, start: usize) -> Spanned<Lexeme> {
+    fn scan_symbol(&mut self, start: usize) -> Option<Spanned<Lexeme>> {
         let ch = self.source[self.pos];
         self.pos += 1;
 
@@ -281,7 +286,7 @@ impl<'src> Lexer<'src> {
                         )
                         .with_help("use the `sub(a, b)` function instead of `a - b`".to_string()),
                     );
-                    return self.next_token();
+                    return None;
                 }
             }
             b'=' => {
@@ -318,7 +323,7 @@ impl<'src> Lexer<'src> {
                                 .to_string(),
                         ),
                     );
-                    return self.next_token();
+                    return None;
                 }
             }
             b'_' => {
@@ -326,7 +331,7 @@ impl<'src> Lexer<'src> {
                 if self.pos < self.source.len() && is_ident_continue(self.source[self.pos]) {
                     // Back up and scan as identifier
                     self.pos = start;
-                    return self.scan_ident_or_keyword();
+                    return Some(self.scan_ident_or_keyword());
                 }
                 Lexeme::Underscore
             }
@@ -340,11 +345,11 @@ impl<'src> Lexer<'src> {
                         "this character is not recognized as part of Trident syntax".to_string(),
                     ),
                 );
-                return self.next_token();
+                return None;
             }
         };
 
-        self.make_token(token, start, self.pos)
+        Some(self.make_token(token, start, self.pos))
     }
 
     fn peek(&self) -> Option<u8> {

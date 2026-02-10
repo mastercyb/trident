@@ -3,10 +3,13 @@ use crate::diagnostic::Diagnostic;
 use crate::lexeme::Lexeme;
 use crate::span::{Span, Spanned};
 
+const MAX_NESTING_DEPTH: u32 = 256;
+
 pub struct Parser {
     tokens: Vec<Spanned<Lexeme>>,
     pos: usize,
     diagnostics: Vec<Diagnostic>,
+    depth: u32,
 }
 
 impl Parser {
@@ -15,7 +18,24 @@ impl Parser {
             tokens,
             pos: 0,
             diagnostics: Vec::new(),
+            depth: 0,
         }
+    }
+
+    fn enter_nesting(&mut self) -> bool {
+        self.depth += 1;
+        if self.depth > MAX_NESTING_DEPTH {
+            self.error_with_help(
+                "nesting depth exceeded (maximum 256 levels)",
+                "simplify your program by extracting deeply nested code into functions",
+            );
+            return false;
+        }
+        true
+    }
+
+    fn exit_nesting(&mut self) {
+        self.depth -= 1;
     }
 
     pub fn parse_file(mut self) -> Result<File, Vec<Diagnostic>> {
@@ -458,6 +478,22 @@ impl Parser {
     // --- Block and statement parsing ---
 
     fn parse_block(&mut self) -> Spanned<Block> {
+        if !self.enter_nesting() {
+            let span = self.current_span();
+            // Skip to EOF to abort parsing entirely — the nesting
+            // depth error has already been recorded.
+            while !self.at(&Lexeme::Eof) {
+                self.advance();
+            }
+            return Spanned::new(
+                Block {
+                    stmts: Vec::new(),
+                    tail_expr: None,
+                },
+                span,
+            );
+        }
+
         let start = self.current_span();
         self.expect(&Lexeme::LBrace);
 
@@ -533,6 +569,7 @@ impl Parser {
         let end = self.current_span();
         self.expect(&Lexeme::RBrace);
         let span = start.merge(end);
+        self.exit_nesting();
         Spanned::new(Block { stmts, tail_expr }, span)
     }
 
