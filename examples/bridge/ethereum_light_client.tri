@@ -1,0 +1,542 @@
+program ethereum_light_client
+
+// ======================================================
+// Ethereum PoS Light Client Bridge Validator
+//
+// Verifies Ethereum beacon chain state inside a ZK circuit,
+// enabling trustless bridging from Ethereum to the host chain.
+//
+// Architecture — Optimistic Bridge Pattern:
+//   BLS12-381 pairing verification is too expensive in-circuit.
+//   Instead, the prover supplies the aggregated attestation result
+//   and signer count. The circuit verifies:
+//     1. Structural commitments (header hash, committee root)
+//     2. Sync committee 2/3 supermajority threshold
+//     3. SSZ Merkle proofs for state/account/storage
+//     4. Finality checkpoint linkage
+//
+// Public inputs:
+//   - Trusted header commitment (previous epoch)
+//   - New header commitment (to be verified)
+//   - Finalized checkpoint root
+//   - State proof target (account + storage slot)
+//   - Bridged value (the storage value being relayed)
+//
+// Secret inputs (divine):
+//   - Header fields, committee data, Merkle siblings,
+//     account fields, storage proof nodes
+//
+// Ops: verify_header (0), verify_sync (1),
+//      verify_state (2), verify_finality (3), full (4)
+// ======================================================
+// --- Events ---
+event HeaderVerified {
+    slot: Field,
+    header_root: Digest,
+}
+
+event SyncCommitteeAttested {
+    signer_count: Field,
+    committee_size: Field,
+    committee_root: Digest,
+}
+
+event StateProofVerified {
+    state_root: Digest,
+    account_hash: Digest,
+    storage_value: Field,
+}
+
+event FinalityConfirmed {
+    finalized_slot: Field,
+    finalized_root: Digest,
+    justified_root: Digest,
+}
+
+// ======================================================
+// Hashing helpers
+// ======================================================
+// Hash a beacon block header into a single commitment digest.
+// Fields: slot, proposer_index, parent_root(5), state_root(5),
+//         body_root(5) — we pack into two hash rounds.
+fn hash_header_lower(
+    slot: Field,
+    proposer_index: Field,
+    parent_root: Digest
+) -> Digest {
+    let (p0, p1, p2, p3, p4) = parent_root
+    hash(slot, proposer_index, p0, p1, p2, p3, p4, 0, 0, 0)
+}
+
+fn hash_header_upper(state_root: Digest, body_root: Digest) -> Digest {
+    let (s0, s1, s2, s3, s4) = state_root
+    let (b0, b1, b2, b3, b4) = body_root
+    hash(s0, s1, s2, s3, s4, b0, b1, b2, b3, b4)
+}
+
+fn hash_header(
+    slot: Field,
+    proposer_index: Field,
+    parent_root: Digest,
+    state_root: Digest,
+    body_root: Digest
+) -> Digest {
+    let lower: Digest = hash_header_lower(slot, proposer_index, parent_root)
+    let upper: Digest = hash_header_upper(state_root, body_root)
+    let (l0, l1, l2, l3, l4) = lower
+    let (u0, u1, u2, u3, u4) = upper
+    hash(l0, l1, l2, l3, l4, u0, u1, u2, u3, u4)
+}
+
+// Hash an account record: nonce, balance, storage_root(5),
+// code_hash(5) — packed into two rounds then combined.
+fn hash_account(
+    nonce: Field,
+    balance: Field,
+    storage_root: Digest,
+    code_hash: Digest
+) -> Digest {
+    let (sr0, sr1, sr2, sr3, sr4) = storage_root
+    let (ch0, ch1, ch2, ch3, ch4) = code_hash
+    let part_a: Digest = hash(nonce, balance, sr0, sr1, sr2, sr3, sr4, 0, 0, 0)
+    let (a0, a1, a2, a3, a4) = part_a
+    hash(a0, a1, a2, a3, a4, ch0, ch1, ch2, ch3, ch4)
+}
+
+// Hash a finality checkpoint: epoch + root(5).
+fn hash_checkpoint(epoch: Field, root: Digest) -> Digest {
+    let (r0, r1, r2, r3, r4) = root
+    hash(epoch, r0, r1, r2, r3, r4, 0, 0, 0, 0)
+}
+
+// ======================================================
+// SSZ Merkle proof verification
+// ======================================================
+// Verify a single step of an SSZ Merkle proof.
+// direction == 0 → sibling is on the right; else left.
+fn merkle_step(current: Digest, sibling: Digest, direction: Field) -> Digest {
+    let (c0, c1, c2, c3, c4) = current
+    let (s0, s1, s2, s3, s4) = sibling
+    if direction == 0 {
+        hash(c0, c1, c2, c3, c4, s0, s1, s2, s3, s4)
+    } else {
+        hash(s0, s1, s2, s3, s4, c0, c1, c2, c3, c4)
+    }
+}
+
+// Verify an SSZ Merkle proof of `depth` steps.
+// The prover supplies sibling hashes and direction bits.
+// Generalized index encodes the path from root to leaf:
+// bit i of the index gives the direction at depth i.
+fn verify_merkle_proof(leaf: Digest, expected_root: Digest, depth: Field) {
+    let mut current: Digest = leaf
+    for i in 0..depth bounded 64 {
+        let sibling: Digest = divine5()
+        let direction: Field = divine()
+        current = merkle_step(current, sibling, direction)
+    }
+    assert_digest(current, expected_root)
+}
+
+// ======================================================
+// Op 0: Beacon block header verification
+// ======================================================
+// Pub: expected header commitment
+// Sec: slot, proposer_index, parent_root, state_root, body_root
+fn verify_header() {
+    let expected_commitment: Digest = pub_read5()
+    // Divine the header fields from the prover.
+    let slot: Field = divine()
+    let proposer_index: Field = divine()
+    let parent_root: Digest = divine5()
+    let state_root: Digest = divine5()
+    let body_root: Digest = divine5()
+    // Recompute header commitment and verify.
+    let computed: Digest = hash_header(
+        slot,
+        proposer_index,
+        parent_root,
+        state_root,
+        body_root
+    )
+    assert_digest(computed, expected_commitment)
+    // Range-check slot and proposer_index fit in 32 bits.
+    let _slot_u32: U32 = as_u32(slot)
+    let _prop_u32: U32 = as_u32(proposer_index)
+    // Write verified header root as public output.
+    let (h0, h1, h2, h3, h4) = computed
+    pub_write(h0)
+    pub_write(h1)
+    pub_write(h2)
+    pub_write(h3)
+    pub_write(h4)
+    emit HeaderVerified { slot: slot, header_root: computed }
+}
+
+// ======================================================
+// Op 1: Sync committee attestation verification
+// ======================================================
+// Pub: header commitment, committee root
+// Sec: signer_count, committee_size, attestation_root
+//
+// Optimistic pattern: the prover asserts the BLS aggregation
+// result. The circuit enforces the 2/3 threshold and binds
+// the attestation to the header + committee commitments.
+fn verify_sync() {
+    let header_commitment: Digest = pub_read5()
+    let committee_root: Digest = pub_read5()
+    // Prover supplies attestation details.
+    let signer_count: Field = divine()
+    let committee_size: Field = divine()
+    let attestation_root: Digest = divine5()
+    // --- 2/3 supermajority threshold ---
+    // signer_count * 3 >= committee_size * 2
+    let lhs: Field = signer_count * 3
+    let rhs: Field = committee_size * 2
+    let margin: Field = sub(lhs, rhs)
+    // margin >= 0 (fits in u32 means non-negative)
+    let _margin_check: U32 = as_u32(margin)
+    // Committee size must be the standard 512.
+    assert_eq(committee_size, 512)
+    // Signer count must be positive and within committee size.
+    let _sc_check: U32 = as_u32(signer_count)
+    let sc_upper: Field = sub(committee_size, signer_count)
+    let _sc_upper_check: U32 = as_u32(sc_upper)
+    // Bind attestation to header: the attestation root must
+    // commit to both the header and the committee.
+    let (h0, h1, h2, h3, h4) = header_commitment
+    let (c0, c1, c2, c3, c4) = committee_root
+    let binding: Digest = hash(h0, h1, h2, h3, h4, c0, c1, c2, c3, c4)
+    // Verify the attestation root encodes the binding and signer count.
+    let (b0, b1, b2, b3, b4) = binding
+    let (a0, a1, a2, a3, a4) = attestation_root
+    let expected_att: Digest = hash(
+        b0,
+        b1,
+        b2,
+        b3,
+        b4,
+        signer_count,
+        committee_size,
+        0,
+        0,
+        0
+    )
+    assert_digest(expected_att, attestation_root)
+    // Public output: signer ratio for the relayer.
+    pub_write(signer_count)
+    pub_write(committee_size)
+    emit SyncCommitteeAttested { 
+        signer_count: signer_count,
+        committee_size: committee_size,
+        committee_root: committee_root,
+    }
+}
+
+// ======================================================
+// Op 2: State proof verification (account + storage)
+// ======================================================
+// Pub: state_root, account_address_hash, storage_slot_hash,
+//      expected_storage_value
+// Sec: account fields, Merkle siblings for both proofs
+//
+// Two-layer proof:
+//   1. Account proof: leaf = account hash, root = state_root
+//   2. Storage proof: leaf = storage value hash, root = account.storage_root
+fn verify_state() {
+    let state_root: Digest = pub_read5()
+    let account_address_hash: Field = pub_read()
+    let storage_slot_hash: Field = pub_read()
+    let expected_storage_value: Field = pub_read()
+    // --- Divine account fields ---
+    let acct_nonce: Field = divine()
+    let acct_balance: Field = divine()
+    let acct_storage_root: Digest = divine5()
+    let acct_code_hash: Digest = divine5()
+    // Compute account leaf hash.
+    let account_leaf: Digest = hash_account(
+        acct_nonce,
+        acct_balance,
+        acct_storage_root,
+        acct_code_hash
+    )
+    // Depth of account trie proof (divined by prover).
+    let account_proof_depth: Field = divine()
+    let _apd_check: U32 = as_u32(account_proof_depth)
+    // Verify account exists in the state trie.
+    verify_merkle_proof(account_leaf, state_root, account_proof_depth)
+    // --- Storage proof ---
+    // The storage value is hashed to form the leaf.
+    let storage_leaf: Digest = hash(
+        expected_storage_value,
+        storage_slot_hash,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+    )
+    // Depth of storage trie proof (divined by prover).
+    let storage_proof_depth: Field = divine()
+    let _spd_check: U32 = as_u32(storage_proof_depth)
+    // Verify storage slot exists in the account's storage trie.
+    verify_merkle_proof(storage_leaf, acct_storage_root, storage_proof_depth)
+    // Write the verified storage value as public output.
+    pub_write(expected_storage_value)
+    emit StateProofVerified { 
+        state_root: state_root,
+        account_hash: account_leaf,
+        storage_value: expected_storage_value,
+    }
+}
+
+// ======================================================
+// Op 3: Finality verification
+// ======================================================
+// Pub: header commitment, expected finalized epoch
+// Sec: header fields, finalized checkpoint, justified checkpoint,
+//      Merkle proof from state_root to finalized_checkpoint
+//
+// Verifies that the finalized_checkpoint in the beacon state
+// matches the expected finalized block, confirming irreversibility.
+fn verify_finality() {
+    let header_commitment: Digest = pub_read5()
+    let expected_finalized_epoch: Field = pub_read()
+    // --- Divine and verify header ---
+    let slot: Field = divine()
+    let proposer_index: Field = divine()
+    let parent_root: Digest = divine5()
+    let state_root: Digest = divine5()
+    let body_root: Digest = divine5()
+    let computed_header: Digest = hash_header(
+        slot,
+        proposer_index,
+        parent_root,
+        state_root,
+        body_root
+    )
+    assert_digest(computed_header, header_commitment)
+    // --- Finalized checkpoint ---
+    let finalized_epoch: Field = divine()
+    let finalized_root: Digest = divine5()
+    // The finalized epoch must match what the relayer claims.
+    assert_eq(finalized_epoch, expected_finalized_epoch)
+    // Finalized epoch must not exceed the current slot's epoch.
+    // Ethereum epochs are 32 slots each. slot / 32 >= finalized_epoch.
+    // We check: slot >= finalized_epoch * 32.
+    let epoch_start_slot: Field = finalized_epoch * 32
+    let slot_margin: Field = sub(slot, epoch_start_slot)
+    let _slot_margin_check: U32 = as_u32(slot_margin)
+    // Compute finalized checkpoint commitment.
+    let finalized_cp: Digest = hash_checkpoint(finalized_epoch, finalized_root)
+    // --- Justified checkpoint (required for Casper FFG) ---
+    let justified_epoch: Field = divine()
+    let justified_root: Digest = divine5()
+    let justified_cp: Digest = hash_checkpoint(justified_epoch, justified_root)
+    // Justified epoch must be >= finalized epoch.
+    let just_margin: Field = sub(justified_epoch, finalized_epoch)
+    let _just_margin_check: U32 = as_u32(just_margin)
+    // --- Merkle proof: finalized checkpoint lives in the state ---
+    // The finalized_checkpoint is at a known generalized index in
+    // the BeaconState SSZ tree. Prover supplies the Merkle path.
+    let finality_proof_depth: Field = divine()
+    let _fpd_check: U32 = as_u32(finality_proof_depth)
+    // Combine both checkpoints as the leaf being proven.
+    let (fc0, fc1, fc2, fc3, fc4) = finalized_cp
+    let (jc0, jc1, jc2, jc3, jc4) = justified_cp
+    let checkpoints_leaf: Digest = hash(
+        fc0,
+        fc1,
+        fc2,
+        fc3,
+        fc4,
+        jc0,
+        jc1,
+        jc2,
+        jc3,
+        jc4
+    )
+    verify_merkle_proof(checkpoints_leaf, state_root, finality_proof_depth)
+    // Public output: finalized root for downstream consumers.
+    let (fr0, fr1, fr2, fr3, fr4) = finalized_root
+    pub_write(fr0)
+    pub_write(fr1)
+    pub_write(fr2)
+    pub_write(fr3)
+    pub_write(fr4)
+    emit FinalityConfirmed { 
+        finalized_slot: epoch_start_slot,
+        finalized_root: finalized_root,
+        justified_root: justified_root,
+    }
+}
+
+// ======================================================
+// Op 4: Full bridge validation pipeline
+// ======================================================
+// Runs all four verification steps in sequence, binding them
+// together through shared commitments. This is the main entry
+// point for a complete bridge relay proof.
+//
+// Pub: trusted_header, new_header, committee_root,
+//      state_root, account_address_hash, storage_slot_hash,
+//      expected_storage_value, expected_finalized_epoch
+fn full_bridge_verify() {
+    // --- Step 1: Verify the new beacon block header ---
+    let new_header_commitment: Digest = pub_read5()
+    let slot: Field = divine()
+    let proposer_index: Field = divine()
+    let parent_root: Digest = divine5()
+    let state_root: Digest = divine5()
+    let body_root: Digest = divine5()
+    let computed_header: Digest = hash_header(
+        slot,
+        proposer_index,
+        parent_root,
+        state_root,
+        body_root
+    )
+    assert_digest(computed_header, new_header_commitment)
+    let _slot_u32: U32 = as_u32(slot)
+    let _prop_u32: U32 = as_u32(proposer_index)
+    emit HeaderVerified { slot: slot, header_root: computed_header }
+    // --- Step 2: Verify sync committee attested to this header ---
+    let committee_root: Digest = pub_read5()
+    let signer_count: Field = divine()
+    let committee_size: Field = divine()
+    let attestation_root: Digest = divine5()
+    // 2/3 supermajority.
+    let lhs: Field = signer_count * 3
+    let rhs: Field = committee_size * 2
+    let margin: Field = sub(lhs, rhs)
+    let _margin_check: U32 = as_u32(margin)
+    assert_eq(committee_size, 512)
+    let _sc_check: U32 = as_u32(signer_count)
+    let sc_upper: Field = sub(committee_size, signer_count)
+    let _sc_upper_check: U32 = as_u32(sc_upper)
+    // Bind attestation to header + committee.
+    let (h0, h1, h2, h3, h4) = new_header_commitment
+    let (c0, c1, c2, c3, c4) = committee_root
+    let binding: Digest = hash(h0, h1, h2, h3, h4, c0, c1, c2, c3, c4)
+    let (b0, b1, b2, b3, b4) = binding
+    let expected_att: Digest = hash(
+        b0,
+        b1,
+        b2,
+        b3,
+        b4,
+        signer_count,
+        committee_size,
+        0,
+        0,
+        0
+    )
+    assert_digest(expected_att, attestation_root)
+    emit SyncCommitteeAttested { 
+        signer_count: signer_count,
+        committee_size: committee_size,
+        committee_root: committee_root,
+    }
+    // --- Step 3: Verify state proof (account + storage) ---
+    let account_address_hash: Field = pub_read()
+    let storage_slot_hash: Field = pub_read()
+    let expected_storage_value: Field = pub_read()
+    let acct_nonce: Field = divine()
+    let acct_balance: Field = divine()
+    let acct_storage_root: Digest = divine5()
+    let acct_code_hash: Digest = divine5()
+    let account_leaf: Digest = hash_account(
+        acct_nonce,
+        acct_balance,
+        acct_storage_root,
+        acct_code_hash
+    )
+    let account_proof_depth: Field = divine()
+    let _apd_check: U32 = as_u32(account_proof_depth)
+    verify_merkle_proof(account_leaf, state_root, account_proof_depth)
+    let storage_leaf: Digest = hash(
+        expected_storage_value,
+        storage_slot_hash,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+    )
+    let storage_proof_depth: Field = divine()
+    let _spd_check: U32 = as_u32(storage_proof_depth)
+    verify_merkle_proof(storage_leaf, acct_storage_root, storage_proof_depth)
+    emit StateProofVerified { 
+        state_root: state_root,
+        account_hash: account_leaf,
+        storage_value: expected_storage_value,
+    }
+    // --- Step 4: Verify finality ---
+    let expected_finalized_epoch: Field = pub_read()
+    let finalized_epoch: Field = divine()
+    let finalized_root: Digest = divine5()
+    assert_eq(finalized_epoch, expected_finalized_epoch)
+    let epoch_start_slot: Field = finalized_epoch * 32
+    let slot_margin: Field = sub(slot, epoch_start_slot)
+    let _slot_margin_check: U32 = as_u32(slot_margin)
+    let finalized_cp: Digest = hash_checkpoint(finalized_epoch, finalized_root)
+    let justified_epoch: Field = divine()
+    let justified_root: Digest = divine5()
+    let justified_cp: Digest = hash_checkpoint(justified_epoch, justified_root)
+    let just_margin: Field = sub(justified_epoch, finalized_epoch)
+    let _just_margin_check: U32 = as_u32(just_margin)
+    let finality_proof_depth: Field = divine()
+    let _fpd_check: U32 = as_u32(finality_proof_depth)
+    let (fc0, fc1, fc2, fc3, fc4) = finalized_cp
+    let (jc0, jc1, jc2, jc3, jc4) = justified_cp
+    let checkpoints_leaf: Digest = hash(
+        fc0,
+        fc1,
+        fc2,
+        fc3,
+        fc4,
+        jc0,
+        jc1,
+        jc2,
+        jc3,
+        jc4
+    )
+    verify_merkle_proof(checkpoints_leaf, state_root, finality_proof_depth)
+    emit FinalityConfirmed { 
+        finalized_slot: epoch_start_slot,
+        finalized_root: finalized_root,
+        justified_root: justified_root,
+    }
+    // --- Public outputs: bridged value + finalized root ---
+    pub_write(expected_storage_value)
+    let (fr0, fr1, fr2, fr3, fr4) = finalized_root
+    pub_write(fr0)
+    pub_write(fr1)
+    pub_write(fr2)
+    pub_write(fr3)
+    pub_write(fr4)
+}
+
+// ======================================================
+// Entry point — dispatch by operation code
+// ======================================================
+fn main() {
+    let op: Field = pub_read()
+    if op == 0 {
+        verify_header()
+    } else if op == 1 {
+        verify_sync()
+    } else if op == 2 {
+        verify_state()
+    } else if op == 3 {
+        verify_finality()
+    } else if op == 4 {
+        full_bridge_verify()
+    }
+}
