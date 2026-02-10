@@ -3,6 +3,7 @@ pub mod cache;
 pub mod cost;
 pub mod diagnostic;
 pub mod emit;
+pub mod equiv;
 pub mod format;
 #[allow(dead_code)]
 pub mod hash;

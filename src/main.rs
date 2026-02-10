@@ -154,6 +154,18 @@ enum Command {
         #[command(subcommand)]
         action: UcmAction,
     },
+    /// Check semantic equivalence of two functions
+    Equiv {
+        /// Input .tri file containing both functions
+        input: PathBuf,
+        /// First function name
+        fn_a: String,
+        /// Second function name
+        fn_b: String,
+        /// Show detailed symbolic analysis
+        #[arg(long)]
+        verbose: bool,
+    },
     /// Start the Language Server Protocol server
     Lsp,
 }
@@ -236,12 +248,18 @@ fn main() {
             smt,
             z3,
             json,
-        } => cmd_verify(input, verbose, smt, z3, json),
+} => cmd_verify(input, verbose, smt, z3, json),
         Command::Hash { input, full } => cmd_hash(input, full),
         Command::Bench { dir } => cmd_bench(dir),
         Command::Generate { input, output } => cmd_generate(input, output),
         Command::View { name, input, full } => cmd_view(name, input, full),
         Command::Ucm { action } => cmd_ucm(action),
+        Command::Equiv {
+            input,
+            fn_a,
+            fn_b,
+            verbose,
+        } => cmd_equiv(input, &fn_a, &fn_b, verbose),
         Command::Lsp => cmd_lsp(),
     }
 }
@@ -1519,6 +1537,67 @@ fn cmd_ucm_deps(name: String) {
         eprintln!("\nUsed by:");
         for (dep_name, dep_hash) in &dependents {
             println!("  {}  {}", dep_hash, dep_name);
+        }
+    }
+}
+
+// --- trident equiv ---
+
+fn cmd_equiv(input: PathBuf, fn_a: &str, fn_b: &str, verbose: bool) {
+    if !input.extension().is_some_and(|e| e == "tri") {
+        eprintln!("error: input must be a .tri file");
+        process::exit(1);
+    }
+
+    let source = match std::fs::read_to_string(&input) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read '{}': {}", input.display(), e);
+            process::exit(1);
+        }
+    };
+
+    let filename = input.to_string_lossy().to_string();
+    let file = match trident::parse_source_silent(&source, &filename) {
+        Ok(f) => f,
+        Err(errors) => {
+            trident::diagnostic::render_diagnostics(&errors, &filename, &source);
+            eprintln!("error: parse errors in '{}'", input.display());
+            process::exit(1);
+        }
+    };
+
+    eprintln!(
+        "Checking equivalence: {} vs {} in {}",
+        fn_a,
+        fn_b,
+        input.display()
+    );
+
+    if verbose {
+        // Show content hashes for both functions.
+        let fn_hashes = trident::hash::hash_file(&file);
+        if let Some(h) = fn_hashes.get(fn_a) {
+            eprintln!("  {} hash: {}", fn_a, h);
+        }
+        if let Some(h) = fn_hashes.get(fn_b) {
+            eprintln!("  {} hash: {}", fn_b, h);
+        }
+    }
+
+    let result = trident::equiv::check_equivalence(&file, fn_a, fn_b);
+
+    eprintln!("\n{}", result.format_report());
+
+    match result.verdict {
+        trident::equiv::EquivalenceVerdict::Equivalent => {
+            // Success exit code.
+        }
+        trident::equiv::EquivalenceVerdict::NotEquivalent => {
+            process::exit(1);
+        }
+        trident::equiv::EquivalenceVerdict::Unknown => {
+            process::exit(2);
         }
     }
 }
