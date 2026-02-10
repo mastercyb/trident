@@ -392,7 +392,7 @@ impl SymExecutor {
                 let value = self.eval_expr(&init.node);
                 match pattern {
                     Pattern::Name(name) => {
-                        let var = self.fresh_var(&name.node);
+                        let _var = self.fresh_var(&name.node);
                         self.env.insert(name.node.clone(), value.clone());
                         // If mutable, we track the name for SSA versioning
                         if *mutable {
@@ -673,7 +673,7 @@ impl SymExecutor {
                 return SymValue::Var(var);
             }
             "hash" | "tip5" => {
-                let inputs: Vec<SymValue> = args.iter().map(|a| self.eval_expr(&a.node)).collect();
+                let _inputs: Vec<SymValue> = args.iter().map(|a| self.eval_expr(&a.node)).collect();
                 let var = self.fresh_var("__hash");
                 return SymValue::Var(var);
             }
@@ -770,7 +770,7 @@ impl SymExecutor {
     }
 
     /// Project element `i` from a tuple-like symbolic value.
-    fn project_tuple(&mut self, val: &SymValue, i: usize) -> SymValue {
+    fn project_tuple(&mut self, _val: &SymValue, i: usize) -> SymValue {
         // For now, each projection creates a fresh variable linked to the source
         let var = self.fresh_var(&format!("__proj_{}", i));
         SymValue::Var(var)

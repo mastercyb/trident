@@ -10,6 +10,7 @@ pub mod lsp;
 pub mod parser;
 pub mod project;
 pub mod resolve;
+pub mod solve;
 pub mod span;
 pub mod stack;
 pub mod sym;
