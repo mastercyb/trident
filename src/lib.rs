@@ -12,6 +12,7 @@ pub mod project;
 pub mod resolve;
 pub mod span;
 pub mod stack;
+pub mod sym;
 pub mod target;
 pub mod typeck;
 pub mod types;
