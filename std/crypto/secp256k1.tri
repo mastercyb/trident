@@ -1,0 +1,301 @@
+module std.crypto.secp256k1
+
+// secp256k1 elliptic curve operations for ZK proofs.
+//
+// The secp256k1 curve is used in Bitcoin and Ethereum. Its equation is:
+//     y^2 = x^3 + 7   (mod p)
+// where p = 2^256 - 2^32 - 977.
+//
+// All field arithmetic is done over U256 using the bigint module.
+// Point multiplication and full modular reduction are marked as TODOs
+// since they require either Barrett/Montgomery reduction or witness-based
+// verification patterns (divine the result, verify the constraint).
+use std.crypto.bigint
+
+use std.core.convert
+
+// A point on the secp256k1 curve in affine coordinates.
+// The point at infinity (identity) is represented as (0, 0), which is
+// not on the curve y^2 = x^3 + 7, so it is unambiguous.
+pub struct Point {
+    x: bigint.U256,
+    y: bigint.U256,
+}
+
+// ---------------------------------------------------------------------------
+// Curve constants
+// ---------------------------------------------------------------------------
+// The secp256k1 field prime: p = 2^256 - 2^32 - 977
+// = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
+//
+// Limbs (little-endian U32):
+//   l0 = 0xFFFFFC2F = 4294966319
+//   l1 = 0xFFFFFFFE = 4294967294
+//   l2 = 0xFFFFFFFF = 4294967295
+//   l3 = 0xFFFFFFFF = 4294967295
+//   l4 = 0xFFFFFFFF = 4294967295
+//   l5 = 0xFFFFFFFF = 4294967295
+//   l6 = 0xFFFFFFFF = 4294967295
+//   l7 = 0xFFFFFFFF = 4294967295
+pub fn field_prime() -> bigint.U256 {
+    bigint.U256 { l0: convert.as_u32(4294966319), l1: convert.as_u32(4294967294), l2: convert.as_u32(4294967295), l3: convert.as_u32(4294967295), l4: convert.as_u32(4294967295), l5: convert.as_u32(4294967295), l6: convert.as_u32(4294967295), l7: convert.as_u32(4294967295) }
+}
+
+// The curve order: n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+//
+// Limbs (little-endian U32):
+//   l0 = 0xD0364141 = 3493216577
+//   l1 = 0xBFD25E8C = 3218235020
+//   l2 = 0xAF48A03B = 2940343355
+//   l3 = 0xBAAEDCE6 = 3132675814
+//   l4 = 0xFFFFFFFE = 4294967294
+//   l5 = 0xFFFFFFFF = 4294967295
+//   l6 = 0xFFFFFFFF = 4294967295
+//   l7 = 0xFFFFFFFF = 4294967295
+pub fn curve_order() -> bigint.U256 {
+    bigint.U256 { l0: convert.as_u32(3493216577), l1: convert.as_u32(3218235020), l2: convert.as_u32(2940343355), l3: convert.as_u32(3132675814), l4: convert.as_u32(4294967294), l5: convert.as_u32(4294967295), l6: convert.as_u32(4294967295), l7: convert.as_u32(4294967295) }
+}
+
+// Generator point G for secp256k1.
+// Gx = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798
+// Gy = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A6855419E3611342DBE4F8E4
+pub fn generator() -> Point {
+    let gx: bigint.U256 = bigint.U256 { l0: convert.as_u32(385357848), l1: convert.as_u32(1508515163), l2: convert.as_u32(769304793), l3: convert.as_u32(43804891), l4: convert.as_u32(3464365831), l5: convert.as_u32(1436269205), l6: convert.as_u32(4192901036), l7: convert.as_u32(2043936894) }
+    // Gx limbs (little-endian)
+    //   0x16F81798 = 385357848
+    //   0x59F2815B = 1508515163
+    //   0x2DCE28D9 = 769304793
+    //   0x029BFCDB = 43804891
+    //   0xCE870B07 = 3464365831
+    //   0x55A06295 = 1436269205
+    //   0xF9DCBBAC = 4192901036
+    //   0x79BE667E = 2043936894
+    let gy: bigint.U256 = bigint.U256 { l0: convert.as_u32(3689778404), l1: convert.as_u32(3815017282), l2: convert.as_u32(2794056729), l3: convert.as_u32(4246237256), l4: convert.as_u32(235930792), l5: convert.as_u32(1571797500), l6: convert.as_u32(649247845), l7: convert.as_u32(1211900535) }
+    // Gy limbs (little-endian)
+    //   0xDBE4F8E4 = 3689778404
+    //   0xE3611342 = 3815017282
+    //   0xA6855419 = 2794056729
+    //   0xFD17B448 = 4246237256
+    //   0x0E1108A8 = 235930792
+    //   0x5DA4FBFC = 1571797500
+    //   0x26A3C465 = 649247845
+    //   0x483ADA77 = 1211900535
+    Point { x: gx, y: gy }
+}
+
+// The secp256k1 curve constant b = 7.
+fn curve_b() -> bigint.U256 {
+    let z: U32 = convert.as_u32(0)
+    bigint.U256 { l0: convert.as_u32(7), l1: z, l2: z, l3: z, l4: z, l5: z, l6: z, l7: z }
+}
+
+// ---------------------------------------------------------------------------
+// Point operations
+// ---------------------------------------------------------------------------
+// Point at infinity (identity element) -- represented as (0, 0).
+pub fn identity() -> Point {
+    Point { x: bigint.zero256(), y: bigint.zero256() }
+}
+
+// Check if a point is the identity (point at infinity).
+pub fn is_identity(p: Point) -> Bool {
+    if bigint.is_zero(p.x) {
+        bigint.is_zero(p.y)
+    } else {
+        false
+    }
+}
+
+// Verify that a point lies on the curve: y^2 = x^3 + 7 (mod p).
+//
+// Computes both sides of the curve equation using modular arithmetic
+// and checks equality. The identity point (0,0) is considered valid
+// by convention even though it does not satisfy the equation.
+pub fn on_curve(p: Point) -> Bool {
+    if is_identity(p) {
+        true
+    } else {
+        let prime: bigint.U256 = field_prime()
+        // Compute y^2 mod p
+        let y_sq: bigint.U256 = bigint.mul_mod(p.y, p.y, prime)
+        // Compute x^2 mod p
+        let x_sq: bigint.U256 = bigint.mul_mod(p.x, p.x, prime)
+        // Compute x^3 mod p = x^2 * x mod p
+        let x_cubed: bigint.U256 = bigint.mul_mod(x_sq, p.x, prime)
+        // Compute x^3 + 7 mod p
+        let b: bigint.U256 = curve_b()
+        let rhs: bigint.U256 = bigint.add_mod(x_cubed, b, prime)
+        // Check y^2 == x^3 + 7 (mod p)
+        // TODO: mul_mod currently uses only low-256-bit multiplication;
+        // for full correctness, requires proper modular reduction
+        bigint.eq256(y_sq, rhs)
+    }
+}
+
+// Negate a point: -(x, y) = (x, p - y).
+pub fn negate(p: Point) -> Point {
+    if is_identity(p) {
+        p
+    } else {
+        let prime: bigint.U256 = field_prime()
+        let neg_y: bigint.U256 = bigint.sub256(prime, p.y)
+        Point { x: p.x, y: neg_y }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Point addition (affine coordinates)
+// ---------------------------------------------------------------------------
+// Add two points on the curve.
+//
+// Standard affine addition formulas:
+//   If P = O, return Q. If Q = O, return P.
+//   If P = -Q, return O.
+//   If P = Q, use doubling formula.
+//   Otherwise:
+//     lambda = (y2 - y1) / (x2 - x1) mod p
+//     x3 = lambda^2 - x1 - x2 mod p
+//     y3 = lambda * (x1 - x3) - y1 mod p
+//
+// TODO: requires modular inversion over the secp256k1 field.
+// In a zkVM context, the prover would divine the inverse and the
+// circuit would verify: inverse * (x2 - x1) == 1 (mod p).
+// For now, this function checks the easy cases and marks the
+// general case as requiring modular inversion.
+pub fn point_add(p: Point, q: Point) -> Point {
+    if is_identity(p) {
+        q
+    } else if is_identity(q) {
+        p
+    } else if bigint.eq256(p.x, q.x) {
+        // Same x-coordinate: either P = Q (doubling) or P = -Q (identity)
+        if bigint.eq256(p.y, q.y) {
+            // P == Q: point doubling
+            // TODO: requires modular inversion for doubling formula
+            //   lambda = (3 * x1^2) / (2 * y1) mod p
+            //   x3 = lambda^2 - 2*x1 mod p
+            //   y3 = lambda * (x1 - x3) - y1 mod p
+            // Stub: return identity as placeholder
+            identity()
+        } else {
+            // P = -Q: return point at infinity
+            identity()
+        }
+    } else {
+        // General case: different x-coordinates
+        // TODO: requires modular inversion
+        //   lambda = (q.y - p.y) * inv(q.x - p.x) mod p
+        //   x3 = lambda^2 - p.x - q.x mod p
+        //   y3 = lambda * (p.x - x3) - p.y mod p
+        // Stub: return identity as placeholder
+        identity()
+    }
+}
+
+// Double a point on the curve.
+// TODO: requires modular inversion (see point_add)
+pub fn point_double(p: Point) -> Point {
+    point_add(p, p)
+}
+
+// ---------------------------------------------------------------------------
+// Scalar multiplication
+// ---------------------------------------------------------------------------
+// Multiply a point by a scalar (U256).
+//
+// Uses the double-and-add algorithm. Since we do not have loops,
+// this would need to be unrolled for all 256 bits. For practical
+// use in a zkVM, the prover would divine the result point and the
+// circuit would verify the discrete-log relation instead.
+//
+// TODO: requires point_add and point_double to be fully implemented.
+// For now, returns identity as a placeholder.
+pub fn scalar_mul(k: bigint.U256, p: Point) -> Point {
+    // In a zkVM proof, scalar multiplication is typically verified by:
+    //   1. The prover divines the result point R.
+    //   2. The circuit verifies that R lies on the curve.
+    //   3. A multi-scalar multiplication check is performed.
+    // Direct bit-by-bit double-and-add is prohibitively expensive
+    // in a circuit (256 doublings + up to 256 additions).
+    // TODO: implement double-and-add or witness-based verification
+    identity()
+}
+
+// ---------------------------------------------------------------------------
+// ECDSA signature verification
+// ---------------------------------------------------------------------------
+// Verify an ECDSA signature over secp256k1.
+//
+// Standard ECDSA verification algorithm:
+//   1. Check r, s are in [1, n-1]
+//   2. Compute e = msg_hash (already provided as U256)
+//   3. Compute w = s^{-1} mod n
+//   4. Compute u1 = e * w mod n
+//   5. Compute u2 = r * w mod n
+//   6. Compute R = u1 * G + u2 * pubkey
+//   7. Check R.x mod n == r
+//
+// Returns true if the signature is valid.
+//
+// TODO: This requires modular inversion over the curve order and
+// elliptic curve point multiplication, both of which depend on
+// the TODO items above. The structure below shows the complete
+// verification flow with stubs for the unimplemented primitives.
+pub fn verify_ecdsa(
+    msg_hash: bigint.U256,
+    sig_r: bigint.U256,
+    sig_s: bigint.U256,
+    pubkey: Point
+) -> Bool {
+    let n: bigint.U256 = curve_order()
+    let one: bigint.U256 = bigint.one256()
+    // Step 1: Check r and s are in valid range [1, n-1].
+    // r must be >= 1 and < n; same for s.
+    let r_is_zero: Bool = bigint.is_zero(sig_r)
+    let s_is_zero: Bool = bigint.is_zero(sig_s)
+    if r_is_zero {
+        false
+    } else if s_is_zero {
+        false
+    } else if bigint.lt256(sig_r, n) {
+        if bigint.lt256(sig_s, n) {
+            // Step 2: Check pubkey is on the curve and not identity.
+            if is_identity(pubkey) {
+                false
+            } else if on_curve(pubkey) {
+                // Step 3: Compute w = s^{-1} mod n.
+                // TODO: requires modular inversion over curve order n.
+                // In a zkVM, the prover divines w and we verify: w * s == 1 (mod n).
+                // let w: bigint.U256 = mod_inv(sig_s, n)
+                // Step 4: Compute u1 = msg_hash * w mod n.
+                // let u1: bigint.U256 = bigint.mul_mod(msg_hash, w, n)
+                // Step 5: Compute u2 = r * w mod n.
+                // let u2: bigint.U256 = bigint.mul_mod(sig_r, w, n)
+                // Step 6: Compute R = u1 * G + u2 * pubkey.
+                // let g: Point = generator()
+                // let r1: Point = scalar_mul(u1, g)
+                // let r2: Point = scalar_mul(u2, pubkey)
+                // let big_r: Point = point_add(r1, r2)
+                // Step 7: Check R is not identity and R.x mod n == r.
+                // if is_identity(big_r) {
+                //     false
+                // } else {
+                //     let rx_mod_n: bigint.U256 = bigint.mod_reduce_once(big_r.x, n)
+                //     bigint.eq256(rx_mod_n, sig_r)
+                // }
+                // TODO: full verification requires modular inversion and
+                // scalar multiplication. Return false as placeholder.
+                false
+            } else {
+                // pubkey not on curve
+                false
+            }
+        } else {
+            // s >= n
+            false
+        }
+    } else {
+        // r >= n
+        false
+    }
+}

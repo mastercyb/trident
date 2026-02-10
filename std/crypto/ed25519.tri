@@ -1,0 +1,236 @@
+module std.crypto.ed25519
+
+// Ed25519 elliptic curve operations for ZK proofs.
+//
+// Ed25519 is a twisted Edwards curve used for digital signatures
+// (e.g., in Solana, Cardano, and many other systems).
+//
+// Curve equation: -x^2 + y^2 = 1 + d*x^2*y^2
+// where d = -121665/121666 over the field F_q,
+//       q = 2^255 - 19.
+//
+// The base field prime q and the curve group order ell are both
+// approximately 2^255, requiring 256-bit arithmetic.
+use std.crypto.bigint
+
+use std.core.convert
+
+// An Ed25519 point in affine coordinates.
+// The neutral element (identity) is (0, 1).
+pub struct EdPoint {
+    x: bigint.U256,
+    y: bigint.U256,
+}
+
+// ---------------------------------------------------------------------------
+// Curve constants
+// ---------------------------------------------------------------------------
+// Ed25519 base field prime: q = 2^255 - 19
+// = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED
+//
+// Limbs (little-endian U32):
+//   l0 = 0xFFFFFFED = 4294967277
+//   l1 = 0xFFFFFFFF = 4294967295
+//   l2 = 0xFFFFFFFF = 4294967295
+//   l3 = 0xFFFFFFFF = 4294967295
+//   l4 = 0xFFFFFFFF = 4294967295
+//   l5 = 0xFFFFFFFF = 4294967295
+//   l6 = 0xFFFFFFFF = 4294967295
+//   l7 = 0x7FFFFFFF = 2147483647
+pub fn field_prime() -> bigint.U256 {
+    bigint.U256 { l0: convert.as_u32(4294967277), l1: convert.as_u32(4294967295), l2: convert.as_u32(4294967295), l3: convert.as_u32(4294967295), l4: convert.as_u32(4294967295), l5: convert.as_u32(4294967295), l6: convert.as_u32(4294967295), l7: convert.as_u32(2147483647) }
+}
+
+// Ed25519 group order (ell):
+// ell = 2^252 + 27742317777372353535851937790883648493
+// = 0x1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED
+//
+// Limbs (little-endian U32):
+//   l0 = 0x5CF5D3ED = 1559614445
+//   l1 = 0x5812631A = 1477600026
+//   l2 = 0x2F79CD65 = 796486501
+//   l3 = 0x14DEF9DE = 349722078
+//   l4 = 0x00000000 = 0
+//   l5 = 0x00000000 = 0
+//   l6 = 0x00000000 = 0
+//   l7 = 0x10000000 = 268435456
+pub fn curve_order() -> bigint.U256 {
+    bigint.U256 { l0: convert.as_u32(1559614445), l1: convert.as_u32(1477600026), l2: convert.as_u32(796486501), l3: convert.as_u32(349722078), l4: convert.as_u32(0), l5: convert.as_u32(0), l6: convert.as_u32(0), l7: convert.as_u32(268435456) }
+}
+
+// Ed25519 base point B.
+// Bx = 0x216936D3CD6E53FEC0A4E231FDD6DC5C692CC7609525A7B2C9562D608F25D51A
+// By = 0x6666666666666666666666666666666666666666666666666666666666666658
+//   (By = 4/5 mod q, the canonical y-coordinate)
+pub fn base_point() -> EdPoint {
+    let bx: bigint.U256 = bigint.U256 { l0: convert.as_u32(2401043738), l1: convert.as_u32(3378557792), l2: convert.as_u32(2502115762), l3: convert.as_u32(1764592480), l4: convert.as_u32(4258486364), l5: convert.as_u32(3232304689), l6: convert.as_u32(3446735870), l7: convert.as_u32(562264787) }
+    // Bx limbs (little-endian)
+    //   0x8F25D51A = 2401043738
+    //   0xC9562D60 = 3378557792
+    //   0x9525A7B2 = 2502115762
+    //   0x692CC760 = 1764592480
+    //   0xFDD6DC5C = 4258486364
+    //   0xC0A4E231 = 3232304689
+    //   0xCD6E53FE = 3446735870
+    //   0x216936D3 = 562264787
+    let by: bigint.U256 = bigint.U256 { l0: convert.as_u32(1717986904), l1: convert.as_u32(1717986918), l2: convert.as_u32(1717986918), l3: convert.as_u32(1717986918), l4: convert.as_u32(1717986918), l5: convert.as_u32(1717986918), l6: convert.as_u32(1717986918), l7: convert.as_u32(1717986918) }
+    // By limbs (little-endian): all 0x66666666 except l0 = 0x66666658
+    //   0x66666658 = 1717986904
+    //   0x66666666 = 1717986918 (all others)
+    EdPoint { x: bx, y: by }
+}
+
+// The Ed25519 curve parameter d = -121665/121666 mod q.
+// d = 0x52036CBC148D92F6736CBD97D3D49C73282B5EDB831A5D93FC6AA54A25DCD7A7
+//   (This is a non-square in F_q, required for the twisted Edwards form.)
+fn curve_d() -> bigint.U256 {
+    bigint.U256 { l0: convert.as_u32(633186215), l1: convert.as_u32(4234318154), l2: convert.as_u32(2199085459), l3: convert.as_u32(674696923), l4: convert.as_u32(3553921139), l5: convert.as_u32(1936749975), l6: convert.as_u32(344927990), l7: convert.as_u32(1375898812) }
+}
+
+// d limbs (little-endian)
+//   0x25DCD7A7 = 633186215
+//   0xFC6AA54A = 4234318154
+//   0x831A5D93 = 2199085459
+//   0x282B5EDB = 674696923
+//   0xD3D49C73 = 3553921139
+//   0x736CBD97 = 1936749975
+//   0x148D92F6 = 344927990
+//   0x52036CBC = 1375898812
+// ---------------------------------------------------------------------------
+// Point operations
+// ---------------------------------------------------------------------------
+// Identity element on the twisted Edwards curve: (0, 1).
+pub fn ed_identity() -> EdPoint {
+    EdPoint { x: bigint.zero256(), y: bigint.one256() }
+}
+
+// Check if a point is the identity.
+pub fn is_identity(p: EdPoint) -> Bool {
+    if bigint.is_zero(p.x) {
+        bigint.eq256(p.y, bigint.one256())
+    } else {
+        false
+    }
+}
+
+// Verify that a point lies on the curve: -x^2 + y^2 = 1 + d*x^2*y^2 (mod q).
+pub fn on_curve(p: EdPoint) -> Bool {
+    let q: bigint.U256 = field_prime()
+    let d: bigint.U256 = curve_d()
+    // Compute x^2 mod q
+    let x_sq: bigint.U256 = bigint.mul_mod(p.x, p.x, q)
+    // Compute y^2 mod q
+    let y_sq: bigint.U256 = bigint.mul_mod(p.y, p.y, q)
+    // LHS = -x^2 + y^2 mod q = y^2 - x^2 mod q
+    let lhs: bigint.U256 = bigint.sub_mod(y_sq, x_sq, q)
+    // RHS = 1 + d * x^2 * y^2 mod q
+    let x2y2: bigint.U256 = bigint.mul_mod(x_sq, y_sq, q)
+    let dx2y2: bigint.U256 = bigint.mul_mod(d, x2y2, q)
+    let rhs: bigint.U256 = bigint.add_mod(bigint.one256(), dx2y2, q)
+    // TODO: mul_mod currently uses only low-256-bit multiplication;
+    // for full correctness, requires proper modular reduction
+    bigint.eq256(lhs, rhs)
+}
+
+// Negate a point: -(x, y) = (-x, y) on a twisted Edwards curve.
+pub fn negate(p: EdPoint) -> EdPoint {
+    if bigint.is_zero(p.x) {
+        p
+    } else {
+        let q: bigint.U256 = field_prime()
+        let neg_x: bigint.U256 = bigint.sub256(q, p.x)
+        EdPoint { x: neg_x, y: p.y }
+    }
+}
+
+// Add two points on the twisted Edwards curve.
+//
+// Unified addition formula (works for all cases including doubling):
+//   x3 = (x1*y2 + y1*x2) / (1 + d*x1*x2*y1*y2) mod q
+//   y3 = (y1*y2 + x1*x2) / (1 - d*x1*x2*y1*y2) mod q
+//
+// (Note: the sign of the x1*x2 term in y3 is + because
+//  the curve is -x^2 + y^2 = 1 + d*x^2*y^2, i.e., a = -1.)
+//
+// TODO: requires modular inversion over F_q.
+// In a zkVM, the prover divines the result and verifies the constraint.
+pub fn point_add(p: EdPoint, q_pt: EdPoint) -> EdPoint {
+    // TODO: requires modular inversion for the denominators.
+    // The prover would divine the result point and verify:
+    //   x3 * (1 + d*x1*x2*y1*y2) == (x1*y2 + y1*x2) mod q
+    //   y3 * (1 - d*x1*x2*y1*y2) == (y1*y2 + x1*x2) mod q
+    // Stub: return identity as placeholder.
+    ed_identity()
+}
+
+// Scalar multiplication: k * P.
+// TODO: requires point_add to be fully implemented.
+// See secp256k1.scalar_mul for discussion of zkVM strategies.
+pub fn scalar_mul(k: bigint.U256, p: EdPoint) -> EdPoint {
+    // TODO: implement double-and-add or witness-based verification
+    ed_identity()
+}
+
+// ---------------------------------------------------------------------------
+// Ed25519 signature verification
+// ---------------------------------------------------------------------------
+// Verify an Ed25519 signature.
+//
+// The Ed25519 verification equation is:
+//   [8][S]B = [8]R + [8][H(R || A || M)]A
+//
+// where:
+//   - B is the base point
+//   - S is the scalar part of the signature (sig_s)
+//   - R is the point part of the signature (sig_r)
+//   - A is the public key (pubkey)
+//   - H(R || A || M) is the hash of the encoded R, encoded A, and message
+//   - msg_hash is provided as the pre-computed H(R || A || M) reduced mod ell
+//
+// The cofactor [8] can be incorporated by checking:
+//   [S]B = R + [h]A  where h = H(R || A || M) mod ell
+//
+// TODO: requires scalar multiplication and point addition to be
+// fully implemented. The structure below shows the complete
+// verification flow.
+pub fn verify(
+    msg_hash: bigint.U256,
+    sig_r: EdPoint,
+    sig_s: bigint.U256,
+    pubkey: EdPoint
+) -> Bool {
+    let ell: bigint.U256 = curve_order()
+    // Step 1: Check that S < ell (scalar must be reduced).
+    if bigint.lt256(sig_s, ell) {
+        // Step 2: Check that R and pubkey are on the curve.
+        if on_curve(sig_r) {
+            if on_curve(pubkey) {
+                // Step 3: Compute the verification equation.
+                // LHS = [S]B
+                let b: EdPoint = base_point()
+                let lhs: EdPoint = scalar_mul(sig_s, b)
+                // RHS = R + [h]A where h = msg_hash
+                let h_times_a: EdPoint = scalar_mul(msg_hash, pubkey)
+                let rhs: EdPoint = point_add(sig_r, h_times_a)
+                // Step 4: Check LHS == RHS.
+                // In practice, check [8](LHS - RHS) == identity
+                // to account for the cofactor.
+                // TODO: requires point subtraction and cofactor clearing
+                let x_eq: Bool = bigint.eq256(lhs.x, rhs.x)
+                let y_eq: Bool = bigint.eq256(lhs.y, rhs.y)
+                if x_eq {
+                    y_eq
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    } else {
+        // S >= ell: invalid signature
+        false
+    }
+}

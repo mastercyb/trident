@@ -1,0 +1,130 @@
+module std.crypto.ecdsa
+
+// Generic ECDSA helpers.
+//
+// This module provides curve-agnostic ECDSA utilities: signature
+// representation, range validation, and input reading. It works
+// with any curve whose order fits in 256 bits.
+use std.crypto.bigint
+
+use std.core.convert
+
+use std.io.io
+
+// An ECDSA signature consisting of (r, s), each a 256-bit scalar.
+pub struct Signature {
+    r: bigint.U256,
+    s: bigint.U256,
+}
+
+// ---------------------------------------------------------------------------
+// Input reading
+// ---------------------------------------------------------------------------
+// Read a single U256 from public input (8 field elements, each holding one U32 limb).
+// Limbs are read in little-endian order (least significant first).
+fn read_u256() -> bigint.U256 {
+    let f0: Field = io.read()
+    let f1: Field = io.read()
+    let f2: Field = io.read()
+    let f3: Field = io.read()
+    let f4: Field = io.read()
+    let f5: Field = io.read()
+    let f6: Field = io.read()
+    let f7: Field = io.read()
+    bigint.U256 { l0: convert.as_u32(f0), l1: convert.as_u32(f1), l2: convert.as_u32(f2), l3: convert.as_u32(f3), l4: convert.as_u32(f4), l5: convert.as_u32(f5), l6: convert.as_u32(f6), l7: convert.as_u32(f7) }
+}
+
+// Read a single U256 from divine (secret) input.
+fn divine_u256() -> bigint.U256 {
+    let f0: Field = io.divine()
+    let f1: Field = io.divine()
+    let f2: Field = io.divine()
+    let f3: Field = io.divine()
+    let f4: Field = io.divine()
+    let f5: Field = io.divine()
+    let f6: Field = io.divine()
+    let f7: Field = io.divine()
+    bigint.U256 { l0: convert.as_u32(f0), l1: convert.as_u32(f1), l2: convert.as_u32(f2), l3: convert.as_u32(f3), l4: convert.as_u32(f4), l5: convert.as_u32(f5), l6: convert.as_u32(f6), l7: convert.as_u32(f7) }
+}
+
+// Decompose a signature from public input.
+// Reads r (8 field elements) then s (8 field elements), 16 total.
+pub fn read_signature() -> Signature {
+    let r: bigint.U256 = read_u256()
+    let s: bigint.U256 = read_u256()
+    Signature { r: r, s: s }
+}
+
+// Read a signature from divine (secret/witness) input.
+pub fn divine_signature() -> Signature {
+    let r: bigint.U256 = divine_u256()
+    let s: bigint.U256 = divine_u256()
+    Signature { r: r, s: s }
+}
+
+// ---------------------------------------------------------------------------
+// Range validation
+// ---------------------------------------------------------------------------
+// Check that r and s are in valid range [1, n-1] for a given curve order n.
+// Both r and s must be nonzero and strictly less than n.
+pub fn valid_range(sig: Signature, order: bigint.U256) -> Bool {
+    // r must not be zero
+    let r_zero: Bool = bigint.is_zero(sig.r)
+    if r_zero {
+        false
+    } else {
+        // s must not be zero
+        let s_zero: Bool = bigint.is_zero(sig.s)
+        if s_zero {
+            false
+        } else {
+            // r must be < order
+            let r_lt: Bool = bigint.lt256(sig.r, order)
+            if r_lt {
+                // s must be < order
+                bigint.lt256(sig.s, order)
+            } else {
+                false
+            }
+        }
+    }
+}
+
+// Check the "low-S" normalization (BIP-62 / Ethereum convention).
+// In low-S form, s <= n/2 where n is the curve order.
+// This prevents signature malleability.
+pub fn is_low_s(sig: Signature, order: bigint.U256) -> Bool {
+    // Compute n/2 (integer division, rounding down).
+    // For odd n (which all standard curve orders are), this is (n-1)/2.
+    // We approximate by shifting right: divide each limb pair.
+    // Since the order is odd, (order - 1) is even, and we can shift right by 1.
+    //
+    // For simplicity, we check s < order and s <= half_order.
+    // half_order = (order - 1) / 2 for odd order.
+    // We construct it by subtracting 1 and dividing by 2.
+    //
+    // TODO: implement right-shift for U256 to compute half_order properly.
+    // For now, check that s < order (basic validity).
+    bigint.lt256(sig.s, order)
+}
+
+// ---------------------------------------------------------------------------
+// Signature encoding helpers
+// ---------------------------------------------------------------------------
+// Write a U256 to public output (8 field elements, little-endian limb order).
+pub fn write_u256(val: bigint.U256) {
+    io.write(convert.as_field(val.l0))
+    io.write(convert.as_field(val.l1))
+    io.write(convert.as_field(val.l2))
+    io.write(convert.as_field(val.l3))
+    io.write(convert.as_field(val.l4))
+    io.write(convert.as_field(val.l5))
+    io.write(convert.as_field(val.l6))
+    io.write(convert.as_field(val.l7))
+}
+
+// Write a signature to public output (r then s, 16 field elements total).
+pub fn write_signature(sig: Signature) {
+    write_u256(sig.r)
+    write_u256(sig.s)
+}
