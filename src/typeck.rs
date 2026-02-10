@@ -88,6 +88,8 @@ pub struct TypeChecker {
     call_resolutions: Vec<MonoInstance>,
     /// Active cfg flags for conditional compilation.
     cfg_flags: HashSet<String>,
+    /// Target VM configuration (digest width, hash rate, field limbs, etc.).
+    target_config: crate::target::TargetConfig,
 }
 
 impl Default for TypeChecker {
@@ -98,6 +100,10 @@ impl Default for TypeChecker {
 
 impl TypeChecker {
     pub fn new() -> Self {
+        Self::with_target(crate::target::TargetConfig::triton())
+    }
+
+    pub fn with_target(config: crate::target::TargetConfig) -> Self {
         let mut tc = Self {
             functions: HashMap::new(),
             scopes: Vec::new(),
@@ -110,6 +116,7 @@ impl TypeChecker {
             mono_instances: Vec::new(),
             call_resolutions: Vec::new(),
             cfg_flags: HashSet::from(["debug".to_string()]),
+            target_config: config,
         };
         tc.register_builtins();
         tc
@@ -800,12 +807,14 @@ impl TypeChecker {
                                     self.define_var(&name.node, ty, *mutable);
                                 }
                             }
-                        } else if resolved_ty == Ty::Digest {
-                            // Digest decomposition: let (f0, f1, f2, f3, f4) = digest
-                            if names.len() != 5 {
+                        } else if matches!(resolved_ty, Ty::Digest(_)) {
+                            // Digest decomposition: let (f0, f1, ...) = digest
+                            let dw = resolved_ty.width() as usize;
+                            if names.len() != dw {
                                 self.error(
                                     format!(
-                                        "Digest destructuring requires exactly 5 names, got {}",
+                                        "Digest destructuring requires exactly {} names, got {}",
+                                        dw,
                                         names.len()
                                     ),
                                     init.span,
@@ -917,11 +926,13 @@ impl TypeChecker {
                         );
                     }
                     true
-                } else if val_ty == Ty::Digest {
-                    if names.len() != 5 {
+                } else if matches!(val_ty, Ty::Digest(_)) {
+                    let dw = val_ty.width() as usize;
+                    if names.len() != dw {
                         self.error(
                             format!(
-                                "Digest destructuring requires exactly 5 names, got {}",
+                                "Digest destructuring requires exactly {} names, got {}",
+                                dw,
                                 names.len()
                             ),
                             value.span,
@@ -1428,8 +1439,8 @@ impl TypeChecker {
             BinOp::Add | BinOp::Mul => {
                 if lhs == &Ty::Field && rhs == &Ty::Field {
                     Ty::Field
-                } else if lhs == &Ty::XField && rhs == &Ty::XField {
-                    Ty::XField
+                } else if matches!(lhs, Ty::XField(_)) && lhs == rhs {
+                    lhs.clone()
                 } else {
                     self.error(
                         format!(
@@ -1495,7 +1506,7 @@ impl TypeChecker {
                 Ty::Tuple(vec![Ty::U32, Ty::U32])
             }
             BinOp::XFieldMul => {
-                if lhs != &Ty::XField || rhs != &Ty::Field {
+                if !matches!(lhs, Ty::XField(_)) || rhs != &Ty::Field {
                     self.error(
                         format!(
                             "operator '*.' requires XField and Field, got {} and {}",
@@ -1505,7 +1516,7 @@ impl TypeChecker {
                         span,
                     );
                 }
-                Ty::XField
+                lhs.clone()
             }
         }
     }
@@ -1602,10 +1613,10 @@ impl TypeChecker {
     fn resolve_type_with_subs(&self, ty: &Type, subs: &HashMap<String, u64>) -> Ty {
         match ty {
             Type::Field => Ty::Field,
-            Type::XField => Ty::XField,
+            Type::XField => Ty::XField(self.target_config.xfield_width),
             Type::Bool => Ty::Bool,
             Type::U32 => Ty::U32,
-            Type::Digest => Ty::Digest,
+            Type::Digest => Ty::Digest(self.target_config.digest_width),
             Type::Array(inner, n) => {
                 let size = match n {
                     ArraySize::Literal(v) => *v,
@@ -1667,9 +1678,16 @@ impl TypeChecker {
     }
 
     fn register_builtins(&mut self) {
+        let dw = self.target_config.digest_width;
+        let hr = self.target_config.hash_rate;
+        let fl = self.target_config.field_limbs;
+        let xw = self.target_config.xfield_width;
+        let digest_ty = Ty::Digest(dw);
+        let xfield_ty = Ty::XField(xw);
+
         let b = &mut self.functions;
 
-        // I/O
+        // I/O — parameterized read/write variants up to digest_width
         b.insert(
             "pub_read".into(),
             FnSig {
@@ -1677,32 +1695,20 @@ impl TypeChecker {
                 return_ty: Ty::Field,
             },
         );
+        for n in 2..dw {
+            b.insert(
+                format!("pub_read{}", n),
+                FnSig {
+                    params: vec![],
+                    return_ty: Ty::Tuple(vec![Ty::Field; n as usize]),
+                },
+            );
+        }
         b.insert(
-            "pub_read2".into(),
+            format!("pub_read{}", dw),
             FnSig {
                 params: vec![],
-                return_ty: Ty::Tuple(vec![Ty::Field; 2]),
-            },
-        );
-        b.insert(
-            "pub_read3".into(),
-            FnSig {
-                params: vec![],
-                return_ty: Ty::Tuple(vec![Ty::Field; 3]),
-            },
-        );
-        b.insert(
-            "pub_read4".into(),
-            FnSig {
-                params: vec![],
-                return_ty: Ty::Tuple(vec![Ty::Field; 4]),
-            },
-        );
-        b.insert(
-            "pub_read5".into(),
-            FnSig {
-                params: vec![],
-                return_ty: Ty::Digest,
+                return_ty: digest_ty.clone(),
             },
         );
 
@@ -1713,49 +1719,15 @@ impl TypeChecker {
                 return_ty: Ty::Unit,
             },
         );
-        b.insert(
-            "pub_write2".into(),
-            FnSig {
-                params: vec![("a".into(), Ty::Field), ("b".into(), Ty::Field)],
-                return_ty: Ty::Unit,
-            },
-        );
-        b.insert(
-            "pub_write3".into(),
-            FnSig {
-                params: vec![
-                    ("a".into(), Ty::Field),
-                    ("b".into(), Ty::Field),
-                    ("c".into(), Ty::Field),
-                ],
-                return_ty: Ty::Unit,
-            },
-        );
-        b.insert(
-            "pub_write4".into(),
-            FnSig {
-                params: vec![
-                    ("a".into(), Ty::Field),
-                    ("b".into(), Ty::Field),
-                    ("c".into(), Ty::Field),
-                    ("d".into(), Ty::Field),
-                ],
-                return_ty: Ty::Unit,
-            },
-        );
-        b.insert(
-            "pub_write5".into(),
-            FnSig {
-                params: vec![
-                    ("a".into(), Ty::Field),
-                    ("b".into(), Ty::Field),
-                    ("c".into(), Ty::Field),
-                    ("d".into(), Ty::Field),
-                    ("e".into(), Ty::Field),
-                ],
-                return_ty: Ty::Unit,
-            },
-        );
+        for n in 2..=dw {
+            b.insert(
+                format!("pub_write{}", n),
+                FnSig {
+                    params: (0..n).map(|i| (format!("v{}", i), Ty::Field)).collect(),
+                    return_ty: Ty::Unit,
+                },
+            );
+        }
 
         // Non-deterministic input
         b.insert(
@@ -1765,18 +1737,20 @@ impl TypeChecker {
                 return_ty: Ty::Field,
             },
         );
+        if xw > 0 {
+            b.insert(
+                format!("divine{}", xw),
+                FnSig {
+                    params: vec![],
+                    return_ty: Ty::Tuple(vec![Ty::Field; xw as usize]),
+                },
+            );
+        }
         b.insert(
-            "divine3".into(),
+            format!("divine{}", dw),
             FnSig {
                 params: vec![],
-                return_ty: Ty::Tuple(vec![Ty::Field; 3]),
-            },
-        );
-        b.insert(
-            "divine5".into(),
-            FnSig {
-                params: vec![],
-                return_ty: Ty::Digest,
+                return_ty: digest_ty.clone(),
             },
         );
 
@@ -1798,7 +1772,10 @@ impl TypeChecker {
         b.insert(
             "assert_digest".into(),
             FnSig {
-                params: vec![("a".into(), Ty::Digest), ("b".into(), Ty::Digest)],
+                params: vec![
+                    ("a".into(), digest_ty.clone()),
+                    ("b".into(), digest_ty.clone()),
+                ],
                 return_ty: Ty::Unit,
             },
         );
@@ -1840,12 +1817,12 @@ impl TypeChecker {
             },
         );
 
-        // U32 operations
+        // U32 operations — split returns field_limbs U32s
         b.insert(
             "split".into(),
             FnSig {
                 params: vec![("a".into(), Ty::Field)],
-                return_ty: Ty::Tuple(vec![Ty::U32, Ty::U32]),
+                return_ty: Ty::Tuple(vec![Ty::U32; fl as usize]),
             },
         );
         b.insert(
@@ -1870,12 +1847,12 @@ impl TypeChecker {
             },
         );
 
-        // Hash operations
+        // Hash operations — parameterized by hash_rate
         b.insert(
             "hash".into(),
             FnSig {
-                params: (0..10).map(|i| (format!("x{}", i), Ty::Field)).collect(),
-                return_ty: Ty::Digest,
+                params: (0..hr).map(|i| (format!("x{}", i), Ty::Field)).collect(),
+                return_ty: digest_ty.clone(),
             },
         );
         b.insert(
@@ -1888,7 +1865,7 @@ impl TypeChecker {
         b.insert(
             "sponge_absorb".into(),
             FnSig {
-                params: (0..10).map(|i| (format!("x{}", i), Ty::Field)).collect(),
+                params: (0..hr).map(|i| (format!("x{}", i), Ty::Field)).collect(),
                 return_ty: Ty::Unit,
             },
         );
@@ -1896,7 +1873,7 @@ impl TypeChecker {
             "sponge_squeeze".into(),
             FnSig {
                 params: vec![],
-                return_ty: Ty::Array(Box::new(Ty::Field), 10),
+                return_ty: Ty::Array(Box::new(Ty::Field), hr as u64),
             },
         );
         b.insert(
@@ -1907,19 +1884,18 @@ impl TypeChecker {
             },
         );
 
-        // Merkle operations
+        // Merkle operations — parameterized by digest_width
         b.insert(
             "merkle_step".into(),
             FnSig {
-                params: vec![
-                    ("idx".into(), Ty::U32),
-                    ("d0".into(), Ty::Field),
-                    ("d1".into(), Ty::Field),
-                    ("d2".into(), Ty::Field),
-                    ("d3".into(), Ty::Field),
-                    ("d4".into(), Ty::Field),
-                ],
-                return_ty: Ty::Tuple(vec![Ty::U32, Ty::Digest]),
+                params: {
+                    let mut p = vec![("idx".into(), Ty::U32)];
+                    for i in 0..dw {
+                        p.push((format!("d{}", i), Ty::Field));
+                    }
+                    p
+                },
+                return_ty: Ty::Tuple(vec![Ty::U32, digest_ty.clone()]),
             },
         );
 
@@ -1942,13 +1918,13 @@ impl TypeChecker {
             "ram_read_block".into(),
             FnSig {
                 params: vec![("addr".into(), Ty::Field)],
-                return_ty: Ty::Digest, // returns [Field; 5] by default; actual size from context
+                return_ty: digest_ty.clone(),
             },
         );
         b.insert(
             "ram_write_block".into(),
             FnSig {
-                params: vec![("addr".into(), Ty::Field), ("d".into(), Ty::Digest)],
+                params: vec![("addr".into(), Ty::Field), ("d".into(), digest_ty.clone())],
                 return_ty: Ty::Unit,
             },
         );
@@ -1969,25 +1945,25 @@ impl TypeChecker {
             },
         );
 
-        // XField
-        b.insert(
-            "xfield".into(),
-            FnSig {
-                params: vec![
-                    ("a".into(), Ty::Field),
-                    ("b".into(), Ty::Field),
-                    ("c".into(), Ty::Field),
-                ],
-                return_ty: Ty::XField,
-            },
-        );
-        b.insert(
-            "xinvert".into(),
-            FnSig {
-                params: vec![("a".into(), Ty::XField)],
-                return_ty: Ty::XField,
-            },
-        );
+        // XField — only registered if the target has an extension field
+        if xw > 0 {
+            b.insert(
+                "xfield".into(),
+                FnSig {
+                    params: (0..xw)
+                        .map(|i| (format!("{}", (b'a' + i as u8) as char), Ty::Field))
+                        .collect(),
+                    return_ty: xfield_ty.clone(),
+                },
+            );
+            b.insert(
+                "xinvert".into(),
+                FnSig {
+                    params: vec![("a".into(), xfield_ty.clone())],
+                    return_ty: xfield_ty,
+                },
+            );
+        }
     }
 }
 

@@ -80,7 +80,7 @@ pub fn compile_with_options(
     let file = parse_source(source, filename)?;
 
     // Type check
-    let exports = match TypeChecker::new()
+    let exports = match TypeChecker::with_target(options.target_config.clone())
         .with_cfg_flags(options.cfg_flags.clone())
         .check_file(&file)
     {
@@ -129,7 +129,8 @@ pub fn compile_project_with_options(
 
     // Type-check in topological order (deps first), collecting exports
     for (_module_name, file_path, source, file) in &parsed_modules {
-        let mut tc = TypeChecker::new().with_cfg_flags(options.cfg_flags.clone());
+        let mut tc = TypeChecker::with_target(options.target_config.clone())
+            .with_cfg_flags(options.cfg_flags.clone());
 
         // Import signatures from already-checked dependencies
         for exports in &all_exports {
@@ -338,7 +339,8 @@ pub fn run_tests(
     // Type-check all modules in order, collecting exports
     let mut all_exports: Vec<typeck::ModuleExports> = Vec::new();
     for (_module_name, file_path, source, file) in &parsed_modules {
-        let mut tc = TypeChecker::new().with_cfg_flags(options.cfg_flags.clone());
+        let mut tc = TypeChecker::with_target(options.target_config.clone())
+            .with_cfg_flags(options.cfg_flags.clone());
         for exports in &all_exports {
             tc.import_module(exports);
         }
@@ -514,7 +516,8 @@ pub fn generate_docs(
 
     // Type-check in topological order, collecting exports
     for (_module_name, file_path, source, file) in &parsed_modules {
-        let mut tc = TypeChecker::new().with_cfg_flags(options.cfg_flags.clone());
+        let mut tc = TypeChecker::with_target(options.target_config.clone())
+            .with_cfg_flags(options.cfg_flags.clone());
         for exports in &all_exports {
             tc.import_module(exports);
         }

@@ -2,10 +2,12 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ty {
     Field,
-    XField,
+    /// Extension field element — width in base field elements (e.g. 3 for Triton's cubic extension).
+    XField(u32),
     Bool,
     U32,
-    Digest,
+    /// Hash digest — width in field elements (e.g. 5 for Tip5, 4 for RPO).
+    Digest(u32),
     Array(Box<Ty>, u64),
     Tuple(Vec<Ty>),
     Struct(StructTy),
@@ -47,8 +49,8 @@ impl Ty {
     pub fn width(&self) -> u32 {
         match self {
             Ty::Field | Ty::Bool | Ty::U32 => 1,
-            Ty::XField => 3,
-            Ty::Digest => 5,
+            Ty::XField(w) => *w,
+            Ty::Digest(w) => *w,
             Ty::Array(inner, n) => inner.width() * (*n as u32),
             Ty::Tuple(elems) => elems.iter().map(|t| t.width()).sum(),
             Ty::Struct(s) => s.width(),
@@ -59,10 +61,10 @@ impl Ty {
     pub fn display(&self) -> String {
         match self {
             Ty::Field => "Field".to_string(),
-            Ty::XField => "XField".to_string(),
+            Ty::XField(_) => "XField".to_string(),
             Ty::Bool => "Bool".to_string(),
             Ty::U32 => "U32".to_string(),
-            Ty::Digest => "Digest".to_string(),
+            Ty::Digest(_) => "Digest".to_string(),
             Ty::Array(inner, n) => format!("[{}; {}]", inner.display(), n),
             Ty::Tuple(elems) => {
                 let parts: Vec<_> = elems.iter().map(|t| t.display()).collect();
