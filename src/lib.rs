@@ -9,7 +9,7 @@ pub mod typeck;
 pub mod verify;
 
 // Re-exports — preserves all `crate::X` paths
-pub use codegen::emit;
+pub use codegen::emitter as emit;
 pub use codegen::linker;
 pub use codegen::stack;
 pub use common::diagnostic;
