@@ -7,6 +7,10 @@
 
 A minimal, security-first language for provable computation on Triton VM.
 
+> **Quick lookup?** See [reference.md](reference.md) for types, operators, builtins, grammar, and CLI flags.
+> **New to ZK?** Start with [for-developers.md](for-developers.md).
+> **Coming from Solidity/Anchor?** See [for-blockchain-devs.md](for-blockchain-devs.md).
+
 ---
 
 ## 1. Executive Summary

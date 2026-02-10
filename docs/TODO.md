@@ -34,6 +34,10 @@
 - [x] Language tutorial / developer guide
 - [x] Optimization guide: cost pitfalls, boundary management, hash batching
 - [x] Error catalog with recovery suggestions
+- [x] Vision document: manifesto, showcase, comparative analysis
+- [x] For Developers guide: zero-to-ZK bridge for conventional programmers
+- [x] For Blockchain Devs guide: mental model migration from EVM/SVM/CosmWasm
+- [x] Quick Reference card: types, operators, builtins, grammar, CLI
 - [ ] Language spec: clean up spec.md for public release
 
 ## Website
@@ -100,4 +104,6 @@ limit (256), emitter unreachable variable halts VM, seal padding
 defense-in-depth.
 
 **Docs** — README, language spec, programming model, cost analysis,
-tutorial, optimization guide, error catalog, fungible token example.
+tutorial, optimization guide, error catalog, fungible token example,
+vision manifesto, developer guide (zero-to-ZK), blockchain developer
+guide (EVM/SVM migration), quick reference card, comparative analysis.

@@ -315,11 +315,16 @@ flags = ["release"]
 
 ## Documentation
 
-- [Language Specification](docs/spec.md) -- Complete language reference
-- [Programming Model](docs/programming-model.md) -- Triton VM execution model
+- [Vision](docs/vision.md) -- Why Trident exists and what you can build
 - [Tutorial](docs/tutorial.md) -- Step-by-step developer guide
+- [For Developers](docs/for-developers.md) -- Zero-knowledge from scratch (for Rust/Python/Go devs)
+- [For Blockchain Devs](docs/for-blockchain-devs.md) -- Mental model migration (for Solidity/Anchor/CosmWasm devs)
+- [Language Reference](docs/reference.md) -- Quick lookup: types, operators, builtins, grammar
+- [Language Specification](docs/spec.md) -- Complete design specification
+- [Programming Model](docs/programming-model.md) -- Triton VM execution model
 - [Optimization Guide](docs/optimization.md) -- Cost reduction strategies
 - [Error Catalog](docs/errors.md) -- All error messages with explanations
+- [Comparative Analysis](docs/analysis.md) -- Triton VM vs. every other ZK system
 
 ## Design Principles
 
