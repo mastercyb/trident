@@ -175,7 +175,17 @@ impl<'a> FormatCtx<'a> {
         }
     }
 
+    fn emit_cfg_attr(&mut self, cfg: &Option<Spanned<String>>, indent: &str) {
+        if let Some(flag) = cfg {
+            self.output.push_str(indent);
+            self.output.push_str("#[cfg(");
+            self.output.push_str(&flag.node);
+            self.output.push_str(")]\n");
+        }
+    }
+
     fn emit_const(&mut self, c: &ConstDef, indent: &str) {
+        self.emit_cfg_attr(&c.cfg, indent);
         self.output.push_str(indent);
         if c.is_pub {
             self.output.push_str("pub ");
@@ -190,6 +200,7 @@ impl<'a> FormatCtx<'a> {
     }
 
     fn emit_struct(&mut self, s: &StructDef, indent: &str) {
+        self.emit_cfg_attr(&s.cfg, indent);
         self.output.push_str(indent);
         if s.is_pub {
             self.output.push_str("pub ");
@@ -214,6 +225,7 @@ impl<'a> FormatCtx<'a> {
     }
 
     fn emit_event(&mut self, e: &EventDef, indent: &str) {
+        self.emit_cfg_attr(&e.cfg, indent);
         self.output.push_str(indent);
         self.output.push_str("event ");
         self.output.push_str(&e.name.node);
@@ -232,6 +244,7 @@ impl<'a> FormatCtx<'a> {
     }
 
     fn emit_fn(&mut self, f: &FnDef, indent: &str) {
+        self.emit_cfg_attr(&f.cfg, indent);
         self.output.push_str(indent);
 
         // Intrinsic attribute

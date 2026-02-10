@@ -36,6 +36,9 @@ enum Command {
         /// Show optimization hints (H0001-H0004)
         #[arg(long)]
         hints: bool,
+        /// Compilation target (debug or release)
+        #[arg(long, default_value = "debug")]
+        target: String,
     },
     /// Type-check without emitting TASM
     Check {
@@ -44,6 +47,9 @@ enum Command {
         /// Print cost analysis report
         #[arg(long)]
         costs: bool,
+        /// Compilation target (debug or release)
+        #[arg(long, default_value = "debug")]
+        target: String,
     },
     /// Format .tri source files
     Fmt {
@@ -68,8 +74,13 @@ fn main() {
             costs,
             hotspots,
             hints,
-        } => cmd_build(input, output, costs, hotspots, hints),
-        Command::Check { input, costs } => cmd_check(input, costs),
+            target,
+        } => cmd_build(input, output, costs, hotspots, hints, &target),
+        Command::Check {
+            input,
+            costs,
+            target,
+        } => cmd_check(input, costs, &target),
         Command::Fmt { input, check } => cmd_fmt(input, check),
         Command::Lsp => cmd_lsp(),
     }
@@ -141,7 +152,31 @@ fn cmd_init(name: Option<String>) {
 
 // --- trident build ---
 
-fn cmd_build(input: PathBuf, output: Option<PathBuf>, costs: bool, hotspots: bool, hints: bool) {
+/// Resolve a target name to CompileOptions, using project targets if available.
+fn resolve_target(
+    target: &str,
+    project: Option<&trident::project::Project>,
+) -> trident::CompileOptions {
+    if let Some(proj) = project {
+        if let Some(flags) = proj.targets.get(target) {
+            return trident::CompileOptions {
+                target: target.to_string(),
+                cfg_flags: flags.iter().cloned().collect(),
+            };
+        }
+    }
+    // Built-in targets: the target name is itself the single cfg flag
+    trident::CompileOptions::for_target(target)
+}
+
+fn cmd_build(
+    input: PathBuf,
+    output: Option<PathBuf>,
+    costs: bool,
+    hotspots: bool,
+    hints: bool,
+    target: &str,
+) {
     let (tasm, default_output) = if input.is_dir() {
         let toml_path = input.join("trident.toml");
         if !toml_path.exists() {
@@ -155,7 +190,8 @@ fn cmd_build(input: PathBuf, output: Option<PathBuf>, costs: bool, hotspots: boo
                 process::exit(1);
             }
         };
-        let tasm = match trident::compile_project(&project.entry) {
+        let options = resolve_target(target, Some(&project));
+        let tasm = match trident::compile_project_with_options(&project.entry, &options) {
             Ok(t) => t,
             Err(_) => process::exit(1),
         };
@@ -172,14 +208,16 @@ fn cmd_build(input: PathBuf, output: Option<PathBuf>, costs: bool, hotspots: boo
                     process::exit(1);
                 }
             };
-            let tasm = match trident::compile_project(&project.entry) {
+            let options = resolve_target(target, Some(&project));
+            let tasm = match trident::compile_project_with_options(&project.entry, &options) {
                 Ok(t) => t,
                 Err(_) => process::exit(1),
             };
             let out = project.root_dir.join(format!("{}.tasm", project.name));
             (tasm, out)
         } else {
-            let tasm = match trident::compile_project(&input) {
+            let options = resolve_target(target, None);
+            let tasm = match trident::compile_project_with_options(&input, &options) {
                 Ok(t) => t,
                 Err(_) => process::exit(1),
             };
@@ -236,7 +274,7 @@ fn cmd_build(input: PathBuf, output: Option<PathBuf>, costs: bool, hotspots: boo
 
 // --- trident check ---
 
-fn cmd_check(input: PathBuf, costs: bool) {
+fn cmd_check(input: PathBuf, costs: bool, _target: &str) {
     let entry = if input.is_dir() {
         let toml_path = input.join("trident.toml");
         if !toml_path.exists() {

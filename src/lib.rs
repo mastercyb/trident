@@ -15,6 +15,7 @@ pub mod stack;
 pub mod typeck;
 pub mod types;
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use ast::FileKind;
@@ -26,12 +27,50 @@ use parser::Parser;
 use resolve::resolve_modules;
 use typeck::{ModuleExports, TypeChecker};
 
+/// Options controlling conditional compilation.
+#[derive(Clone, Debug)]
+pub struct CompileOptions {
+    pub target: String,
+    pub cfg_flags: HashSet<String>,
+}
+
+impl Default for CompileOptions {
+    fn default() -> Self {
+        Self {
+            target: "debug".to_string(),
+            cfg_flags: HashSet::from(["debug".to_string()]),
+        }
+    }
+}
+
+impl CompileOptions {
+    /// Create options for a named built-in target.
+    pub fn for_target(target: &str) -> Self {
+        Self {
+            target: target.to_string(),
+            cfg_flags: HashSet::from([target.to_string()]),
+        }
+    }
+}
+
 /// Compile a single Trident source string to TASM.
 pub fn compile(source: &str, filename: &str) -> Result<String, Vec<Diagnostic>> {
+    compile_with_options(source, filename, &CompileOptions::default())
+}
+
+/// Compile a single Trident source string to TASM with options.
+pub fn compile_with_options(
+    source: &str,
+    filename: &str,
+    options: &CompileOptions,
+) -> Result<String, Vec<Diagnostic>> {
     let file = parse_source(source, filename)?;
 
     // Type check
-    let exports = match TypeChecker::new().check_file(&file) {
+    let exports = match TypeChecker::new()
+        .with_cfg_flags(options.cfg_flags.clone())
+        .check_file(&file)
+    {
         Ok(exports) => exports,
         Err(errors) => {
             render_diagnostics(&errors, filename, source);
@@ -41,6 +80,7 @@ pub fn compile(source: &str, filename: &str) -> Result<String, Vec<Diagnostic>> 
 
     // Emit TASM
     let tasm = Emitter::new()
+        .with_cfg_flags(options.cfg_flags.clone())
         .with_mono_instances(exports.mono_instances)
         .with_call_resolutions(exports.call_resolutions)
         .emit_file(&file);
@@ -49,6 +89,14 @@ pub fn compile(source: &str, filename: &str) -> Result<String, Vec<Diagnostic>> 
 
 /// Compile a multi-module project from an entry point path.
 pub fn compile_project(entry_path: &Path) -> Result<String, Vec<Diagnostic>> {
+    compile_project_with_options(entry_path, &CompileOptions::default())
+}
+
+/// Compile a multi-module project with options.
+pub fn compile_project_with_options(
+    entry_path: &Path,
+    options: &CompileOptions,
+) -> Result<String, Vec<Diagnostic>> {
     // Resolve all modules in dependency order
     let modules = resolve_modules(entry_path)?;
 
@@ -68,7 +116,7 @@ pub fn compile_project(entry_path: &Path) -> Result<String, Vec<Diagnostic>> {
 
     // Type-check in topological order (deps first), collecting exports
     for (_module_name, file_path, source, file) in &parsed_modules {
-        let mut tc = TypeChecker::new();
+        let mut tc = TypeChecker::new().with_cfg_flags(options.cfg_flags.clone());
 
         // Import signatures from already-checked dependencies
         for exports in &all_exports {
@@ -160,6 +208,7 @@ pub fn compile_project(entry_path: &Path) -> Result<String, Vec<Diagnostic>> {
             .map(|e| e.call_resolutions.clone())
             .unwrap_or_default();
         let tasm = Emitter::new()
+            .with_cfg_flags(options.cfg_flags.clone())
             .with_intrinsics(intrinsic_map.clone())
             .with_module_aliases(module_aliases.clone())
             .with_constants(external_constants.clone())
@@ -961,5 +1010,83 @@ fn main() {
             formatted.contains("first<3>"),
             "formatted output should preserve first<3>"
         );
+    }
+
+    // --- conditional compilation integration tests ---
+
+    #[test]
+    fn test_cfg_debug_compiles() {
+        let source = "program test\n#[cfg(debug)]\nfn check() {\n    assert(true)\n}\nfn main() {\n    check()\n}";
+        let options = CompileOptions::for_target("debug");
+        let result = compile_with_options(source, "test.tri", &options);
+        assert!(result.is_ok(), "debug cfg should compile in debug mode");
+        let tasm = result.unwrap();
+        assert!(tasm.contains("__check:"), "check fn should be emitted");
+    }
+
+    #[test]
+    fn test_cfg_release_excludes_debug_fn() {
+        let source = "program test\n#[cfg(debug)]\nfn check() {\n    assert(true)\n}\nfn main() {}";
+        let options = CompileOptions::for_target("release");
+        let result = compile_with_options(source, "test.tri", &options);
+        assert!(result.is_ok(), "should compile without debug fn");
+        let tasm = result.unwrap();
+        assert!(
+            !tasm.contains("__check:"),
+            "check fn should NOT be emitted in release"
+        );
+    }
+
+    #[test]
+    fn test_cfg_different_targets_different_output() {
+        let source = "program test\n#[cfg(debug)]\nfn mode() -> Field { 0 }\n#[cfg(release)]\nfn mode() -> Field { 1 }\nfn main() {\n    let x: Field = mode()\n    pub_write(x)\n}";
+
+        let debug_opts = CompileOptions::for_target("debug");
+        let debug_tasm =
+            compile_with_options(source, "test.tri", &debug_opts).expect("debug should compile");
+
+        let release_opts = CompileOptions::for_target("release");
+        let release_tasm = compile_with_options(source, "test.tri", &release_opts)
+            .expect("release should compile");
+
+        // Both should have __mode: but with different bodies
+        assert!(debug_tasm.contains("__mode:"));
+        assert!(release_tasm.contains("__mode:"));
+        // Debug pushes 0, release pushes 1
+        assert!(debug_tasm.contains("push 0"));
+        assert!(release_tasm.contains("push 1"));
+    }
+
+    #[test]
+    fn test_cfg_const_excluded_in_release() {
+        let source = "program test\n#[cfg(debug)]\nconst LEVEL: Field = 3\nfn main() {}";
+        let options = CompileOptions::for_target("release");
+        let result = compile_with_options(source, "test.tri", &options);
+        assert!(
+            result.is_ok(),
+            "should compile even though const is excluded"
+        );
+    }
+
+    #[test]
+    fn test_cfg_format_roundtrip() {
+        let source = "program test\n\n#[cfg(debug)]\nfn check() {}\n\n#[cfg(release)]\nconst X: Field = 0\n\nfn main() {}\n";
+        let formatted = format_source(source, "test.tri").expect("should format");
+        assert!(
+            formatted.contains("#[cfg(debug)]"),
+            "should preserve cfg(debug)"
+        );
+        assert!(
+            formatted.contains("#[cfg(release)]"),
+            "should preserve cfg(release)"
+        );
+    }
+
+    #[test]
+    fn test_no_cfg_backward_compatible() {
+        // All existing code should work unchanged (no cfg = always active)
+        let source = "program test\nfn helper() -> Field { 42 }\nfn main() {\n    let x: Field = helper()\n    pub_write(x)\n}";
+        let result = compile(source, "test.tri");
+        assert!(result.is_ok(), "no-cfg code should compile as before");
     }
 }

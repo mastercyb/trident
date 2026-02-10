@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
 use crate::span::Spanned;
@@ -49,6 +49,8 @@ pub struct Emitter {
     call_resolutions: Vec<MonoInstance>,
     /// Index into call_resolutions for the next generic call.
     call_resolution_idx: usize,
+    /// Active cfg flags for conditional compilation.
+    cfg_flags: HashSet<String>,
 }
 
 impl Default for Emitter {
@@ -78,6 +80,21 @@ impl Emitter {
             current_subs: HashMap::new(),
             call_resolutions: Vec::new(),
             call_resolution_idx: 0,
+            cfg_flags: HashSet::from(["debug".to_string()]),
+        }
+    }
+
+    /// Set active cfg flags for conditional compilation.
+    pub fn with_cfg_flags(mut self, flags: HashSet<String>) -> Self {
+        self.cfg_flags = flags;
+        self
+    }
+
+    /// Check if an item's cfg attribute is active.
+    fn is_cfg_active(&self, cfg: &Option<Spanned<String>>) -> bool {
+        match cfg {
+            None => true,
+            Some(flag) => self.cfg_flags.contains(&flag.node),
         }
     }
 
@@ -111,9 +128,22 @@ impl Emitter {
         self
     }
 
+    /// Check if a top-level item's cfg is active.
+    fn is_item_cfg_active(&self, item: &Item) -> bool {
+        match item {
+            Item::Fn(f) => self.is_cfg_active(&f.cfg),
+            Item::Const(c) => self.is_cfg_active(&c.cfg),
+            Item::Struct(s) => self.is_cfg_active(&s.cfg),
+            Item::Event(e) => self.is_cfg_active(&e.cfg),
+        }
+    }
+
     pub fn emit_file(mut self, file: &File) -> String {
         // Pre-scan: collect return widths and detect generic functions.
         for item in &file.items {
+            if !self.is_item_cfg_active(&item.node) {
+                continue;
+            }
             if let Item::Fn(func) = &item.node {
                 if !func.type_params.is_empty() {
                     // Generic function: store AST for later monomorphized emission.
@@ -153,6 +183,9 @@ impl Emitter {
 
         // Pre-scan: collect intrinsic mappings.
         for item in &file.items {
+            if !self.is_item_cfg_active(&item.node) {
+                continue;
+            }
             if let Item::Fn(func) = &item.node {
                 if let Some(ref intrinsic) = func.intrinsic {
                     // Extract inner value from "intrinsic(VALUE)"
@@ -170,6 +203,9 @@ impl Emitter {
 
         // Pre-scan: collect struct type definitions.
         for item in &file.items {
+            if !self.is_item_cfg_active(&item.node) {
+                continue;
+            }
             if let Item::Struct(sdef) = &item.node {
                 self.struct_types
                     .insert(sdef.name.node.clone(), sdef.clone());
@@ -178,6 +214,9 @@ impl Emitter {
 
         // Pre-scan: collect constant values.
         for item in &file.items {
+            if !self.is_item_cfg_active(&item.node) {
+                continue;
+            }
             if let Item::Const(cdef) = &item.node {
                 if let Expr::Literal(Literal::Integer(val)) = &cdef.value.node {
                     self.constants.insert(cdef.name.node.clone(), *val);
@@ -188,6 +227,9 @@ impl Emitter {
         // Pre-scan: assign sequential tags to events.
         let mut event_tag = 0u64;
         for item in &file.items {
+            if !self.is_item_cfg_active(&item.node) {
+                continue;
+            }
             if let Item::Event(edef) = &item.node {
                 self.event_tags.insert(edef.name.node.clone(), event_tag);
                 let field_names: Vec<String> =
@@ -225,6 +267,9 @@ impl Emitter {
         }
 
         for item in &file.items {
+            if !self.is_item_cfg_active(&item.node) {
+                continue;
+            }
             if let Item::Fn(func) = &item.node {
                 if func.type_params.is_empty() {
                     self.emit_fn(func);

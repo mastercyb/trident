@@ -179,32 +179,47 @@ impl Parser {
         while !self.at(&Lexeme::Eof) {
             let start = self.current_span();
 
-            // Handle #[attr] before pub: #[intrinsic(name)] pub fn ...
-            if self.at(&Lexeme::Hash) {
+            // Parse attributes: #[cfg(flag)] and/or #[intrinsic(name)]
+            let mut cfg_attr: Option<Spanned<String>> = None;
+            let mut intrinsic_attr: Option<Spanned<String>> = None;
+            while self.at(&Lexeme::Hash) {
                 let attr = self.parse_attribute();
-                let is_pub = self.eat(&Lexeme::Pub);
-                let item = self.parse_fn_with_attr(is_pub, Some(attr));
-                let span = start.merge(self.prev_span());
-                items.push(Spanned::new(Item::Fn(item), span));
-                continue;
+                if attr.node.starts_with("cfg(") {
+                    // Extract flag name from "cfg(flag)"
+                    let flag = attr.node[4..attr.node.len() - 1].to_string();
+                    cfg_attr = Some(Spanned::new(flag, attr.span));
+                } else if attr.node.starts_with("intrinsic(") {
+                    intrinsic_attr = Some(attr);
+                } else {
+                    self.error_at_current("unknown attribute; expected cfg or intrinsic");
+                }
             }
 
             let is_pub = self.eat(&Lexeme::Pub);
 
             if self.at(&Lexeme::Const) {
-                let item = self.parse_const(is_pub);
+                if intrinsic_attr.is_some() {
+                    self.error_at_current("#[intrinsic] is only allowed on functions");
+                }
+                let item = self.parse_const(is_pub, cfg_attr);
                 let span = start.merge(self.prev_span());
                 items.push(Spanned::new(Item::Const(item), span));
             } else if self.at(&Lexeme::Struct) {
-                let item = self.parse_struct(is_pub);
+                if intrinsic_attr.is_some() {
+                    self.error_at_current("#[intrinsic] is only allowed on functions");
+                }
+                let item = self.parse_struct(is_pub, cfg_attr);
                 let span = start.merge(self.prev_span());
                 items.push(Spanned::new(Item::Struct(item), span));
             } else if self.at(&Lexeme::Event) {
-                let item = self.parse_event();
+                if intrinsic_attr.is_some() {
+                    self.error_at_current("#[intrinsic] is only allowed on functions");
+                }
+                let item = self.parse_event(cfg_attr);
                 let span = start.merge(self.prev_span());
                 items.push(Spanned::new(Item::Event(item), span));
             } else if self.at(&Lexeme::Fn) || self.at(&Lexeme::Hash) {
-                let item = self.parse_fn(is_pub);
+                let item = self.parse_fn_with_attr(is_pub, cfg_attr, intrinsic_attr);
                 let span = start.merge(self.prev_span());
                 items.push(Spanned::new(Item::Fn(item), span));
             } else {
@@ -215,7 +230,7 @@ impl Parser {
         items
     }
 
-    fn parse_const(&mut self, is_pub: bool) -> ConstDef {
+    fn parse_const(&mut self, is_pub: bool, cfg: Option<Spanned<String>>) -> ConstDef {
         self.expect(&Lexeme::Const);
         let name = self.expect_ident();
         self.expect(&Lexeme::Colon);
@@ -224,13 +239,14 @@ impl Parser {
         let value = self.parse_expr();
         ConstDef {
             is_pub,
+            cfg,
             name,
             ty,
             value,
         }
     }
 
-    fn parse_struct(&mut self, is_pub: bool) -> StructDef {
+    fn parse_struct(&mut self, is_pub: bool, cfg: Option<Spanned<String>>) -> StructDef {
         self.expect(&Lexeme::Struct);
         let name = self.expect_ident();
         self.expect(&Lexeme::LBrace);
@@ -252,21 +268,18 @@ impl Parser {
         self.expect(&Lexeme::RBrace);
         StructDef {
             is_pub,
+            cfg,
             name,
             fields,
         }
     }
 
-    fn parse_fn(&mut self, is_pub: bool) -> FnDef {
-        let intrinsic = if self.at(&Lexeme::Hash) {
-            Some(self.parse_attribute())
-        } else {
-            None
-        };
-        self.parse_fn_with_attr(is_pub, intrinsic)
-    }
-
-    fn parse_fn_with_attr(&mut self, is_pub: bool, intrinsic: Option<Spanned<String>>) -> FnDef {
+    fn parse_fn_with_attr(
+        &mut self,
+        is_pub: bool,
+        cfg: Option<Spanned<String>>,
+        intrinsic: Option<Spanned<String>>,
+    ) -> FnDef {
         self.expect(&Lexeme::Fn);
         let name = self.expect_ident();
 
@@ -291,6 +304,7 @@ impl Parser {
 
         FnDef {
             is_pub,
+            cfg,
             intrinsic,
             name,
             type_params,
@@ -622,7 +636,7 @@ impl Parser {
         Spanned::new(Stmt::Return(value), span)
     }
 
-    fn parse_event(&mut self) -> EventDef {
+    fn parse_event(&mut self, cfg: Option<Spanned<String>>) -> EventDef {
         self.expect(&Lexeme::Event);
         let name = self.expect_ident();
         self.expect(&Lexeme::LBrace);
@@ -640,7 +654,7 @@ impl Parser {
             }
         }
         self.expect(&Lexeme::RBrace);
-        EventDef { name, fields }
+        EventDef { cfg, name, fields }
     }
 
     fn parse_emit_stmt(&mut self) -> Spanned<Stmt> {
@@ -1263,6 +1277,73 @@ mod tests {
             assert!(matches!(&block.node.stmts[0].node, Stmt::Let { .. }));
             assert!(matches!(&block.node.stmts[1].node, Stmt::Asm { .. }));
             assert!(block.node.tail_expr.is_some(), "pub_write(x) is tail expr");
+        }
+    }
+
+    // --- cfg attribute parsing ---
+
+    #[test]
+    fn test_cfg_on_fn() {
+        let file = parse("program test\n#[cfg(debug)]\nfn check() {}");
+        if let Item::Fn(f) = &file.items[0].node {
+            assert_eq!(f.cfg.as_ref().unwrap().node, "debug");
+            assert_eq!(f.name.node, "check");
+        } else {
+            panic!("expected fn");
+        }
+    }
+
+    #[test]
+    fn test_cfg_on_const() {
+        let file = parse("program test\n#[cfg(release)]\nconst X: Field = 0");
+        if let Item::Const(c) = &file.items[0].node {
+            assert_eq!(c.cfg.as_ref().unwrap().node, "release");
+            assert_eq!(c.name.node, "X");
+        } else {
+            panic!("expected const");
+        }
+    }
+
+    #[test]
+    fn test_cfg_on_struct() {
+        let file = parse("program test\n#[cfg(debug)]\nstruct Dbg { val: Field }");
+        if let Item::Struct(s) = &file.items[0].node {
+            assert_eq!(s.cfg.as_ref().unwrap().node, "debug");
+            assert_eq!(s.name.node, "Dbg");
+        } else {
+            panic!("expected struct");
+        }
+    }
+
+    #[test]
+    fn test_cfg_on_pub_fn() {
+        let file = parse("program test\n#[cfg(release)]\npub fn fast() {}");
+        if let Item::Fn(f) = &file.items[0].node {
+            assert_eq!(f.cfg.as_ref().unwrap().node, "release");
+            assert!(f.is_pub);
+        } else {
+            panic!("expected fn");
+        }
+    }
+
+    #[test]
+    fn test_cfg_with_intrinsic() {
+        let file = parse("module std.test\n#[cfg(debug)]\n#[intrinsic(add)]\npub fn add(a: Field, b: Field) -> Field");
+        if let Item::Fn(f) = &file.items[0].node {
+            assert_eq!(f.cfg.as_ref().unwrap().node, "debug");
+            assert!(f.intrinsic.is_some());
+        } else {
+            panic!("expected fn");
+        }
+    }
+
+    #[test]
+    fn test_no_cfg() {
+        let file = parse("program test\nfn main() {}");
+        if let Item::Fn(f) = &file.items[0].node {
+            assert!(f.cfg.is_none());
+        } else {
+            panic!("expected fn");
         }
     }
 }

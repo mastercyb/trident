@@ -1059,6 +1059,7 @@ mod tests {
     fn test_format_fn_signature_no_params() {
         let f = crate::ast::FnDef {
             is_pub: false,
+            cfg: None,
             intrinsic: None,
             name: crate::span::Spanned::dummy("main".to_string()),
             type_params: vec![],
@@ -1073,6 +1074,7 @@ mod tests {
     fn test_format_fn_signature_with_return() {
         let f = crate::ast::FnDef {
             is_pub: true,
+            cfg: None,
             intrinsic: None,
             name: crate::span::Spanned::dummy("add".to_string()),
             type_params: vec![],

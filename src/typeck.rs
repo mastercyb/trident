@@ -86,6 +86,8 @@ pub struct TypeChecker {
     mono_instances: Vec<MonoInstance>,
     /// Per-call-site resolutions in AST walk order.
     call_resolutions: Vec<MonoInstance>,
+    /// Active cfg flags for conditional compilation.
+    cfg_flags: HashSet<String>,
 }
 
 impl Default for TypeChecker {
@@ -107,9 +109,34 @@ impl TypeChecker {
             generic_fns: HashMap::new(),
             mono_instances: Vec::new(),
             call_resolutions: Vec::new(),
+            cfg_flags: HashSet::from(["debug".to_string()]),
         };
         tc.register_builtins();
         tc
+    }
+
+    /// Set active cfg flags for conditional compilation.
+    pub fn with_cfg_flags(mut self, flags: HashSet<String>) -> Self {
+        self.cfg_flags = flags;
+        self
+    }
+
+    /// Check if an item's cfg attribute is active.
+    fn is_cfg_active(&self, cfg: &Option<Spanned<String>>) -> bool {
+        match cfg {
+            None => true,
+            Some(flag) => self.cfg_flags.contains(&flag.node),
+        }
+    }
+
+    /// Check if a top-level item's cfg is active.
+    fn is_item_cfg_active(&self, item: &Item) -> bool {
+        match item {
+            Item::Fn(f) => self.is_cfg_active(&f.cfg),
+            Item::Const(c) => self.is_cfg_active(&c.cfg),
+            Item::Struct(s) => self.is_cfg_active(&s.cfg),
+            Item::Event(e) => self.is_cfg_active(&e.cfg),
+        }
     }
 
     /// Import exported signatures from another module.
@@ -160,6 +187,10 @@ impl TypeChecker {
 
         // First pass: register all structs, function signatures, and constants
         for item in &file.items {
+            // Skip items excluded by conditional compilation
+            if !self.is_item_cfg_active(&item.node) {
+                continue;
+            }
             match &item.node {
                 Item::Struct(sdef) => {
                     let fields: Vec<(String, Ty, bool)> = sdef
@@ -257,6 +288,9 @@ impl TypeChecker {
 
         // Second pass: type check function bodies
         for item in &file.items {
+            if !self.is_item_cfg_active(&item.node) {
+                continue;
+            }
             if let Item::Fn(func) = &item.node {
                 self.check_fn(func);
             }
@@ -265,6 +299,9 @@ impl TypeChecker {
         // Unused import detection: collect used module prefixes from all calls
         let mut used_prefixes: HashSet<String> = HashSet::new();
         for item in &file.items {
+            if !self.is_item_cfg_active(&item.node) {
+                continue;
+            }
             if let Item::Fn(func) = &item.node {
                 if let Some(body) = &func.body {
                     Self::collect_used_modules_block(&body.node, &mut used_prefixes);
@@ -291,6 +328,9 @@ impl TypeChecker {
         let mut exported_structs = Vec::new();
 
         for item in &file.items {
+            if !self.is_item_cfg_active(&item.node) {
+                continue;
+            }
             match &item.node {
                 Item::Fn(func) if func.is_pub => {
                     let params: Vec<(String, Ty)> = func
@@ -2166,5 +2206,77 @@ mod tests {
             result.is_err(),
             "non-generic fn called with size args should fail"
         );
+    }
+
+    // --- conditional compilation ---
+
+    fn check_with_flags(source: &str, flags: &[&str]) -> Result<ModuleExports, Vec<Diagnostic>> {
+        let (tokens, _, _) = Lexer::new(source, 0).tokenize();
+        let file = Parser::new(tokens).parse_file().unwrap();
+        let flag_set: HashSet<String> = flags.iter().map(|s| s.to_string()).collect();
+        TypeChecker::new()
+            .with_cfg_flags(flag_set)
+            .check_file(&file)
+    }
+
+    #[test]
+    fn test_cfg_debug_includes_debug_fn() {
+        let result = check_with_flags(
+            "program test\n#[cfg(debug)]\nfn check() {}\nfn main() {\n    check()\n}",
+            &["debug"],
+        );
+        assert!(result.is_ok(), "debug fn should be available in debug mode");
+    }
+
+    #[test]
+    fn test_cfg_release_excludes_debug_fn() {
+        let result = check_with_flags(
+            "program test\n#[cfg(debug)]\nfn check() {}\nfn main() {\n    check()\n}",
+            &["release"],
+        );
+        assert!(
+            result.is_err(),
+            "debug fn should not be available in release mode"
+        );
+    }
+
+    #[test]
+    fn test_cfg_no_attr_always_available() {
+        let result = check_with_flags(
+            "program test\nfn helper() {}\nfn main() {\n    helper()\n}",
+            &["release"],
+        );
+        assert!(result.is_ok(), "uncfg'd fn always available");
+    }
+
+    #[test]
+    fn test_cfg_duplicate_names_different_cfg() {
+        // Two functions with same name but different cfg — only one active
+        let result = check_with_flags(
+            "program test\n#[cfg(debug)]\nfn mode() -> Field { 0 }\n#[cfg(release)]\nfn mode() -> Field { 1 }\nfn main() {\n    let x: Field = mode()\n}",
+            &["debug"],
+        );
+        assert!(result.is_ok(), "should pick the debug variant");
+    }
+
+    #[test]
+    fn test_cfg_const_excluded() {
+        let result = check_with_flags(
+            "program test\n#[cfg(debug)]\nconst X: Field = 42\nfn main() {\n    let a: Field = X\n}",
+            &["release"],
+        );
+        // X is cfg'd out, so it should be unknown
+        assert!(result.is_err(), "const should be excluded in release");
+    }
+
+    #[test]
+    fn test_cfg_export_filtered() {
+        let exports = check_with_flags(
+            "module test\n#[cfg(debug)]\npub fn dbg_only() {}\npub fn always() {}",
+            &["release"],
+        )
+        .unwrap();
+        assert_eq!(exports.functions.len(), 1, "only always() exported");
+        assert_eq!(exports.functions[0].0, "always");
     }
 }

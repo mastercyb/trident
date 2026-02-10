@@ -59,6 +59,7 @@ pub enum Item {
 #[derive(Clone, Debug)]
 pub struct ConstDef {
     pub is_pub: bool,
+    pub cfg: Option<Spanned<String>>,
     pub name: Spanned<String>,
     pub ty: Spanned<Type>,
     pub value: Spanned<Expr>,
@@ -67,6 +68,7 @@ pub struct ConstDef {
 #[derive(Clone, Debug)]
 pub struct StructDef {
     pub is_pub: bool,
+    pub cfg: Option<Spanned<String>>,
     pub name: Spanned<String>,
     pub fields: Vec<StructField>,
 }
@@ -80,6 +82,7 @@ pub struct StructField {
 
 #[derive(Clone, Debug)]
 pub struct EventDef {
+    pub cfg: Option<Spanned<String>>,
     pub name: Spanned<String>,
     pub fields: Vec<EventField>,
 }
@@ -93,6 +96,7 @@ pub struct EventField {
 #[derive(Clone, Debug)]
 pub struct FnDef {
     pub is_pub: bool,
+    pub cfg: Option<Spanned<String>>,
     pub intrinsic: Option<Spanned<String>>,
     pub name: Spanned<String>,
     /// Size-generic parameters, e.g. `<N>` in `fn sum<N>(arr: [Field; N])`.

@@ -1,14 +1,10 @@
 # Trident Development Plan
 
-238 tests. 0 warnings. Core complete.
-
----
-
 ## Compiler
 
 - [x] Size-generic functions: `fn sum<N>(arr: [Field; N]) -> Field`
 - [x] Inline TASM: `asm { push 1 add }` with type annotations
-- [ ] Conditional compilation: debug/release proving targets
+- [x] Conditional compilation: `#[cfg(debug)]` / `#[cfg(release)]` with `--target` flag
 - [ ] Pattern matching: syntactic sugar over nested if/else
 
 
@@ -86,7 +82,7 @@ symbols, go-to-definition, hover, completions.
 
 **Editor** — Zed extension, tree-sitter grammar with highlights.
 
-**Tests (197)** — formatter (29), diagnostics (7), LSP (27),
+**Tests (258)** — formatter (29), diagnostics (7), LSP (27),
 integration (27), emitter (20), type checker (21), parser (12), lexer (7),
 cost (15), stack (6), linker (3), resolve (3), project (1). Round-trip,
 idempotency, edge cases, spilling, all operators.
