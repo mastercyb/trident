@@ -45,9 +45,12 @@ enum Command {
         /// Compare costs with a previous cost JSON file
         #[arg(long, value_name = "PATH")]
         compare: Option<PathBuf>,
-        /// Compilation target (debug or release)
-        #[arg(long, default_value = "debug")]
+        /// Target VM (default: triton)
+        #[arg(long, default_value = "triton")]
         target: String,
+        /// Compilation profile for cfg flags (debug or release)
+        #[arg(long, default_value = "debug")]
+        profile: String,
     },
     /// Type-check without emitting TASM
     Check {
@@ -56,9 +59,12 @@ enum Command {
         /// Print cost analysis report
         #[arg(long)]
         costs: bool,
-        /// Compilation target (debug or release)
-        #[arg(long, default_value = "debug")]
+        /// Target VM (default: triton)
+        #[arg(long, default_value = "triton")]
         target: String,
+        /// Compilation profile for cfg flags (debug or release)
+        #[arg(long, default_value = "debug")]
+        profile: String,
     },
     /// Format .tri source files
     Fmt {
@@ -72,9 +78,12 @@ enum Command {
     Test {
         /// Input .tri file or directory with trident.toml
         input: PathBuf,
-        /// Compilation target (debug or release)
-        #[arg(long, default_value = "debug")]
+        /// Target VM (default: triton)
+        #[arg(long, default_value = "triton")]
         target: String,
+        /// Compilation profile for cfg flags (debug or release)
+        #[arg(long, default_value = "debug")]
+        profile: String,
     },
     /// Generate documentation with cost annotations
     Doc {
@@ -83,9 +92,12 @@ enum Command {
         /// Output markdown file (default: stdout)
         #[arg(short, long)]
         output: Option<PathBuf>,
-        /// Compilation target (debug or release)
-        #[arg(long, default_value = "debug")]
+        /// Target VM (default: triton)
+        #[arg(long, default_value = "triton")]
         target: String,
+        /// Compilation profile for cfg flags (debug or release)
+        #[arg(long, default_value = "debug")]
+        profile: String,
     },
     /// Start the Language Server Protocol server
     Lsp,
@@ -106,21 +118,28 @@ fn main() {
             save_costs,
             compare,
             target,
+            profile,
         } => cmd_build(
-            input, output, costs, hotspots, hints, annotate, save_costs, compare, &target,
+            input, output, costs, hotspots, hints, annotate, save_costs, compare, &target, &profile,
         ),
         Command::Check {
             input,
             costs,
             target,
-        } => cmd_check(input, costs, &target),
+            profile,
+        } => cmd_check(input, costs, &target, &profile),
         Command::Fmt { input, check } => cmd_fmt(input, check),
-        Command::Test { input, target } => cmd_test(input, &target),
+        Command::Test {
+            input,
+            target,
+            profile,
+        } => cmd_test(input, &target, &profile),
         Command::Doc {
             input,
             output,
             target,
-        } => cmd_doc(input, output, &target),
+            profile,
+        } => cmd_doc(input, output, &target, &profile),
         Command::Lsp => cmd_lsp(),
     }
 }
@@ -191,22 +210,76 @@ fn cmd_init(name: Option<String>) {
 
 // --- trident build ---
 
-/// Resolve a profile name to CompileOptions, using project targets if available.
-fn resolve_target(
+/// Resolve a VM target + profile to CompileOptions.
+///
+/// - `target`: VM target name (e.g. "triton"). For backward compat, if
+///   "debug" or "release" is passed as target, treat it as profile with a
+///   deprecation warning.
+/// - `profile`: compilation profile for cfg flags (e.g. "debug", "release").
+fn resolve_options(
     target: &str,
+    profile: &str,
     project: Option<&trident::project::Project>,
 ) -> trident::CompileOptions {
-    if let Some(proj) = project {
-        if let Some(flags) = proj.targets.get(target) {
-            return trident::CompileOptions {
-                profile: target.to_string(),
-                cfg_flags: flags.iter().cloned().collect(),
-                target_config: trident::target::TargetConfig::triton(),
-            };
+    // Backward compatibility: if --target was "debug" or "release", the user
+    // is using the old semantics where --target meant profile.
+    let (vm_target, actual_profile) = match target {
+        "debug" | "release" => {
+            eprintln!(
+                "warning: --target {} is deprecated for profile selection; use --profile {} --target triton",
+                target, target
+            );
+            ("triton", target)
         }
+        _ => (target, profile),
+    };
+
+    // Use project's target if CLI target is the default and project specifies one
+    let effective_target = if vm_target == "triton" {
+        if let Some(proj) = project {
+            if let Some(ref proj_target) = proj.target {
+                proj_target.as_str()
+            } else {
+                vm_target
+            }
+        } else {
+            vm_target
+        }
+    } else {
+        vm_target
+    };
+
+    // Resolve the VM target config
+    let target_config = if effective_target == "triton" {
+        trident::target::TargetConfig::triton()
+    } else {
+        match trident::target::TargetConfig::resolve(effective_target) {
+            Ok(config) => config,
+            Err(e) => {
+                eprintln!("error: {}", e.message);
+                process::exit(1);
+            }
+        }
+    };
+
+    // Resolve cfg flags from project targets or default to profile name
+    let cfg_flags = if let Some(proj) = project {
+        // Check project [target] field first
+        // Then check project [targets.PROFILE] for cfg flags
+        if let Some(flags) = proj.targets.get(actual_profile) {
+            flags.iter().cloned().collect()
+        } else {
+            std::collections::HashSet::from([actual_profile.to_string()])
+        }
+    } else {
+        std::collections::HashSet::from([actual_profile.to_string()])
+    };
+
+    trident::CompileOptions {
+        profile: actual_profile.to_string(),
+        cfg_flags,
+        target_config,
     }
-    // Built-in profiles: the profile name is itself the single cfg flag
-    trident::CompileOptions::for_target(target)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -220,6 +293,7 @@ fn cmd_build(
     save_costs: Option<PathBuf>,
     compare: Option<PathBuf>,
     target: &str,
+    profile: &str,
 ) {
     let (tasm, default_output) = if input.is_dir() {
         let toml_path = input.join("trident.toml");
@@ -234,7 +308,7 @@ fn cmd_build(
                 process::exit(1);
             }
         };
-        let options = resolve_target(target, Some(&project));
+        let options = resolve_options(target, profile, Some(&project));
         let tasm = match trident::compile_project_with_options(&project.entry, &options) {
             Ok(t) => t,
             Err(_) => process::exit(1),
@@ -252,7 +326,7 @@ fn cmd_build(
                     process::exit(1);
                 }
             };
-            let options = resolve_target(target, Some(&project));
+            let options = resolve_options(target, profile, Some(&project));
             let tasm = match trident::compile_project_with_options(&project.entry, &options) {
                 Ok(t) => t,
                 Err(_) => process::exit(1),
@@ -260,7 +334,7 @@ fn cmd_build(
             let out = project.root_dir.join(format!("{}.tasm", project.name));
             (tasm, out)
         } else {
-            let options = resolve_target(target, None);
+            let options = resolve_options(target, profile, None);
             let tasm = match trident::compile_project_with_options(&input, &options) {
                 Ok(t) => t,
                 Err(_) => process::exit(1),
@@ -356,7 +430,7 @@ fn cmd_build(
 
 // --- trident check ---
 
-fn cmd_check(input: PathBuf, costs: bool, _target: &str) {
+fn cmd_check(input: PathBuf, costs: bool, _target: &str, _profile: &str) {
     let entry = if input.is_dir() {
         let toml_path = input.join("trident.toml");
         if !toml_path.exists() {
@@ -520,7 +594,7 @@ fn collect_tri_files_recursive(dir: &Path, result: &mut Vec<PathBuf>) {
 
 // --- trident test ---
 
-fn cmd_test(input: PathBuf, target: &str) {
+fn cmd_test(input: PathBuf, target: &str, profile: &str) {
     let entry = if input.is_dir() {
         let toml_path = input.join("trident.toml");
         if !toml_path.exists() {
@@ -555,7 +629,7 @@ fn cmd_test(input: PathBuf, target: &str) {
         process::exit(1);
     };
 
-    let options = resolve_target(target, None);
+    let options = resolve_options(target, profile, None);
     let result = trident::run_tests(&entry, &options);
 
     match result {
@@ -570,7 +644,7 @@ fn cmd_test(input: PathBuf, target: &str) {
 
 // --- trident doc ---
 
-fn cmd_doc(input: PathBuf, output: Option<PathBuf>, target: &str) {
+fn cmd_doc(input: PathBuf, output: Option<PathBuf>, target: &str, profile: &str) {
     let (entry, project) = if input.is_dir() {
         let toml_path = input.join("trident.toml");
         if !toml_path.exists() {
@@ -607,7 +681,7 @@ fn cmd_doc(input: PathBuf, output: Option<PathBuf>, target: &str) {
         process::exit(1);
     };
 
-    let options = resolve_target(target, project.as_ref());
+    let options = resolve_options(target, profile, project.as_ref());
     let markdown = match trident::generate_docs(&entry, &options) {
         Ok(md) => md,
         Err(_) => {

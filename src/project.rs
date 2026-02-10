@@ -11,7 +11,9 @@ pub struct Project {
     pub version: String,
     pub entry: PathBuf,
     pub root_dir: PathBuf,
-    /// Custom target definitions: target_name → list of cfg flags.
+    /// VM target name (e.g. "triton"). If set, overrides --target default.
+    pub target: Option<String>,
+    /// Custom profile definitions: profile_name → list of cfg flags.
     /// E.g. `[targets.debug]` with `flags = ["debug", "verbose"]`.
     pub targets: HashMap<String, Vec<String>>,
 }
@@ -46,6 +48,7 @@ impl Project {
         let mut name = String::new();
         let mut version = String::new();
         let mut entry = String::new();
+        let mut vm_target: Option<String> = None;
         let mut targets: HashMap<String, Vec<String>> = HashMap::new();
         let mut current_section = String::new();
 
@@ -69,6 +72,7 @@ impl Project {
                         "name" => name = value.to_string(),
                         "version" => version = value.to_string(),
                         "entry" => entry = value.to_string(),
+                        "target" => vm_target = Some(value.to_string()),
                         _ => {}
                     }
                 } else if let Some(target_name) = current_section.strip_prefix("targets.") {
@@ -97,6 +101,7 @@ impl Project {
             version,
             entry: root_dir.join(&entry),
             root_dir,
+            target: vm_target,
             targets,
         })
     }
