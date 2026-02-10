@@ -1,0 +1,923 @@
+module std.crypto.sha256
+
+// SHA-256 compression function for bridge verification.
+//
+// Bitcoin uses double-SHA256 (SHA256(SHA256(msg))) for transaction and block
+// hashing. This module implements the SHA-256 compression function over U32
+// limbs, suitable for proving correct hash computation inside a STARK.
+//
+// The implementation covers:
+//   - Sha256State: the 8-word (256-bit) chaining value
+//   - init(): standard SHA-256 initialization vector (FIPS 180-4)
+//   - compress(): one 512-bit block compression (64 rounds)
+//   - Bitwise helpers: rotr, shr, ch, maj, big/little sigma functions
+//
+// Padding is NOT included here; the caller is responsible for constructing
+// padded 512-bit blocks per FIPS 180-4 section 5.1.1 before calling
+// compress(). For Bitcoin's double-SHA256, call compress twice with
+// appropriate padding.
+//
+// U32 arithmetic constraints:
+//   - `+` and `*` are Field-only operators.
+//   - U32 has `&`, `^`, `<`, `/%` as native operators.
+//   - To add U32 values we widen to Field, add, then narrow back.
+//   - Right rotation uses divmod: x /% 2^n yields (quotient, remainder),
+//     then rotr(x, n) = remainder * 2^(32-n) + quotient.
+//   - Right shift uses divmod: shr(x, n) = quotient from x /% 2^n.
+//   - Bitwise NOT is x ^ 0xFFFFFFFF.
+use std.core.convert
+
+use std.core.field
+
+// ---------------------------------------------------------------------------
+// SHA-256 state: 8 U32 working variables
+// ---------------------------------------------------------------------------
+pub struct Sha256State {
+    h0: U32,
+    h1: U32,
+    h2: U32,
+    h3: U32,
+    h4: U32,
+    h5: U32,
+    h6: U32,
+    h7: U32,
+}
+
+// ---------------------------------------------------------------------------
+// Standard initialization vector (FIPS 180-4 section 5.3.3)
+// ---------------------------------------------------------------------------
+// These are the first 32 bits of the fractional parts of the square roots
+// of the first 8 primes (2, 3, 5, 7, 11, 13, 17, 19).
+pub fn init() -> Sha256State {
+    Sha256State { h0: convert.as_u32(1779033703), h1: convert.as_u32(3144134277), h2: convert.as_u32(1013904242), h3: convert.as_u32(2773480762), h4: convert.as_u32(1359893119), h5: convert.as_u32(2600822924), h6: convert.as_u32(528734635), h7: convert.as_u32(1541459225) }
+}
+
+// ---------------------------------------------------------------------------
+// Power-of-two constants for rotation / shift via divmod
+// ---------------------------------------------------------------------------
+// Returns 2^n as a U32 for small n values used by SHA-256 rotations.
+// SHA-256 needs rotations by: 2, 3, 6, 7, 10, 11, 13, 17, 18, 19, 22, 25.
+// And shifts by: 3, 7, 10.
+// We precompute the needed powers of two.
+fn pow2_2() -> U32 {
+    convert.as_u32(4)
+}
+
+fn pow2_3() -> U32 {
+    convert.as_u32(8)
+}
+
+fn pow2_6() -> U32 {
+    convert.as_u32(64)
+}
+
+fn pow2_7() -> U32 {
+    convert.as_u32(128)
+}
+
+fn pow2_10() -> U32 {
+    convert.as_u32(1024)
+}
+
+fn pow2_11() -> U32 {
+    convert.as_u32(2048)
+}
+
+fn pow2_13() -> U32 {
+    convert.as_u32(8192)
+}
+
+fn pow2_17() -> U32 {
+    convert.as_u32(131072)
+}
+
+fn pow2_18() -> U32 {
+    convert.as_u32(262144)
+}
+
+fn pow2_19() -> U32 {
+    convert.as_u32(524288)
+}
+
+fn pow2_22() -> U32 {
+    convert.as_u32(4194304)
+}
+
+fn pow2_25() -> U32 {
+    convert.as_u32(33554432)
+}
+
+// Complementary powers: 2^(32-n) for rotation recombination.
+fn pow2_30() -> U32 {
+    convert.as_u32(1073741824)
+}
+
+fn pow2_29() -> U32 {
+    convert.as_u32(536870912)
+}
+
+fn pow2_26() -> U32 {
+    convert.as_u32(67108864)
+}
+
+fn pow2_25c() -> U32 {
+    convert.as_u32(33554432)
+}
+
+fn pow2_22c() -> U32 {
+    convert.as_u32(4194304)
+}
+
+fn pow2_21() -> U32 {
+    convert.as_u32(2097152)
+}
+
+fn pow2_19c() -> U32 {
+    convert.as_u32(524288)
+}
+
+fn pow2_15() -> U32 {
+    convert.as_u32(32768)
+}
+
+fn pow2_14() -> U32 {
+    convert.as_u32(16384)
+}
+
+fn pow2_13c() -> U32 {
+    convert.as_u32(8192)
+}
+
+fn pow2_10c() -> U32 {
+    convert.as_u32(1024)
+}
+
+fn pow2_7c() -> U32 {
+    convert.as_u32(128)
+}
+
+// ---------------------------------------------------------------------------
+// Bitwise helpers
+// ---------------------------------------------------------------------------
+// Add two U32 values modulo 2^32.
+// Widens to Field, adds, then takes the low 32 bits via split.
+fn add32(a: U32, b: U32) -> U32 {
+    let fa: Field = convert.as_field(a)
+    let fb: Field = convert.as_field(b)
+    let sum: Field = fa + fb
+    let (_, lo) = convert.split(sum)
+    lo
+}
+
+// Add three U32 values modulo 2^32.
+fn add32_3(a: U32, b: U32, c: U32) -> U32 {
+    let fa: Field = convert.as_field(a)
+    let fb: Field = convert.as_field(b)
+    let fc: Field = convert.as_field(c)
+    let sum: Field = fa + fb + fc
+    // sum fits in at most 34 bits; split gives (hi, lo) where lo is 32-bit
+    let (_, lo) = convert.split(sum)
+    lo
+}
+
+// Add five U32 values modulo 2^32.
+// Maximum: 5 * (2^32 - 1) = 5 * 4294967295 = 21474836475, fits in ~35 bits.
+// This fits in a Goldilocks field element (64-bit prime).
+fn add32_5(a: U32, b: U32, c: U32, d: U32, e: U32) -> U32 {
+    let sum: Field = convert.as_field(a) + convert.as_field(b) + convert.as_field(c) + convert.as_field(d) + convert.as_field(e)
+    let (_, lo) = convert.split(sum)
+    lo
+}
+
+// Right rotation: rotr(x, n) = (x >> n) | (x << (32-n))
+// Implemented via divmod: x /% 2^n gives (quotient, remainder).
+//   quotient  = x >> n       (high bits shifted down)
+//   remainder = x & (2^n-1)  (low bits that wrap around)
+// Result = remainder * 2^(32-n) + quotient
+// We compute the recombination in Field to avoid overflow, then narrow.
+fn rotr(x: U32, pow2_n: U32, pow2_32_minus_n: U32) -> U32 {
+    let (quotient, remainder) = x /% pow2_n
+    // remainder * 2^(32-n) + quotient, taken mod 2^32
+    let hi_part: Field = convert.as_field(remainder) * convert.as_field(pow2_32_minus_n)
+    let result: Field = hi_part + convert.as_field(quotient)
+    // This fits exactly in 32 bits (no overflow) because:
+    //   remainder < 2^n, so remainder * 2^(32-n) < 2^32
+    //   quotient < 2^(32-n)
+    //   sum < 2^32 + 2^(32-n) but actually exactly 2^32 - 1 at most
+    convert.as_u32(result)
+}
+
+// Right shift: shr(x, n) = x >> n = quotient from x /% 2^n
+fn shr(x: U32, pow2_n: U32) -> U32 {
+    let (quotient, _) = x /% pow2_n
+    quotient
+}
+
+// Bitwise NOT via XOR with all-ones.
+fn not32(x: U32) -> U32 {
+    x ^ convert.as_u32(4294967295)
+}
+
+// Ch(e, f, g) = (e AND f) XOR (NOT(e) AND g)
+fn ch(e: U32, f: U32, g: U32) -> U32 {
+    e & f ^ not32(e) & g
+}
+
+// Maj(a, b, c) = (a AND b) XOR (a AND c) XOR (b AND c)
+fn maj(a: U32, b: U32, c: U32) -> U32 {
+    a & b ^ a & c ^ b & c
+}
+
+// ---------------------------------------------------------------------------
+// SHA-256 sigma functions
+// ---------------------------------------------------------------------------
+// Big Sigma 0: ROTR(2, a) XOR ROTR(13, a) XOR ROTR(22, a)
+fn big_sigma0(a: U32) -> U32 {
+    let r2: U32 = rotr(a, pow2_2(), pow2_30())
+    let r13: U32 = rotr(a, pow2_13(), pow2_19c())
+    let r22: U32 = rotr(a, pow2_22(), pow2_10c())
+    r2 ^ r13 ^ r22
+}
+
+// Big Sigma 1: ROTR(6, e) XOR ROTR(11, e) XOR ROTR(25, e)
+fn big_sigma1(e: U32) -> U32 {
+    let r6: U32 = rotr(e, pow2_6(), pow2_26())
+    let r11: U32 = rotr(e, pow2_11(), pow2_21())
+    let r25: U32 = rotr(e, pow2_25(), pow2_7c())
+    r6 ^ r11 ^ r25
+}
+
+// Little sigma 0: ROTR(7, x) XOR ROTR(18, x) XOR SHR(3, x)
+// Used in message schedule expansion.
+fn little_sigma0(x: U32) -> U32 {
+    let r7: U32 = rotr(x, pow2_7(), pow2_25c())
+    let r18: U32 = rotr(x, pow2_18(), pow2_14())
+    let s3: U32 = shr(x, pow2_3())
+    r7 ^ r18 ^ s3
+}
+
+// Little sigma 1: ROTR(17, x) XOR ROTR(19, x) XOR SHR(10, x)
+// Used in message schedule expansion.
+fn little_sigma1(x: U32) -> U32 {
+    let r17: U32 = rotr(x, pow2_17(), pow2_15())
+    let r19: U32 = rotr(x, pow2_19(), pow2_13c())
+    let s10: U32 = shr(x, pow2_10())
+    r17 ^ r19 ^ s10
+}
+
+// ---------------------------------------------------------------------------
+// Round constants (FIPS 180-4 section 4.2.2)
+// ---------------------------------------------------------------------------
+// First 32 bits of the fractional parts of the cube roots of the first
+// 64 primes (2..311).
+//
+// We provide them as lookup-by-index to avoid a 64-element array.
+// The compiler will inline these as constant U32 values.
+fn k(i: U32) -> U32 {
+    if i == convert.as_u32(0) {
+        convert.as_u32(1116352408)
+    } else if i == convert.as_u32(1) {
+        convert.as_u32(1899447441)
+    } else if i == convert.as_u32(2) {
+        convert.as_u32(3049323471)
+    } else if i == convert.as_u32(3) {
+        convert.as_u32(3921009573)
+    } else if i == convert.as_u32(4) {
+        convert.as_u32(961987163)
+    } else if i == convert.as_u32(5) {
+        convert.as_u32(1508970993)
+    } else if i == convert.as_u32(6) {
+        convert.as_u32(2453635748)
+    } else if i == convert.as_u32(7) {
+        convert.as_u32(2870763221)
+    } else if i == convert.as_u32(8) {
+        convert.as_u32(3624381080)
+    } else if i == convert.as_u32(9) {
+        convert.as_u32(310598401)
+    } else if i == convert.as_u32(10) {
+        convert.as_u32(607225278)
+    } else if i == convert.as_u32(11) {
+        convert.as_u32(1426881987)
+    } else if i == convert.as_u32(12) {
+        convert.as_u32(1925078388)
+    } else if i == convert.as_u32(13) {
+        convert.as_u32(2162078206)
+    } else if i == convert.as_u32(14) {
+        convert.as_u32(2614888103)
+    } else if i == convert.as_u32(15) {
+        convert.as_u32(3248222580)
+    } else if i == convert.as_u32(16) {
+        convert.as_u32(3835390401)
+    } else if i == convert.as_u32(17) {
+        convert.as_u32(4022224774)
+    } else if i == convert.as_u32(18) {
+        convert.as_u32(264347078)
+    } else if i == convert.as_u32(19) {
+        convert.as_u32(604807628)
+    } else if i == convert.as_u32(20) {
+        convert.as_u32(770255983)
+    } else if i == convert.as_u32(21) {
+        convert.as_u32(1249150122)
+    } else if i == convert.as_u32(22) {
+        convert.as_u32(1555081692)
+    } else if i == convert.as_u32(23) {
+        convert.as_u32(1996064986)
+    } else if i == convert.as_u32(24) {
+        convert.as_u32(2554220882)
+    } else if i == convert.as_u32(25) {
+        convert.as_u32(2821834349)
+    } else if i == convert.as_u32(26) {
+        convert.as_u32(2952996808)
+    } else if i == convert.as_u32(27) {
+        convert.as_u32(3210313671)
+    } else if i == convert.as_u32(28) {
+        convert.as_u32(3336571891)
+    } else if i == convert.as_u32(29) {
+        convert.as_u32(3584528711)
+    } else if i == convert.as_u32(30) {
+        convert.as_u32(113926993)
+    } else if i == convert.as_u32(31) {
+        convert.as_u32(338241895)
+    } else if i == convert.as_u32(32) {
+        convert.as_u32(666307205)
+    } else if i == convert.as_u32(33) {
+        convert.as_u32(773529912)
+    } else if i == convert.as_u32(34) {
+        convert.as_u32(1294757372)
+    } else if i == convert.as_u32(35) {
+        convert.as_u32(1396182291)
+    } else if i == convert.as_u32(36) {
+        convert.as_u32(1695183700)
+    } else if i == convert.as_u32(37) {
+        convert.as_u32(1986661051)
+    } else if i == convert.as_u32(38) {
+        convert.as_u32(2177026350)
+    } else if i == convert.as_u32(39) {
+        convert.as_u32(2456956037)
+    } else if i == convert.as_u32(40) {
+        convert.as_u32(2730485921)
+    } else if i == convert.as_u32(41) {
+        convert.as_u32(2820302411)
+    } else if i == convert.as_u32(42) {
+        convert.as_u32(3259730800)
+    } else if i == convert.as_u32(43) {
+        convert.as_u32(3345764771)
+    } else if i == convert.as_u32(44) {
+        convert.as_u32(3516065817)
+    } else if i == convert.as_u32(45) {
+        convert.as_u32(3600352804)
+    } else if i == convert.as_u32(46) {
+        convert.as_u32(4094571909)
+    } else if i == convert.as_u32(47) {
+        convert.as_u32(275423344)
+    } else if i == convert.as_u32(48) {
+        convert.as_u32(430227734)
+    } else if i == convert.as_u32(49) {
+        convert.as_u32(506948616)
+    } else if i == convert.as_u32(50) {
+        convert.as_u32(659060556)
+    } else if i == convert.as_u32(51) {
+        convert.as_u32(883997877)
+    } else if i == convert.as_u32(52) {
+        convert.as_u32(958139571)
+    } else if i == convert.as_u32(53) {
+        convert.as_u32(1322822218)
+    } else if i == convert.as_u32(54) {
+        convert.as_u32(1537002063)
+    } else if i == convert.as_u32(55) {
+        convert.as_u32(1747873779)
+    } else if i == convert.as_u32(56) {
+        convert.as_u32(1955562222)
+    } else if i == convert.as_u32(57) {
+        convert.as_u32(2024104815)
+    } else if i == convert.as_u32(58) {
+        convert.as_u32(2227730452)
+    } else if i == convert.as_u32(59) {
+        convert.as_u32(2361852424)
+    } else if i == convert.as_u32(60) {
+        convert.as_u32(2428436474)
+    } else if i == convert.as_u32(61) {
+        convert.as_u32(2756734187)
+    } else if i == convert.as_u32(62) {
+        convert.as_u32(3204031479)
+    } else {
+        convert.as_u32(3329325298)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Single SHA-256 round
+// ---------------------------------------------------------------------------
+// Performs one round of the SHA-256 compression function.
+// Inputs: working variables a..h, round constant ki, schedule word wi.
+// Returns updated (a, b, c, d, e, f, g, h) packed as Sha256State.
+fn round(
+    va: U32,
+    vb: U32,
+    vc: U32,
+    vd: U32,
+    ve: U32,
+    vf: U32,
+    vg: U32,
+    vh: U32,
+    ki: U32,
+    wi: U32
+) -> Sha256State {
+    let s1: U32 = big_sigma1(ve)
+    let ch_val: U32 = ch(ve, vf, vg)
+    // t1 = h + Sigma1(e) + Ch(e,f,g) + k[i] + w[i]
+    let t1: U32 = add32_5(vh, s1, ch_val, ki, wi)
+    let s0: U32 = big_sigma0(va)
+    let maj_val: U32 = maj(va, vb, vc)
+    // t2 = Sigma0(a) + Maj(a,b,c)
+    let t2: U32 = add32(s0, maj_val)
+    // Update working variables:
+    //   new_a = t1 + t2
+    //   new_b = a, new_c = b, new_d = c
+    //   new_e = d + t1
+    //   new_f = e, new_g = f, new_h = g
+    Sha256State { h0: add32(t1, t2), h1: va, h2: vb, h3: vc, h4: add32(vd, t1), h5: ve, h6: vf, h7: vg }
+}
+
+// ---------------------------------------------------------------------------
+// Message schedule expansion
+// ---------------------------------------------------------------------------
+// Compute w[i] = little_sigma1(w[i-2]) + w[i-7] + little_sigma0(w[i-15]) + w[i-16]
+// All additions are mod 2^32.
+//
+// We use a "rolling window" approach: each expand step takes the 16 most
+// recent schedule words and produces the next one, shifting the window.
+// A 16-word message schedule window.
+pub struct MsgSchedule {
+    w0: U32,
+    w1: U32,
+    w2: U32,
+    w3: U32,
+    w4: U32,
+    w5: U32,
+    w6: U32,
+    w7: U32,
+    w8: U32,
+    w9: U32,
+    w10: U32,
+    w11: U32,
+    w12: U32,
+    w13: U32,
+    w14: U32,
+    w15: U32,
+}
+
+// Expand the schedule by one step: compute next w from window, shift.
+// w_new = sigma1(w[14]) + w[9] + sigma0(w[1]) + w[0]
+// Then shift: new window = [w1, w2, ..., w15, w_new]
+fn schedule_step(ms: MsgSchedule) -> MsgSchedule {
+    let s1: U32 = little_sigma1(ms.w14)
+    let s0: U32 = little_sigma0(ms.w1)
+    // w_new = sigma1(w14) + w9 + sigma0(w1) + w0
+    let w_new_f: Field = convert.as_field(s1) + convert.as_field(ms.w9) + convert.as_field(s0) + convert.as_field(ms.w0)
+    let (_, w_new) = convert.split(w_new_f)
+    MsgSchedule { w0: ms.w1, w1: ms.w2, w2: ms.w3, w3: ms.w4, w4: ms.w5, w5: ms.w6, w6: ms.w7, w7: ms.w8, w8: ms.w9, w9: ms.w10, w10: ms.w11, w11: ms.w12, w12: ms.w13, w13: ms.w14, w14: ms.w15, w15: w_new }
+}
+
+// ---------------------------------------------------------------------------
+// Compression: 4-round chunk
+// ---------------------------------------------------------------------------
+// Performs 4 consecutive SHA-256 rounds and 4 schedule expansions.
+// This is the inner loop unit; calling it 16 times covers all 64 rounds.
+fn four_rounds(
+    st: Sha256State,
+    ms: MsgSchedule,
+    ki0: U32,
+    ki1: U32,
+    ki2: U32,
+    ki3: U32
+) -> (Sha256State, MsgSchedule) {
+    // Round 0 of this chunk: use ms.w0 as schedule word
+    let s1: Sha256State = round(
+        st.h0,
+        st.h1,
+        st.h2,
+        st.h3,
+        st.h4,
+        st.h5,
+        st.h6,
+        st.h7,
+        ki0,
+        ms.w0
+    )
+    let ms1: MsgSchedule = schedule_step(ms)
+    // Round 1
+    let s2: Sha256State = round(
+        s1.h0,
+        s1.h1,
+        s1.h2,
+        s1.h3,
+        s1.h4,
+        s1.h5,
+        s1.h6,
+        s1.h7,
+        ki1,
+        ms1.w0
+    )
+    let ms2: MsgSchedule = schedule_step(ms1)
+    // Round 2
+    let s3: Sha256State = round(
+        s2.h0,
+        s2.h1,
+        s2.h2,
+        s2.h3,
+        s2.h4,
+        s2.h5,
+        s2.h6,
+        s2.h7,
+        ki2,
+        ms2.w0
+    )
+    let ms3: MsgSchedule = schedule_step(ms2)
+    // Round 3
+    let s4: Sha256State = round(
+        s3.h0,
+        s3.h1,
+        s3.h2,
+        s3.h3,
+        s3.h4,
+        s3.h5,
+        s3.h6,
+        s3.h7,
+        ki3,
+        ms3.w0
+    )
+    let ms4: MsgSchedule = schedule_step(ms3)
+    (s4, ms4)
+}
+
+// ---------------------------------------------------------------------------
+// Compression: first 16 rounds (schedule words come directly from input)
+// ---------------------------------------------------------------------------
+// For rounds 0..15, w[i] = input word i. We also begin schedule expansion
+// so that round 16 onwards can continue from the rolling window.
+fn first_four_rounds(
+    st: Sha256State,
+    ms: MsgSchedule
+) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(0)),
+        k(convert.as_u32(1)),
+        k(convert.as_u32(2)),
+        k(convert.as_u32(3))
+    )
+}
+
+fn second_four_rounds(
+    st: Sha256State,
+    ms: MsgSchedule
+) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(4)),
+        k(convert.as_u32(5)),
+        k(convert.as_u32(6)),
+        k(convert.as_u32(7))
+    )
+}
+
+fn third_four_rounds(
+    st: Sha256State,
+    ms: MsgSchedule
+) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(8)),
+        k(convert.as_u32(9)),
+        k(convert.as_u32(10)),
+        k(convert.as_u32(11))
+    )
+}
+
+fn fourth_four_rounds(
+    st: Sha256State,
+    ms: MsgSchedule
+) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(12)),
+        k(convert.as_u32(13)),
+        k(convert.as_u32(14)),
+        k(convert.as_u32(15))
+    )
+}
+
+// Rounds 16..19
+fn chunk_16(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(16)),
+        k(convert.as_u32(17)),
+        k(convert.as_u32(18)),
+        k(convert.as_u32(19))
+    )
+}
+
+// Rounds 20..23
+fn chunk_20(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(20)),
+        k(convert.as_u32(21)),
+        k(convert.as_u32(22)),
+        k(convert.as_u32(23))
+    )
+}
+
+// Rounds 24..27
+fn chunk_24(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(24)),
+        k(convert.as_u32(25)),
+        k(convert.as_u32(26)),
+        k(convert.as_u32(27))
+    )
+}
+
+// Rounds 28..31
+fn chunk_28(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(28)),
+        k(convert.as_u32(29)),
+        k(convert.as_u32(30)),
+        k(convert.as_u32(31))
+    )
+}
+
+// Rounds 32..35
+fn chunk_32(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(32)),
+        k(convert.as_u32(33)),
+        k(convert.as_u32(34)),
+        k(convert.as_u32(35))
+    )
+}
+
+// Rounds 36..39
+fn chunk_36(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(36)),
+        k(convert.as_u32(37)),
+        k(convert.as_u32(38)),
+        k(convert.as_u32(39))
+    )
+}
+
+// Rounds 40..43
+fn chunk_40(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(40)),
+        k(convert.as_u32(41)),
+        k(convert.as_u32(42)),
+        k(convert.as_u32(43))
+    )
+}
+
+// Rounds 44..47
+fn chunk_44(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(44)),
+        k(convert.as_u32(45)),
+        k(convert.as_u32(46)),
+        k(convert.as_u32(47))
+    )
+}
+
+// Rounds 48..51
+fn chunk_48(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(48)),
+        k(convert.as_u32(49)),
+        k(convert.as_u32(50)),
+        k(convert.as_u32(51))
+    )
+}
+
+// Rounds 52..55
+fn chunk_52(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(52)),
+        k(convert.as_u32(53)),
+        k(convert.as_u32(54)),
+        k(convert.as_u32(55))
+    )
+}
+
+// Rounds 56..59
+fn chunk_56(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(56)),
+        k(convert.as_u32(57)),
+        k(convert.as_u32(58)),
+        k(convert.as_u32(59))
+    )
+}
+
+// Rounds 60..63
+fn chunk_60(st: Sha256State, ms: MsgSchedule) -> (Sha256State, MsgSchedule) {
+    four_rounds(
+        st,
+        ms,
+        k(convert.as_u32(60)),
+        k(convert.as_u32(61)),
+        k(convert.as_u32(62)),
+        k(convert.as_u32(63))
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Final addition: add working variables back into chaining value
+// ---------------------------------------------------------------------------
+fn finalize(state: Sha256State, working: Sha256State) -> Sha256State {
+    Sha256State { h0: add32(state.h0, working.h0), h1: add32(state.h1, working.h1), h2: add32(state.h2, working.h2), h3: add32(state.h3, working.h3), h4: add32(state.h4, working.h4), h5: add32(state.h5, working.h5), h6: add32(state.h6, working.h6), h7: add32(state.h7, working.h7) }
+}
+
+// ---------------------------------------------------------------------------
+// Public API: compress one 512-bit block
+// ---------------------------------------------------------------------------
+// Performs the SHA-256 compression function on a single 512-bit message
+// block (16 U32 words, big-endian per FIPS 180-4).
+//
+// Parameters:
+//   state: current chaining value (use init() for the first block)
+//   w0..w15: the 16 message schedule words of the 512-bit block
+//
+// Returns: updated chaining value after compression.
+//
+// For Bitcoin double-SHA256 of a message m:
+//   1. Pad m per FIPS 180-4 to N 512-bit blocks B0, B1, ..., B(N-1)
+//   2. h = init()
+//   3. For each block Bi: h = compress(h, Bi.w0, ..., Bi.w15)
+//   4. Serialize h as 32 bytes (big-endian per word)
+//   5. Pad those 32 bytes to one 512-bit block B'
+//   6. h2 = compress(init(), B'.w0, ..., B'.w15)
+//   7. h2 is the double-SHA256 digest
+pub fn compress(
+    state: Sha256State,
+    w0: U32,
+    w1: U32,
+    w2: U32,
+    w3: U32,
+    w4: U32,
+    w5: U32,
+    w6: U32,
+    w7: U32,
+    w8: U32,
+    w9: U32,
+    w10: U32,
+    w11: U32,
+    w12: U32,
+    w13: U32,
+    w14: U32,
+    w15: U32
+) -> Sha256State {
+    // Initialize message schedule with the 16 input words
+    let ms: MsgSchedule = MsgSchedule { w0: w0, w1: w1, w2: w2, w3: w3, w4: w4, w5: w5, w6: w6, w7: w7, w8: w8, w9: w9, w10: w10, w11: w11, w12: w12, w13: w13, w14: w14, w15: w15 }
+    // Initialize working variables from current hash state
+    let wv: Sha256State = Sha256State { h0: state.h0, h1: state.h1, h2: state.h2, h3: state.h3, h4: state.h4, h5: state.h5, h6: state.h6, h7: state.h7 }
+    // Rounds 0..3
+    let (wv1, ms1) = first_four_rounds(wv, ms)
+    // Rounds 4..7
+    let (wv2, ms2) = second_four_rounds(wv1, ms1)
+    // Rounds 8..11
+    let (wv3, ms3) = third_four_rounds(wv2, ms2)
+    // Rounds 12..15
+    let (wv4, ms4) = fourth_four_rounds(wv3, ms3)
+    // Rounds 16..19
+    let (wv5, ms5) = chunk_16(wv4, ms4)
+    // Rounds 20..23
+    let (wv6, ms6) = chunk_20(wv5, ms5)
+    // Rounds 24..27
+    let (wv7, ms7) = chunk_24(wv6, ms6)
+    // Rounds 28..31
+    let (wv8, ms8) = chunk_28(wv7, ms7)
+    // Rounds 32..35
+    let (wv9, ms9) = chunk_32(wv8, ms8)
+    // Rounds 36..39
+    let (wv10, ms10) = chunk_36(wv9, ms9)
+    // Rounds 40..43
+    let (wv11, ms11) = chunk_40(wv10, ms10)
+    // Rounds 44..47
+    let (wv12, ms12) = chunk_44(wv11, ms11)
+    // Rounds 48..51
+    let (wv13, ms13) = chunk_48(wv12, ms12)
+    // Rounds 52..55
+    let (wv14, ms14) = chunk_52(wv13, ms13)
+    // Rounds 56..59
+    let (wv15, ms15) = chunk_56(wv14, ms14)
+    // Rounds 60..63
+    let (wv16, _ms16) = chunk_60(wv15, ms15)
+    // Add working variables back into chaining value
+    finalize(state, wv16)
+}
+
+// ---------------------------------------------------------------------------
+// Convenience: double-SHA256 of a single 512-bit block
+// ---------------------------------------------------------------------------
+// Computes SHA256(SHA256(block)) where block is exactly 512 bits (16 words).
+// The caller must have already padded the original message into this block.
+//
+// The second SHA-256 call hashes the 256-bit intermediate digest. Per FIPS
+// 180-4 padding, 256 bits = 32 bytes requires one 512-bit block:
+//   words 0..7: the 8 digest words
+//   word 8:     0x80000000 (padding start bit)
+//   words 9..13: 0x00000000 (zero padding)
+//   word 14:    0x00000000 (high 32 bits of bit-length)
+//   word 15:    0x00000100 (low 32 bits of bit-length = 256)
+pub fn double_sha256_single_block(
+    w0: U32,
+    w1: U32,
+    w2: U32,
+    w3: U32,
+    w4: U32,
+    w5: U32,
+    w6: U32,
+    w7: U32,
+    w8: U32,
+    w9: U32,
+    w10: U32,
+    w11: U32,
+    w12: U32,
+    w13: U32,
+    w14: U32,
+    w15: U32
+) -> Sha256State {
+    // First SHA-256
+    let iv: Sha256State = init()
+    let first: Sha256State = compress(
+        iv,
+        w0,
+        w1,
+        w2,
+        w3,
+        w4,
+        w5,
+        w6,
+        w7,
+        w8,
+        w9,
+        w10,
+        w11,
+        w12,
+        w13,
+        w14,
+        w15
+    )
+    // Construct padded block for second SHA-256 of the 256-bit digest:
+    // 8 digest words + 0x80000000 + 5 zero words + 0x00000000 + 0x00000100
+    let pad_start: U32 = convert.as_u32(2147483648)
+    let zero: U32 = convert.as_u32(0)
+    let bit_len: U32 = convert.as_u32(256)
+    // Second SHA-256
+    let iv2: Sha256State = init()
+    compress(
+        iv2,
+        first.h0,
+        first.h1,
+        first.h2,
+        first.h3,
+        first.h4,
+        first.h5,
+        first.h6,
+        first.h7,
+        pad_start,
+        zero,
+        zero,
+        zero,
+        zero,
+        zero,
+        zero,
+        bit_len
+    )
+}

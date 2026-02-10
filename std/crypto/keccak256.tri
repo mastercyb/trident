@@ -1,0 +1,549 @@
+module std.crypto.keccak256
+
+// Keccak-256 building blocks for Ethereum bridge verification.
+//
+// Ethereum uses Keccak-256 (the pre-NIST-finalization variant of SHA-3) for
+// transaction hashing, address derivation, and Merkle-Patricia trie nodes.
+// This module provides the core primitives for in-circuit Keccak computation.
+//
+// Keccak-f[1600] operates on a 5x5 array of 64-bit lanes. Since Trident's
+// native unsigned type is U32, each 64-bit lane is represented as a pair of
+// U32 values (lo, hi) in little-endian order.
+//
+// The full permutation consists of 24 rounds, each applying five steps:
+//   theta  - column parity diffusion
+//   rho    - bitwise rotation of each lane
+//   pi     - lane permutation (reindexing)
+//   chi    - nonlinear row mixing: a[i] ^= ~a[i+1] & a[i+2]
+//   iota   - round constant XOR into lane (0,0)
+//
+// For most Ethereum bridge use cases, the prover supplies pre-computed
+// Keccak-256 hashes via divine() and the circuit verifies structural
+// commitments (e.g., Merkle-Patricia proofs). This library provides the
+// building blocks for cases where full in-circuit Keccak is required.
+//
+// U32 arithmetic constraints:
+//   - `+` and `*` are Field-only operators.
+//   - U32 has `&`, `^`, `<`, `/%` as native operators.
+//   - To add U32 values we widen to Field, add, then split back.
+//   - `convert.as_field(u)` widens U32 -> Field losslessly.
+//   - `convert.as_u32(f)` narrows Field -> U32 (asserts fits in 32 bits).
+//   - `convert.split(f)` splits a Field into (hi: U32, lo: U32).
+use std.core.convert
+
+use std.core.field
+
+// ---------------------------------------------------------------------------
+// Lane: a 64-bit value as two U32 halves (little-endian)
+// ---------------------------------------------------------------------------
+// lo holds bits [0..31], hi holds bits [32..63].
+pub struct Lane {
+    lo: U32,
+    hi: U32,
+}
+
+// Zero lane.
+pub fn zero_lane() -> Lane {
+    let z: U32 = convert.as_u32(0)
+    Lane { lo: z, hi: z }
+}
+
+// Construct a lane from two U32 literals.
+pub fn make_lane(lo: U32, hi: U32) -> Lane {
+    Lane { lo: lo, hi: hi }
+}
+
+// ---------------------------------------------------------------------------
+// Lane-level bitwise operations
+// ---------------------------------------------------------------------------
+// XOR two lanes.
+pub fn xor_lane(a: Lane, b: Lane) -> Lane {
+    Lane { lo: a.lo ^ b.lo, hi: a.hi ^ b.hi }
+}
+
+// AND two lanes.
+pub fn and_lane(a: Lane, b: Lane) -> Lane {
+    Lane { lo: a.lo & b.lo, hi: a.hi & b.hi }
+}
+
+// NOT a lane (bitwise complement via XOR with all-ones).
+pub fn not_lane(a: Lane) -> Lane {
+    let ones: U32 = convert.as_u32(4294967295)
+    Lane { lo: a.lo ^ ones, hi: a.hi ^ ones }
+}
+
+// Chi step helper: a ^ (~b & c), the nonlinear mixing per Keccak spec.
+pub fn chi_lane(a: Lane, b: Lane, c: Lane) -> Lane {
+    let not_b: Lane = not_lane(b)
+    let masked: Lane = and_lane(not_b, c)
+    xor_lane(a, masked)
+}
+
+// ---------------------------------------------------------------------------
+// Lane rotation (64-bit cyclic left rotation by n bits)
+// ---------------------------------------------------------------------------
+// Rotate a 64-bit lane left by 1 bit.
+// For a pair (lo, hi), rotating left by 1:
+//   new_lo = (lo << 1) | (hi >> 31)
+//   new_hi = (hi << 1) | (lo >> 31)
+// We implement shift via Field arithmetic since U32 lacks shift operators.
+// Left shift by 1: multiply value by 2 in Field, split to get overflow.
+// Right shift by 31: the bit shifted out by left-shift-by-1 is the top bit.
+fn shl1_u32(a: U32) -> (U32, U32) {
+    // Returns (result, overflow_bit) where overflow_bit is the top bit of a.
+    let fa: Field = convert.as_field(a)
+    let doubled: Field = fa + fa
+    let (hi, lo) = convert.split(doubled)
+    // lo is a << 1 (mod 2^32), hi is the carry (0 or 1) = top bit of a
+    (lo, hi)
+}
+
+// Rotate a lane left by 1 bit (64-bit rotation).
+pub fn rot_lane_1(a: Lane) -> Lane {
+    let (lo_shifted, lo_top) = shl1_u32(a.lo)
+    let (hi_shifted, hi_top) = shl1_u32(a.hi)
+    // new_lo = (lo << 1) | hi_top  (top bit of hi wraps into bit 0 of lo)
+    // new_hi = (hi << 1) | lo_top  (top bit of lo wraps into bit 0 of hi)
+    let new_lo: U32 = lo_shifted ^ hi_top
+    let new_hi: U32 = hi_shifted ^ lo_top
+    Lane { lo: new_lo, hi: new_hi }
+}
+
+// Left shift a U32 by n bits (0 <= n <= 31) via Field multiplication.
+// Returns (result, overflow) where overflow holds the bits shifted out.
+fn shl_u32(a: U32, n: U32) -> (U32, U32) {
+    let fa: Field = convert.as_field(a)
+    let fn_val: Field = convert.as_field(u32_pow2(n))
+    let product: Field = fa * fn_val
+    let (hi, lo) = convert.split(product)
+    (lo, hi)
+}
+
+// Compute 2^n for n in [0..31] using repeated doubling in Field.
+// Since Trident has no U32 shift, we build the power via Field arithmetic
+// and narrow back to U32.
+fn u32_pow2(n: U32) -> U32 {
+    let z: U32 = convert.as_u32(0)
+    let one: U32 = convert.as_u32(1)
+    if n == z {
+        one
+    } else if n == convert.as_u32(1) {
+        convert.as_u32(2)
+    } else if n == convert.as_u32(2) {
+        convert.as_u32(4)
+    } else if n == convert.as_u32(3) {
+        convert.as_u32(8)
+    } else if n == convert.as_u32(4) {
+        convert.as_u32(16)
+    } else if n == convert.as_u32(5) {
+        convert.as_u32(32)
+    } else if n == convert.as_u32(6) {
+        convert.as_u32(64)
+    } else if n == convert.as_u32(7) {
+        convert.as_u32(128)
+    } else if n == convert.as_u32(8) {
+        convert.as_u32(256)
+    } else if n == convert.as_u32(9) {
+        convert.as_u32(512)
+    } else if n == convert.as_u32(10) {
+        convert.as_u32(1024)
+    } else if n == convert.as_u32(11) {
+        convert.as_u32(2048)
+    } else if n == convert.as_u32(12) {
+        convert.as_u32(4096)
+    } else if n == convert.as_u32(13) {
+        convert.as_u32(8192)
+    } else if n == convert.as_u32(14) {
+        convert.as_u32(16384)
+    } else if n == convert.as_u32(15) {
+        convert.as_u32(32768)
+    } else if n == convert.as_u32(16) {
+        convert.as_u32(65536)
+    } else if n == convert.as_u32(17) {
+        convert.as_u32(131072)
+    } else if n == convert.as_u32(18) {
+        convert.as_u32(262144)
+    } else if n == convert.as_u32(19) {
+        convert.as_u32(524288)
+    } else if n == convert.as_u32(20) {
+        convert.as_u32(1048576)
+    } else if n == convert.as_u32(21) {
+        convert.as_u32(2097152)
+    } else if n == convert.as_u32(22) {
+        convert.as_u32(4194304)
+    } else if n == convert.as_u32(23) {
+        convert.as_u32(8388608)
+    } else if n == convert.as_u32(24) {
+        convert.as_u32(16777216)
+    } else if n == convert.as_u32(25) {
+        convert.as_u32(33554432)
+    } else if n == convert.as_u32(26) {
+        convert.as_u32(67108864)
+    } else if n == convert.as_u32(27) {
+        convert.as_u32(134217728)
+    } else if n == convert.as_u32(28) {
+        convert.as_u32(268435456)
+    } else if n == convert.as_u32(29) {
+        convert.as_u32(536870912)
+    } else if n == convert.as_u32(30) {
+        convert.as_u32(1073741824)
+    } else {
+        convert.as_u32(2147483648)
+    }
+}
+
+// Rotate a 64-bit lane left by n bits (0 < n < 32).
+// new_lo = (lo << n) | (hi >> (32 - n))
+// new_hi = (hi << n) | (lo >> (32 - n))
+fn rot_lane_small(a: Lane, n: U32) -> Lane {
+    let (lo_left, lo_over) = shl_u32(a.lo, n)
+    let (hi_left, hi_over) = shl_u32(a.hi, n)
+    // lo_over holds the bits shifted out of lo (i.e., lo >> (32-n))
+    // hi_over holds the bits shifted out of hi (i.e., hi >> (32-n))
+    let new_lo: U32 = lo_left ^ hi_over
+    let new_hi: U32 = hi_left ^ lo_over
+    Lane { lo: new_lo, hi: new_hi }
+}
+
+// Rotate a 64-bit lane left by exactly 32 bits (swap halves).
+fn rot_lane_32(a: Lane) -> Lane {
+    Lane { lo: a.hi, hi: a.lo }
+}
+
+// Rotate a 64-bit lane left by n bits (32 < n < 64).
+// Equivalent to swap halves then rotate by (n - 32).
+fn rot_lane_large(a: Lane, n: U32) -> Lane {
+    // Subtract 32 from n: widen to Field, subtract, narrow back.
+    let fn_val: Field = convert.as_field(n)
+    let f32: Field = convert.as_field(convert.as_u32(32))
+    let small_n: U32 = convert.as_u32(fn_val + field.neg(f32))
+    let swapped: Lane = rot_lane_32(a)
+    rot_lane_small(swapped, small_n)
+}
+
+// General 64-bit left rotation by an arbitrary offset (0..63).
+// Dispatches to the appropriate helper based on offset range.
+pub fn rot_lane(a: Lane, n: U32) -> Lane {
+    let z: U32 = convert.as_u32(0)
+    let thirty_two: U32 = convert.as_u32(32)
+    if n == z {
+        a
+    } else if n == thirty_two {
+        rot_lane_32(a)
+    } else if n < thirty_two {
+        rot_lane_small(a, n)
+    } else {
+        rot_lane_large(a, n)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Keccak-f[1600] state: 25 lanes in row-major order
+// ---------------------------------------------------------------------------
+// State[x][y] is stored as field s_{x}_{y} where x is column, y is row.
+// Flat naming: s00 = (0,0), s10 = (1,0), ..., s44 = (4,4).
+pub struct KeccakState {
+    s00: Lane,
+    s10: Lane,
+    s20: Lane,
+    s30: Lane,
+    s40: Lane,
+    s01: Lane,
+    s11: Lane,
+    s21: Lane,
+    s31: Lane,
+    s41: Lane,
+    s02: Lane,
+    s12: Lane,
+    s22: Lane,
+    s32: Lane,
+    s42: Lane,
+    s03: Lane,
+    s13: Lane,
+    s23: Lane,
+    s33: Lane,
+    s43: Lane,
+    s04: Lane,
+    s14: Lane,
+    s24: Lane,
+    s34: Lane,
+    s44: Lane,
+}
+
+// Zero-initialized Keccak state.
+pub fn zero_state() -> KeccakState {
+    let z: Lane = zero_lane()
+    KeccakState { s00: z, s10: z, s20: z, s30: z, s40: z, s01: z, s11: z, s21: z, s31: z, s41: z, s02: z, s12: z, s22: z, s32: z, s42: z, s03: z, s13: z, s23: z, s33: z, s43: z, s04: z, s14: z, s24: z, s34: z, s44: z }
+}
+
+// ---------------------------------------------------------------------------
+// Theta step
+// ---------------------------------------------------------------------------
+// theta computes column parities, rotates, and XORs into the state.
+//   C[x]    = state[x][0] ^ state[x][1] ^ state[x][2] ^ state[x][3] ^ state[x][4]
+//   D[x]    = C[x-1] ^ rot(C[x+1], 1)
+//   state[x][y] ^= D[x]
+pub fn theta(st: KeccakState) -> KeccakState {
+    // Column parities
+    let c0: Lane = xor_lane(
+        xor_lane(xor_lane(xor_lane(st.s00, st.s01), st.s02), st.s03),
+        st.s04
+    )
+    let c1: Lane = xor_lane(
+        xor_lane(xor_lane(xor_lane(st.s10, st.s11), st.s12), st.s13),
+        st.s14
+    )
+    let c2: Lane = xor_lane(
+        xor_lane(xor_lane(xor_lane(st.s20, st.s21), st.s22), st.s23),
+        st.s24
+    )
+    let c3: Lane = xor_lane(
+        xor_lane(xor_lane(xor_lane(st.s30, st.s31), st.s32), st.s33),
+        st.s34
+    )
+    let c4: Lane = xor_lane(
+        xor_lane(xor_lane(xor_lane(st.s40, st.s41), st.s42), st.s43),
+        st.s44
+    )
+    // D[x] = C[x-1] ^ rot(C[x+1], 1)  (indices mod 5)
+    let d0: Lane = xor_lane(c4, rot_lane_1(c1))
+    let d1: Lane = xor_lane(c0, rot_lane_1(c2))
+    let d2: Lane = xor_lane(c1, rot_lane_1(c3))
+    let d3: Lane = xor_lane(c2, rot_lane_1(c4))
+    let d4: Lane = xor_lane(c3, rot_lane_1(c0))
+    // XOR D[x] into each lane of column x
+    KeccakState { s00: xor_lane(st.s00, d0), s10: xor_lane(st.s10, d1), s20: xor_lane(st.s20, d2), s30: xor_lane(st.s30, d3), s40: xor_lane(st.s40, d4), s01: xor_lane(st.s01, d0), s11: xor_lane(st.s11, d1), s21: xor_lane(st.s21, d2), s31: xor_lane(st.s31, d3), s41: xor_lane(st.s41, d4), s02: xor_lane(st.s02, d0), s12: xor_lane(st.s12, d1), s22: xor_lane(st.s22, d2), s32: xor_lane(st.s32, d3), s42: xor_lane(st.s42, d4), s03: xor_lane(st.s03, d0), s13: xor_lane(st.s13, d1), s23: xor_lane(st.s23, d2), s33: xor_lane(st.s33, d3), s43: xor_lane(st.s43, d4), s04: xor_lane(st.s04, d0), s14: xor_lane(st.s14, d1), s24: xor_lane(st.s24, d2), s34: xor_lane(st.s34, d3), s44: xor_lane(st.s44, d4) }
+}
+
+// ---------------------------------------------------------------------------
+// Rho step (lane rotations by fixed offsets)
+// ---------------------------------------------------------------------------
+// Each lane is rotated left by a fixed number of bits defined by the spec.
+// Offsets (x,y) -> rotation amount:
+//   (0,0)-> 0, (1,0)->1,  (2,0)->62, (3,0)->28, (4,0)->27,
+//   (0,1)->36, (1,1)->44, (2,1)-> 6, (3,1)->55, (4,1)->20,
+//   (0,2)-> 3, (1,2)->10, (2,2)->43, (3,2)->25, (4,2)->39,
+//   (0,3)->41, (1,3)->45, (2,3)->15, (3,3)->21, (4,3)-> 8,
+//   (0,4)->18, (1,4)-> 2, (2,4)->61, (3,4)->56, (4,4)->14.
+pub fn rho(st: KeccakState) -> KeccakState {
+    KeccakState { s00: st.s00, s10: rot_lane(st.s10, convert.as_u32(1)), s20: rot_lane(st.s20, convert.as_u32(62)), s30: rot_lane(st.s30, convert.as_u32(28)), s40: rot_lane(st.s40, convert.as_u32(27)), s01: rot_lane(st.s01, convert.as_u32(36)), s11: rot_lane(st.s11, convert.as_u32(44)), s21: rot_lane(st.s21, convert.as_u32(6)), s31: rot_lane(st.s31, convert.as_u32(55)), s41: rot_lane(st.s41, convert.as_u32(20)), s02: rot_lane(st.s02, convert.as_u32(3)), s12: rot_lane(st.s12, convert.as_u32(10)), s22: rot_lane(st.s22, convert.as_u32(43)), s32: rot_lane(st.s32, convert.as_u32(25)), s42: rot_lane(st.s42, convert.as_u32(39)), s03: rot_lane(st.s03, convert.as_u32(41)), s13: rot_lane(st.s13, convert.as_u32(45)), s23: rot_lane(st.s23, convert.as_u32(15)), s33: rot_lane(st.s33, convert.as_u32(21)), s43: rot_lane(st.s43, convert.as_u32(8)), s04: rot_lane(st.s04, convert.as_u32(18)), s14: rot_lane(st.s14, convert.as_u32(2)), s24: rot_lane(st.s24, convert.as_u32(61)), s34: rot_lane(st.s34, convert.as_u32(56)), s44: rot_lane(st.s44, convert.as_u32(14)) }
+}
+
+// ---------------------------------------------------------------------------
+// Pi step (lane permutation)
+// ---------------------------------------------------------------------------
+// Reindex: new[y][2x+3y mod 5] = old[x][y]
+// Equivalently, for each destination (X,Y): new[X][Y] = old[(X+3Y) mod 5][X]
+// Expanded mapping (new_x, new_y) <- (old_x, old_y):
+//   (0,0)<-(0,0)  (1,0)<-(1,1)  (2,0)<-(2,2)  (3,0)<-(3,3)  (4,0)<-(4,4)
+//   (0,1)<-(3,0)  (1,1)<-(4,1)  (2,1)<-(0,2)  (3,1)<-(1,3)  (4,1)<-(2,4)
+//   (0,2)<-(1,0)  (1,2)<-(2,1)  (2,2)<-(3,2)  (3,2)<-(4,3)  (4,2)<-(0,4)
+//   (0,3)<-(4,0)  (1,3)<-(0,1)  (2,3)<-(1,2)  (3,3)<-(2,3)  (4,3)<-(3,4)
+//   (0,4)<-(2,0)  (1,4)<-(3,1)  (2,4)<-(4,2)  (3,4)<-(0,3)  (4,4)<-(1,4)
+pub fn pi(st: KeccakState) -> KeccakState {
+    KeccakState { s00: st.s00, s10: st.s11, s20: st.s22, s30: st.s33, s40: st.s44, s01: st.s30, s11: st.s41, s21: st.s02, s31: st.s13, s41: st.s24, s02: st.s10, s12: st.s21, s22: st.s32, s32: st.s43, s42: st.s04, s03: st.s40, s13: st.s01, s23: st.s12, s33: st.s23, s43: st.s34, s04: st.s20, s14: st.s31, s24: st.s42, s34: st.s03, s44: st.s14 }
+}
+
+// ---------------------------------------------------------------------------
+// Chi step (nonlinear row mixing)
+// ---------------------------------------------------------------------------
+// For each row y and column x:
+//   new[x][y] = state[x][y] ^ (~state[x+1 mod 5][y] & state[x+2 mod 5][y])
+pub fn chi(st: KeccakState) -> KeccakState {
+    // Row 0
+    let r00: Lane = chi_lane(st.s00, st.s10, st.s20)
+    let r10: Lane = chi_lane(st.s10, st.s20, st.s30)
+    let r20: Lane = chi_lane(st.s20, st.s30, st.s40)
+    let r30: Lane = chi_lane(st.s30, st.s40, st.s00)
+    let r40: Lane = chi_lane(st.s40, st.s00, st.s10)
+    // Row 1
+    let r01: Lane = chi_lane(st.s01, st.s11, st.s21)
+    let r11: Lane = chi_lane(st.s11, st.s21, st.s31)
+    let r21: Lane = chi_lane(st.s21, st.s31, st.s41)
+    let r31: Lane = chi_lane(st.s31, st.s41, st.s01)
+    let r41: Lane = chi_lane(st.s41, st.s01, st.s11)
+    // Row 2
+    let r02: Lane = chi_lane(st.s02, st.s12, st.s22)
+    let r12: Lane = chi_lane(st.s12, st.s22, st.s32)
+    let r22: Lane = chi_lane(st.s22, st.s32, st.s42)
+    let r32: Lane = chi_lane(st.s32, st.s42, st.s02)
+    let r42: Lane = chi_lane(st.s42, st.s02, st.s12)
+    // Row 3
+    let r03: Lane = chi_lane(st.s03, st.s13, st.s23)
+    let r13: Lane = chi_lane(st.s13, st.s23, st.s33)
+    let r23: Lane = chi_lane(st.s23, st.s33, st.s43)
+    let r33: Lane = chi_lane(st.s33, st.s43, st.s03)
+    let r43: Lane = chi_lane(st.s43, st.s03, st.s13)
+    // Row 4
+    let r04: Lane = chi_lane(st.s04, st.s14, st.s24)
+    let r14: Lane = chi_lane(st.s14, st.s24, st.s34)
+    let r24: Lane = chi_lane(st.s24, st.s34, st.s44)
+    let r34: Lane = chi_lane(st.s34, st.s44, st.s04)
+    let r44: Lane = chi_lane(st.s44, st.s04, st.s14)
+    KeccakState { s00: r00, s10: r10, s20: r20, s30: r30, s40: r40, s01: r01, s11: r11, s21: r21, s31: r31, s41: r41, s02: r02, s12: r12, s22: r22, s32: r32, s42: r42, s03: r03, s13: r13, s23: r23, s33: r33, s43: r43, s04: r04, s14: r14, s24: r24, s34: r34, s44: r44 }
+}
+
+// ---------------------------------------------------------------------------
+// Iota step (round constant XOR)
+// ---------------------------------------------------------------------------
+// XOR the round constant into lane (0,0).
+pub fn iota(st: KeccakState, rc: Lane) -> KeccakState {
+    KeccakState { s00: xor_lane(st.s00, rc), s10: st.s10, s20: st.s20, s30: st.s30, s40: st.s40, s01: st.s01, s11: st.s11, s21: st.s21, s31: st.s31, s41: st.s41, s02: st.s02, s12: st.s12, s22: st.s22, s32: st.s32, s42: st.s42, s03: st.s03, s13: st.s13, s23: st.s23, s33: st.s33, s43: st.s43, s04: st.s04, s14: st.s14, s24: st.s24, s34: st.s34, s44: st.s44 }
+}
+
+// ---------------------------------------------------------------------------
+// Round constants for Keccak-f[1600]
+// ---------------------------------------------------------------------------
+// 24 round constants as (lo, hi) pairs. These are the standard RC values
+// from the Keccak specification (FIPS 202, Table 2).
+pub fn rc0() -> Lane {
+    make_lane(convert.as_u32(1), convert.as_u32(0))
+}
+
+pub fn rc1() -> Lane {
+    make_lane(convert.as_u32(32898), convert.as_u32(0))
+}
+
+pub fn rc2() -> Lane {
+    make_lane(convert.as_u32(32906), convert.as_u32(2147483648))
+}
+
+pub fn rc3() -> Lane {
+    make_lane(convert.as_u32(2147516416), convert.as_u32(2147483648))
+}
+
+pub fn rc4() -> Lane {
+    make_lane(convert.as_u32(32907), convert.as_u32(0))
+}
+
+pub fn rc5() -> Lane {
+    make_lane(convert.as_u32(2147483649), convert.as_u32(0))
+}
+
+pub fn rc6() -> Lane {
+    make_lane(convert.as_u32(2147516545), convert.as_u32(2147483648))
+}
+
+pub fn rc7() -> Lane {
+    make_lane(convert.as_u32(32777), convert.as_u32(2147483648))
+}
+
+pub fn rc8() -> Lane {
+    make_lane(convert.as_u32(138), convert.as_u32(0))
+}
+
+pub fn rc9() -> Lane {
+    make_lane(convert.as_u32(136), convert.as_u32(0))
+}
+
+pub fn rc10() -> Lane {
+    make_lane(convert.as_u32(2147516425), convert.as_u32(0))
+}
+
+pub fn rc11() -> Lane {
+    make_lane(convert.as_u32(2147483658), convert.as_u32(0))
+}
+
+pub fn rc12() -> Lane {
+    make_lane(convert.as_u32(2147516555), convert.as_u32(0))
+}
+
+pub fn rc13() -> Lane {
+    make_lane(convert.as_u32(139), convert.as_u32(2147483648))
+}
+
+pub fn rc14() -> Lane {
+    make_lane(convert.as_u32(32905), convert.as_u32(2147483648))
+}
+
+pub fn rc15() -> Lane {
+    make_lane(convert.as_u32(32771), convert.as_u32(2147483648))
+}
+
+pub fn rc16() -> Lane {
+    make_lane(convert.as_u32(32770), convert.as_u32(2147483648))
+}
+
+pub fn rc17() -> Lane {
+    make_lane(convert.as_u32(128), convert.as_u32(2147483648))
+}
+
+pub fn rc18() -> Lane {
+    make_lane(convert.as_u32(32778), convert.as_u32(0))
+}
+
+pub fn rc19() -> Lane {
+    make_lane(convert.as_u32(2147483658), convert.as_u32(2147483648))
+}
+
+pub fn rc20() -> Lane {
+    make_lane(convert.as_u32(2147516545), convert.as_u32(2147483648))
+}
+
+pub fn rc21() -> Lane {
+    make_lane(convert.as_u32(32896), convert.as_u32(2147483648))
+}
+
+pub fn rc22() -> Lane {
+    make_lane(convert.as_u32(2147483649), convert.as_u32(0))
+}
+
+pub fn rc23() -> Lane {
+    make_lane(convert.as_u32(2147516424), convert.as_u32(2147483648))
+}
+
+// ---------------------------------------------------------------------------
+// Single Keccak-f[1600] round
+// ---------------------------------------------------------------------------
+// Applies theta, rho, pi, chi, iota in sequence for one round.
+pub fn keccak_round(st: KeccakState, rc: Lane) -> KeccakState {
+    let after_theta: KeccakState = theta(st)
+    let after_rho: KeccakState = rho(after_theta)
+    let after_pi: KeccakState = pi(after_rho)
+    let after_chi: KeccakState = chi(after_pi)
+    iota(after_chi, rc)
+}
+
+// ---------------------------------------------------------------------------
+// Full Keccak-f[1600] permutation (24 rounds)
+// ---------------------------------------------------------------------------
+// Applies all 24 rounds of the Keccak-f[1600] permutation.
+// Each round applies theta -> rho -> pi -> chi -> iota with the
+// corresponding round constant.
+pub fn keccak_f1600(st: KeccakState) -> KeccakState {
+    let s0: KeccakState = keccak_round(st, rc0())
+    let s1: KeccakState = keccak_round(s0, rc1())
+    let s2: KeccakState = keccak_round(s1, rc2())
+    let s3: KeccakState = keccak_round(s2, rc3())
+    let s4: KeccakState = keccak_round(s3, rc4())
+    let s5: KeccakState = keccak_round(s4, rc5())
+    let s6: KeccakState = keccak_round(s5, rc6())
+    let s7: KeccakState = keccak_round(s6, rc7())
+    let s8: KeccakState = keccak_round(s7, rc8())
+    let s9: KeccakState = keccak_round(s8, rc9())
+    let s10: KeccakState = keccak_round(s9, rc10())
+    let s11: KeccakState = keccak_round(s10, rc11())
+    let s12: KeccakState = keccak_round(s11, rc12())
+    let s13: KeccakState = keccak_round(s12, rc13())
+    let s14: KeccakState = keccak_round(s13, rc14())
+    let s15: KeccakState = keccak_round(s14, rc15())
+    let s16: KeccakState = keccak_round(s15, rc16())
+    let s17: KeccakState = keccak_round(s16, rc17())
+    let s18: KeccakState = keccak_round(s17, rc18())
+    let s19: KeccakState = keccak_round(s18, rc19())
+    let s20: KeccakState = keccak_round(s19, rc20())
+    let s21: KeccakState = keccak_round(s20, rc21())
+    let s22: KeccakState = keccak_round(s21, rc22())
+    keccak_round(s22, rc23())
+}
+
+// ---------------------------------------------------------------------------
+// Keccak-256 output extraction
+// ---------------------------------------------------------------------------
+// Keccak-256 output is the first 256 bits of the state after squeezing.
+// With rate = 1088 bits (136 bytes) and capacity = 512 bits, the output
+// comes from lanes (0,0) through (3,0) — the first 4 lanes = 256 bits.
+// Returns 8 U32 values: the 256-bit digest in little-endian limb order.
+pub fn extract256(st: KeccakState) -> (U32, U32, U32, U32, U32, U32, U32, U32) {
+    (st.s00.lo, st.s00.hi, st.s10.lo, st.s10.hi, st.s20.lo, st.s20.hi, st.s30.lo, st.s30.hi)
+}
