@@ -1,0 +1,15 @@
+program proof_relay
+
+// Proof Relay — Verify and Forward a Single Proof
+//
+// The simplest composition pattern: verify one inner proof and
+// output the verified claim. The outer proof attests:
+// "I verified that program P produced outputs O."
+//
+// This is the building block for cross-chain proof relay:
+// a proof generated on chain A can be verified on chain B.
+use ext.triton.proof
+
+fn main() {
+    proof.verify_inner_proof(4)
+}

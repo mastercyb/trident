@@ -2511,4 +2511,116 @@ fn main() {
             "xb inner product should use xb_dot_step"
         );
     }
+
+    #[test]
+    fn test_proof_composition_library() {
+        let dir = tempfile::tempdir().unwrap();
+        let main_path = dir.path().join("main.tri");
+        std::fs::write(
+            &main_path,
+            r#"program test
+use ext.triton.proof
+
+fn main() {
+    proof.verify_inner_proof(4)
+}
+"#,
+        )
+        .unwrap();
+        // Copy all required library files
+        let ext_dir = dir.path().join("ext").join("triton");
+        std::fs::create_dir_all(&ext_dir).unwrap();
+        std::fs::copy("ext/triton/proof.tri", ext_dir.join("proof.tri")).unwrap_or_default();
+        std::fs::copy("ext/triton/recursive.tri", ext_dir.join("recursive.tri"))
+            .unwrap_or_default();
+        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+        let std_io = dir.path().join("std").join("io");
+        let std_core = dir.path().join("std").join("core");
+        std::fs::create_dir_all(&std_io).unwrap();
+        std::fs::create_dir_all(&std_core).unwrap();
+        std::fs::copy("std/io/io.tri", std_io.join("io.tri")).unwrap_or_default();
+        std::fs::copy("std/core/assert.tri", std_core.join("assert.tri")).unwrap_or_default();
+
+        let result = compile_project(&main_path);
+        assert!(
+            result.is_ok(),
+            "proof composition should compile: {:?}",
+            result.err()
+        );
+        let tasm = result.unwrap();
+        assert!(
+            tasm.contains("xx_dot_step"),
+            "should use xx_dot_step for inner products"
+        );
+    }
+
+    #[test]
+    fn test_proof_aggregation() {
+        let dir = tempfile::tempdir().unwrap();
+        let main_path = dir.path().join("main.tri");
+        std::fs::write(
+            &main_path,
+            r#"program test
+use ext.triton.proof
+
+fn main() {
+    let n: Field = pub_read()
+    proof.aggregate_proofs(n, 4)
+}
+"#,
+        )
+        .unwrap();
+        let ext_dir = dir.path().join("ext").join("triton");
+        std::fs::create_dir_all(&ext_dir).unwrap();
+        std::fs::copy("ext/triton/proof.tri", ext_dir.join("proof.tri")).unwrap_or_default();
+        std::fs::copy("ext/triton/recursive.tri", ext_dir.join("recursive.tri"))
+            .unwrap_or_default();
+        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+        let std_io = dir.path().join("std").join("io");
+        let std_core = dir.path().join("std").join("core");
+        std::fs::create_dir_all(&std_io).unwrap();
+        std::fs::create_dir_all(&std_core).unwrap();
+        std::fs::copy("std/io/io.tri", std_io.join("io.tri")).unwrap_or_default();
+        std::fs::copy("std/core/assert.tri", std_core.join("assert.tri")).unwrap_or_default();
+
+        let result = compile_project(&main_path);
+        assert!(
+            result.is_ok(),
+            "proof aggregation should compile: {:?}",
+            result.err()
+        );
+        let tasm = result.unwrap();
+        assert!(
+            tasm.contains("xx_dot_step"),
+            "aggregation should use xx_dot_step"
+        );
+    }
+
+    #[test]
+    fn test_proof_relay_example_compiles() {
+        let path = std::path::Path::new("examples/neptune/proof_relay.tri");
+        if !path.exists() {
+            return;
+        }
+        let result = compile_project(path);
+        assert!(
+            result.is_ok(),
+            "proof relay example should compile: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_proof_aggregator_example_compiles() {
+        let path = std::path::Path::new("examples/neptune/proof_aggregator.tri");
+        if !path.exists() {
+            return;
+        }
+        let result = compile_project(path);
+        assert!(
+            result.is_ok(),
+            "proof aggregator example should compile: {:?}",
+            result.err()
+        );
+    }
 }

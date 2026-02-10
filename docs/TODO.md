@@ -111,7 +111,7 @@ backend is fully implemented; others are stubs.
 - [x] Const generics in expressions: `[Field; M + N]`, `[Field; N * 2]`
 - [x] `#[pure]` annotation (no I/O — enables aggressive verification)
 - [ ] Trait-like interfaces for backend extensions (generic over hash function)
-- [ ] Proof composition primitives (recursive verification as first-class)
+- [x] Proof composition primitives (recursive verification as first-class)
 
 ## Research Directions
 

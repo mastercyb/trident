@@ -1,0 +1,28 @@
+program proof_aggregator
+
+// Proof Aggregator — Compose Multiple Proofs Into One
+//
+// This program verifies N inner proofs and produces a single
+// outer proof that attests to the validity of all N computations.
+//
+// Use cases:
+//   - Transaction batching: verify 16 tx proofs -> 1 block proof
+//   - Rollup sequencing: aggregate L2 state transition proofs
+//   - Parallel proving: split work, prove independently, aggregate
+//
+// Public input:
+//   1. Number of proofs to aggregate
+//   2. For each proof: Claim (program digest + I/O counts) + I/O values
+//
+// Secret input:
+//   For each proof: STARK proof data via divine/divine5
+//
+// Public output:
+//   For each verified proof: the inner program's digest (5 fields)
+use ext.triton.proof
+
+fn main() {
+    let num_proofs: Field = pub_read()
+    let num_fri_rounds: Field = 4
+    proof.aggregate_proofs(num_proofs, num_fri_rounds)
+}

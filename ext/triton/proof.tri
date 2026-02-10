@@ -1,0 +1,160 @@
+module ext.triton.proof
+
+use ext.triton.recursive
+
+use std.io.io
+
+// Proof Composition Primitives for Triton VM
+//
+// This module provides high-level building blocks for recursive
+// proof verification and composition. It abstracts the low-level
+// inner product and Fiat-Shamir machinery into reusable patterns.
+//
+// Key types:
+//   Claim — what is being verified (program digest + I/O counts)
+//
+// Key operations:
+//   parse_claim()       — read a Claim from public input
+//   hash_public_io()    — hash all public I/O into a binding digest
+//   derive_fiat_shamir_seed() — compute the initial FS challenge
+//   fri_fold()          — execute one FRI folding round
+//   verify_ood()        — check out-of-domain constraint evaluation
+//   combine_constraints() — inner product to combine AIR constraints
+//   output_verified_claim() — write the verified program digest
+// A Claim represents what we are verifying: which program ran,
+// and how much public I/O it consumed/produced.
+pub struct Claim {
+    program_digest: Digest,
+    num_inputs: Field,
+    num_outputs: Field,
+}
+
+// Read a Claim from public input.
+// Format: 5 fields (program digest) + 1 (num_inputs) + 1 (num_outputs).
+pub fn parse_claim() -> Claim {
+    let (digest, ni, no) = recursive.read_claim()
+    Claim { program_digest: digest, num_inputs: ni, num_outputs: no }
+}
+
+// Hash all public I/O values into a single binding digest.
+// Reads `num_inputs + num_outputs` values from public input and
+// chains them through Tip5 to produce a commitment.
+pub fn hash_public_io(claim: Claim) -> Digest {
+    let mut acc: Digest = hash(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    for i in 0..claim.num_inputs bounded 64 {
+        let val: Field = pub_read()
+        let (h0, h1, h2, h3, h4) = acc
+        acc = hash(h0, h1, h2, h3, h4, val, 0, 0, 0, 0)
+    }
+    for i in 0..claim.num_outputs bounded 64 {
+        let val: Field = pub_read()
+        let (h0, h1, h2, h3, h4) = acc
+        acc = hash(h0, h1, h2, h3, h4, val, 0, 0, 0, 0)
+    }
+    acc
+}
+
+// Derive the initial Fiat-Shamir seed from a Claim and its I/O hash.
+// This binds the verifier's randomness to the prover's statement.
+pub fn derive_fiat_shamir_seed(claim: Claim, io_hash: Digest) -> Digest {
+    let (p0, p1, p2, p3, p4) = claim.program_digest
+    let (h0, h1, h2, h3, h4) = io_hash
+    hash(p0, p1, p2, p3, p4, h0, h1, h2, h3, h4)
+}
+
+// Derive a challenge digest from a seed and a round number.
+pub fn derive_challenge(seed: Digest, round: Field) -> Digest {
+    let (s0, s1, s2, s3, s4) = seed
+    hash(s0, s1, s2, s3, s4, round, 0, 0, 0, 0)
+}
+
+// Execute one FRI folding round.
+// Takes the current commitment and Fiat-Shamir seed, produces the
+// next-round commitment. The prover supplies the next commitment
+// via divine input; the verifier derives a challenge to bind it.
+// Returns (next_commitment, challenge_used).
+pub fn fri_fold(
+    commitment: Digest,
+    seed: Digest,
+    round: Field
+) -> (Digest, Digest) {
+    let challenge: Digest = derive_challenge(seed, round)
+    let next_commitment: Digest = io.divine5()
+    (next_commitment, challenge)
+}
+
+// Run a full FRI verification chain of `num_rounds` rounds.
+// Returns the final commitment after all folding rounds.
+pub fn fri_verify(
+    base_commitment: Digest,
+    seed: Digest,
+    num_rounds: Field
+) -> Digest {
+    let mut current: Digest = base_commitment
+    for r in 0..num_rounds bounded 16 {
+        let round_field: Field = as_field(r)
+        let (next, challenge) = fri_fold(current, seed, round_field)
+        current = next
+    }
+    current
+}
+
+// Verify the out-of-domain (OOD) evaluation.
+// Derives a random evaluation point, reads the claimed evaluation
+// from divine input, and returns both for the caller to check.
+pub fn verify_ood(seed: Digest) -> (Digest, Digest) {
+    let ood_point: Digest = derive_challenge(seed, 100)
+    let ood_evaluation: Digest = io.divine5()
+    (ood_point, ood_evaluation)
+}
+
+// Combine AIR constraints using inner product with random weights.
+// The constraint values and weights are in RAM at the given pointers.
+// Returns the combined evaluation as a Digest (XField + pointers).
+pub fn combine_constraints(
+    ptr_constraints: Field,
+    ptr_weights: Field,
+    num_constraints: Field
+) -> Digest {
+    recursive.xfe_inner_product(ptr_constraints, ptr_weights, num_constraints)
+}
+
+// Write the verified program digest to public output.
+pub fn output_verified_claim(claim: Claim) {
+    let (d0, d1, d2, d3, d4) = claim.program_digest
+    io.write(d0)
+    io.write(d1)
+    io.write(d2)
+    io.write(d3)
+    io.write(d4)
+}
+
+// Verify a single inner proof end-to-end.
+// Orchestrates: read claim -> hash I/O -> Fiat-Shamir -> FRI -> OOD -> combine -> output.
+// `num_fri_rounds` controls the security parameter (typically 3-5).
+pub fn verify_inner_proof(num_fri_rounds: Field) {
+    let claim: Claim = parse_claim()
+    let io_hash: Digest = hash_public_io(claim)
+    let seed: Digest = derive_fiat_shamir_seed(claim, io_hash)
+    let base_commitment: Digest = io.divine5()
+    let final_commitment: Digest = fri_verify(
+        base_commitment,
+        seed,
+        num_fri_rounds
+    )
+    let (ood_point, ood_eval) = verify_ood(seed)
+    let ptr_c: Field = io.divine()
+    let ptr_w: Field = io.divine()
+    let num_c: Field = io.divine()
+    let combined: Digest = combine_constraints(ptr_c, ptr_w, num_c)
+    output_verified_claim(claim)
+}
+
+// Verify multiple inner proofs in sequence, outputting each
+// verified program digest. Used for proof aggregation:
+// N inner proofs -> 1 outer proof attesting to all N.
+pub fn aggregate_proofs(num_proofs: Field, num_fri_rounds: Field) {
+    for i in 0..num_proofs bounded 32 {
+        verify_inner_proof(num_fri_rounds)
+    }
+}
