@@ -99,6 +99,10 @@ pub struct FnDef {
     pub cfg: Option<Spanned<String>>,
     pub intrinsic: Option<Spanned<String>>,
     pub is_test: bool,
+    /// Precondition annotations: `#[requires(predicate)]`.
+    pub requires: Vec<Spanned<String>>,
+    /// Postcondition annotations: `#[ensures(predicate)]`.
+    pub ensures: Vec<Spanned<String>>,
     pub name: Spanned<String>,
     /// Size-generic parameters, e.g. `<N>` in `fn sum<N>(arr: [Field; N])`.
     pub type_params: Vec<Spanned<String>>,

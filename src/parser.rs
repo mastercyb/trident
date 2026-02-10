@@ -202,10 +202,13 @@ impl Parser {
         while !self.at(&Lexeme::Eof) {
             let start = self.current_span();
 
-            // Parse attributes: #[cfg(flag)], #[intrinsic(name)], #[test]
+            // Parse attributes: #[cfg(flag)], #[intrinsic(name)], #[test],
+            // #[requires(pred)], #[ensures(pred)]
             let mut cfg_attr: Option<Spanned<String>> = None;
             let mut intrinsic_attr: Option<Spanned<String>> = None;
             let mut is_test = false;
+            let mut requires_attrs: Vec<Spanned<String>> = Vec::new();
+            let mut ensures_attrs: Vec<Spanned<String>> = Vec::new();
             while self.at(&Lexeme::Hash) {
                 let attr = self.parse_attribute();
                 if attr.node.starts_with("cfg(") {
@@ -214,10 +217,18 @@ impl Parser {
                     cfg_attr = Some(Spanned::new(flag, attr.span));
                 } else if attr.node.starts_with("intrinsic(") {
                     intrinsic_attr = Some(attr);
+                } else if attr.node.starts_with("requires(") {
+                    let pred = attr.node[9..attr.node.len() - 1].to_string();
+                    requires_attrs.push(Spanned::new(pred, attr.span));
+                } else if attr.node.starts_with("ensures(") {
+                    let pred = attr.node[8..attr.node.len() - 1].to_string();
+                    ensures_attrs.push(Spanned::new(pred, attr.span));
                 } else if attr.node == "test" {
                     is_test = true;
                 } else {
-                    self.error_at_current("unknown attribute; expected cfg, intrinsic, or test");
+                    self.error_at_current(
+                        "unknown attribute; expected cfg, intrinsic, test, requires, or ensures",
+                    );
                 }
             }
 
@@ -230,6 +241,11 @@ impl Parser {
                 if is_test {
                     self.error_at_current("#[test] is only allowed on functions");
                 }
+                if !requires_attrs.is_empty() || !ensures_attrs.is_empty() {
+                    self.error_at_current(
+                        "#[requires] and #[ensures] are only allowed on functions",
+                    );
+                }
                 let item = self.parse_const(is_pub, cfg_attr);
                 let span = start.merge(self.prev_span());
                 items.push(Spanned::new(Item::Const(item), span));
@@ -239,6 +255,11 @@ impl Parser {
                 }
                 if is_test {
                     self.error_at_current("#[test] is only allowed on functions");
+                }
+                if !requires_attrs.is_empty() || !ensures_attrs.is_empty() {
+                    self.error_at_current(
+                        "#[requires] and #[ensures] are only allowed on functions",
+                    );
                 }
                 let item = self.parse_struct(is_pub, cfg_attr);
                 let span = start.merge(self.prev_span());
@@ -250,11 +271,23 @@ impl Parser {
                 if is_test {
                     self.error_at_current("#[test] is only allowed on functions");
                 }
+                if !requires_attrs.is_empty() || !ensures_attrs.is_empty() {
+                    self.error_at_current(
+                        "#[requires] and #[ensures] are only allowed on functions",
+                    );
+                }
                 let item = self.parse_event(cfg_attr);
                 let span = start.merge(self.prev_span());
                 items.push(Spanned::new(Item::Event(item), span));
             } else if self.at(&Lexeme::Fn) || self.at(&Lexeme::Hash) {
-                let item = self.parse_fn_with_attr(is_pub, cfg_attr, intrinsic_attr, is_test);
+                let item = self.parse_fn_with_attr(
+                    is_pub,
+                    cfg_attr,
+                    intrinsic_attr,
+                    is_test,
+                    requires_attrs,
+                    ensures_attrs,
+                );
                 let span = start.merge(self.prev_span());
                 items.push(Spanned::new(Item::Fn(item), span));
             } else {
@@ -318,6 +351,8 @@ impl Parser {
         cfg: Option<Spanned<String>>,
         intrinsic: Option<Spanned<String>>,
         is_test: bool,
+        requires: Vec<Spanned<String>>,
+        ensures: Vec<Spanned<String>>,
     ) -> FnDef {
         self.expect(&Lexeme::Fn);
         let name = self.expect_ident();
@@ -346,6 +381,8 @@ impl Parser {
             cfg,
             intrinsic,
             is_test,
+            requires,
+            ensures,
             name,
             type_params,
             params,
@@ -377,15 +414,62 @@ impl Parser {
         let name = self.expect_ident();
         if self.at(&Lexeme::LParen) {
             self.expect(&Lexeme::LParen);
-            let value = self.expect_ident();
+            // Collect everything between ( and ) as raw text, handling nesting.
+            // For simple attributes like cfg(flag) or intrinsic(name), this is
+            // just an identifier. For requires/ensures predicates like
+            // requires(x + y == z), this collects the full expression text.
+            let mut depth = 1u32;
+            let mut parts = Vec::new();
+            while depth > 0 && !self.at(&Lexeme::Eof) {
+                if self.at(&Lexeme::LParen) {
+                    depth += 1;
+                    parts.push("(".to_string());
+                    self.advance();
+                } else if self.at(&Lexeme::RParen) {
+                    depth -= 1;
+                    if depth > 0 {
+                        parts.push(")".to_string());
+                        self.advance();
+                    }
+                    // Don't advance the final RParen — we consume it below
+                } else {
+                    parts.push(self.current_lexeme_text());
+                    self.advance();
+                }
+            }
             self.expect(&Lexeme::RParen);
             self.expect(&Lexeme::RBracket);
+            let value = parts.join(" ");
             let span = start.merge(self.prev_span());
-            Spanned::new(format!("{}({})", name.node, value.node), span)
+            Spanned::new(format!("{}({})", name.node, value.trim()), span)
         } else {
             self.expect(&Lexeme::RBracket);
             let span = start.merge(self.prev_span());
             Spanned::new(name.node, span)
+        }
+    }
+
+    /// Get the text representation of the current token for attribute parsing.
+    fn current_lexeme_text(&self) -> String {
+        match self.peek() {
+            Lexeme::Ident(s) => s.clone(),
+            Lexeme::Integer(n) => n.to_string(),
+            Lexeme::Plus => "+".to_string(),
+            Lexeme::Star => "*".to_string(),
+            Lexeme::Eq => "=".to_string(),
+            Lexeme::EqEq => "==".to_string(),
+            Lexeme::Lt => "<".to_string(),
+            Lexeme::Gt => ">".to_string(),
+            Lexeme::Amp => "&".to_string(),
+            Lexeme::Caret => "^".to_string(),
+            Lexeme::Dot => ".".to_string(),
+            Lexeme::Comma => ",".to_string(),
+            Lexeme::Colon => ":".to_string(),
+            Lexeme::Arrow => "->".to_string(),
+            Lexeme::LBracket => "[".to_string(),
+            Lexeme::RBracket => "]".to_string(),
+            Lexeme::Hash => "#".to_string(),
+            other => format!("{:?}", other),
         }
     }
 

@@ -106,6 +106,12 @@ enum Command {
         /// Show detailed constraint system summary
         #[arg(long)]
         verbose: bool,
+        /// Output SMT-LIB2 encoding to file (for external solvers)
+        #[arg(long, value_name = "PATH")]
+        smt: Option<PathBuf>,
+        /// Run Z3 solver (if available) for formal verification
+        #[arg(long)]
+        z3: bool,
     },
     /// Run benchmarks: compare Trident output vs hand-written TASM
     Bench {
@@ -154,7 +160,12 @@ fn main() {
             target,
             profile,
         } => cmd_doc(input, output, &target, &profile),
-        Command::Verify { input, verbose } => cmd_verify(input, verbose),
+        Command::Verify {
+            input,
+            verbose,
+            smt,
+            z3,
+        } => cmd_verify(input, verbose, smt, z3),
         Command::Bench { dir } => cmd_bench(dir),
         Command::Lsp => cmd_lsp(),
     }
@@ -717,7 +728,7 @@ fn cmd_doc(input: PathBuf, output: Option<PathBuf>, target: &str, profile: &str)
 
 // --- trident verify ---
 
-fn cmd_verify(input: PathBuf, verbose: bool) {
+fn cmd_verify(input: PathBuf, verbose: bool, smt_output: Option<PathBuf>, run_z3: bool) {
     let entry = if input.is_dir() {
         let toml_path = input.join("trident.toml");
         if !toml_path.exists() {
@@ -754,17 +765,101 @@ fn cmd_verify(input: PathBuf, verbose: bool) {
 
     eprintln!("Verifying {}...", input.display());
 
-    // Also run symbolic analysis for verbose output
-    if verbose {
+    // Parse for symbolic analysis (needed for verbose, SMT, and Z3)
+    let system = if verbose || smt_output.is_some() || run_z3 {
         if let Ok(source) = std::fs::read_to_string(&entry) {
             let filename = entry.to_string_lossy().to_string();
-            if let Ok(file) = trident::parse_source_silent(&source, &filename) {
-                let system = trident::sym::analyze(&file);
-                eprintln!("\nConstraint system: {}", system.summary());
+            match trident::parse_source_silent(&source, &filename) {
+                Ok(file) => {
+                    let sys = trident::sym::analyze(&file);
+                    if verbose {
+                        eprintln!("\nConstraint system: {}", sys.summary());
+                    }
+                    Some(sys)
+                }
+                Err(_) => None,
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // --smt: write SMT-LIB2 encoding to file
+    if let Some(ref smt_path) = smt_output {
+        if let Some(ref sys) = system {
+            let smt_script = trident::smt::encode_system(sys, trident::smt::QueryMode::SafetyCheck);
+            if let Err(e) = std::fs::write(smt_path, &smt_script) {
+                eprintln!("error: cannot write '{}': {}", smt_path.display(), e);
+                process::exit(1);
+            }
+            eprintln!("SMT-LIB2 written to {}", smt_path.display());
+        }
+    }
+
+    // --z3: run Z3 solver
+    if run_z3 {
+        if let Some(ref sys) = system {
+            let smt_script = trident::smt::encode_system(sys, trident::smt::QueryMode::SafetyCheck);
+            match trident::smt::run_z3(&smt_script) {
+                Ok(result) => {
+                    eprintln!("\nZ3 safety check:");
+                    match result.status {
+                        trident::smt::SmtStatus::Unsat => {
+                            eprintln!("  Result: UNSAT (formally verified safe)");
+                        }
+                        trident::smt::SmtStatus::Sat => {
+                            eprintln!("  Result: SAT (counterexample found)");
+                            if let Some(model) = &result.model {
+                                eprintln!("  Model:\n{}", model);
+                            }
+                        }
+                        trident::smt::SmtStatus::Unknown => {
+                            eprintln!("  Result: UNKNOWN (solver timed out or gave up)");
+                        }
+                        trident::smt::SmtStatus::Error(ref e) => {
+                            eprintln!("  Result: ERROR\n  {}", e);
+                        }
+                    }
+
+                    // Also check witness existence for programs with divine inputs
+                    if !sys.divine_inputs.is_empty() {
+                        let witness_script = trident::smt::encode_system(
+                            sys,
+                            trident::smt::QueryMode::WitnessExistence,
+                        );
+                        if let Ok(witness_result) = trident::smt::run_z3(&witness_script) {
+                            eprintln!(
+                                "\nZ3 witness existence ({} divine inputs):",
+                                sys.divine_inputs.len()
+                            );
+                            match witness_result.status {
+                                trident::smt::SmtStatus::Sat => {
+                                    eprintln!("  Result: SAT (valid witness exists)");
+                                }
+                                trident::smt::SmtStatus::Unsat => {
+                                    eprintln!("  Result: UNSAT (no valid witness — constraints unsatisfiable)");
+                                }
+                                _ => {
+                                    eprintln!(
+                                        "  Result: {}",
+                                        witness_result.output.lines().next().unwrap_or("unknown")
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("\nZ3 not available: {}", e);
+                    eprintln!("  Install Z3 or use --smt to export for external solvers.");
+                }
             }
         }
     }
 
+    // Standard verification (random + BMC)
     match trident::verify_project(&entry) {
         Ok(report) => {
             eprintln!("\n{}", report.format_report());

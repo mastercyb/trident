@@ -252,6 +252,20 @@ impl<'a> FormatCtx<'a> {
             self.output.push_str("#[test]\n");
         }
 
+        // Spec annotations
+        for req in &f.requires {
+            self.output.push_str(indent);
+            self.output.push_str("#[requires(");
+            self.output.push_str(&req.node);
+            self.output.push_str(")]\n");
+        }
+        for ens in &f.ensures {
+            self.output.push_str(indent);
+            self.output.push_str("#[ensures(");
+            self.output.push_str(&ens.node);
+            self.output.push_str(")]\n");
+        }
+
         self.output.push_str(indent);
 
         // Intrinsic attribute

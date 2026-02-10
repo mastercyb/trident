@@ -1386,6 +1386,8 @@ mod tests {
             is_test: false,
             cfg: None,
             intrinsic: None,
+            requires: vec![],
+            ensures: vec![],
             name: crate::span::Spanned::dummy("main".to_string()),
             type_params: vec![],
             params: vec![],
@@ -1402,6 +1404,8 @@ mod tests {
             is_test: false,
             cfg: None,
             intrinsic: None,
+            requires: vec![],
+            ensures: vec![],
             name: crate::span::Spanned::dummy("add".to_string()),
             type_params: vec![],
             params: vec![
