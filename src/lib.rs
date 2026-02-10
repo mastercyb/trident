@@ -542,6 +542,53 @@ pub fn analyze_costs_project(
     }
 }
 
+/// Count the number of TASM instructions in a compiled output string.
+/// Skips comments, labels, blank lines, and the halt instruction.
+pub fn count_tasm_instructions(tasm: &str) -> usize {
+    tasm.lines()
+        .map(|line| line.trim())
+        .filter(|line| {
+            !line.is_empty() && !line.starts_with("//") && !line.ends_with(':') && *line != "halt"
+        })
+        .count()
+}
+
+/// Benchmark result for a single program.
+#[derive(Clone, Debug)]
+pub struct BenchmarkResult {
+    pub name: String,
+    pub trident_instructions: usize,
+    pub baseline_instructions: usize,
+    pub overhead_ratio: f64,
+    pub trident_padded_height: u64,
+    pub baseline_padded_height: u64,
+}
+
+impl BenchmarkResult {
+    pub fn format(&self) -> String {
+        format!(
+            "{:<24} {:>6} {:>6}  {:>5.2}x  {:>6} {:>6}",
+            self.name,
+            self.trident_instructions,
+            self.baseline_instructions,
+            self.overhead_ratio,
+            self.trident_padded_height,
+            self.baseline_padded_height,
+        )
+    }
+
+    pub fn format_header() -> String {
+        format!(
+            "{:<24} {:>6} {:>6}  {:>6}  {:>6} {:>6}",
+            "Benchmark", "Tri", "Hand", "Ratio", "TriPad", "HandPad"
+        )
+    }
+
+    pub fn format_separator() -> String {
+        "-".repeat(72)
+    }
+}
+
 /// Generate markdown documentation for a Trident project.
 ///
 /// Resolves all modules, parses and type-checks them, computes cost analysis,

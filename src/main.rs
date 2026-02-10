@@ -99,6 +99,12 @@ enum Command {
         #[arg(long, default_value = "debug")]
         profile: String,
     },
+    /// Run benchmarks: compare Trident output vs hand-written TASM
+    Bench {
+        /// Directory containing benchmark .tri + .baseline.tasm files
+        #[arg(default_value = "benches")]
+        dir: PathBuf,
+    },
     /// Start the Language Server Protocol server
     Lsp,
 }
@@ -140,6 +146,7 @@ fn main() {
             target,
             profile,
         } => cmd_doc(input, output, &target, &profile),
+        Command::Bench { dir } => cmd_bench(dir),
         Command::Lsp => cmd_lsp(),
     }
 }
@@ -697,6 +704,112 @@ fn cmd_doc(input: PathBuf, output: Option<PathBuf>, target: &str, profile: &str)
     } else {
         print!("{}", markdown);
     }
+}
+
+// --- trident bench ---
+
+fn cmd_bench(dir: PathBuf) {
+    if !dir.is_dir() {
+        eprintln!("error: '{}' is not a directory", dir.display());
+        process::exit(1);
+    }
+
+    // Find all .tri files in the bench directory
+    let mut tri_files: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| {
+            eprintln!("error: cannot read '{}': {}", dir.display(), e);
+            process::exit(1);
+        })
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|p| p.extension().is_some_and(|e| e == "tri"))
+        .collect();
+    tri_files.sort();
+
+    if tri_files.is_empty() {
+        eprintln!("No benchmark .tri files found in '{}'", dir.display());
+        process::exit(1);
+    }
+
+    let options = trident::CompileOptions::default();
+    let mut results: Vec<trident::BenchmarkResult> = Vec::new();
+
+    for tri_path in &tri_files {
+        let stem = tri_path.file_stem().unwrap().to_string_lossy().to_string();
+        let baseline_path = dir.join(format!("{}.baseline.tasm", stem));
+
+        // Compile the Trident program
+        let tasm = match trident::compile_project_with_options(tri_path, &options) {
+            Ok(t) => t,
+            Err(_) => {
+                eprintln!("  FAIL  {}  (compilation error)", stem);
+                continue;
+            }
+        };
+
+        let trident_count = trident::count_tasm_instructions(&tasm);
+
+        // Get cost analysis for padded height
+        let trident_padded = trident::analyze_costs_project(tri_path, &options)
+            .map(|c| c.padded_height)
+            .unwrap_or(0);
+
+        // Read baseline if available
+        let (baseline_count, baseline_padded) = if baseline_path.exists() {
+            let baseline = std::fs::read_to_string(&baseline_path).unwrap_or_default();
+            let count = trident::count_tasm_instructions(&baseline);
+            // Baseline padded height: count instructions as approximate processor rows
+            let padded = (count as u64).next_power_of_two();
+            (count, padded)
+        } else {
+            (0, 0)
+        };
+
+        let ratio = if baseline_count > 0 {
+            trident_count as f64 / baseline_count as f64
+        } else {
+            0.0
+        };
+
+        results.push(trident::BenchmarkResult {
+            name: stem,
+            trident_instructions: trident_count,
+            baseline_instructions: baseline_count,
+            overhead_ratio: ratio,
+            trident_padded_height: trident_padded,
+            baseline_padded_height: baseline_padded,
+        });
+    }
+
+    // Print results table
+    eprintln!();
+    eprintln!("{}", trident::BenchmarkResult::format_header());
+    eprintln!("{}", trident::BenchmarkResult::format_separator());
+    for result in &results {
+        eprintln!("{}", result.format());
+    }
+    eprintln!("{}", trident::BenchmarkResult::format_separator());
+
+    // Summary
+    let with_baseline: Vec<_> = results
+        .iter()
+        .filter(|r| r.baseline_instructions > 0)
+        .collect();
+    if !with_baseline.is_empty() {
+        let avg_ratio: f64 = with_baseline.iter().map(|r| r.overhead_ratio).sum::<f64>()
+            / with_baseline.len() as f64;
+        let max_ratio = with_baseline
+            .iter()
+            .map(|r| r.overhead_ratio)
+            .fold(0.0f64, f64::max);
+        eprintln!(
+            "Average overhead: {:.2}x  Max: {:.2}x  ({} benchmarks with baselines)",
+            avg_ratio,
+            max_ratio,
+            with_baseline.len()
+        );
+    }
+    eprintln!();
 }
 
 // --- trident lsp ---

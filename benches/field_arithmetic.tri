@@ -1,0 +1,13 @@
+program field_arithmetic
+
+// Benchmark: basic field arithmetic chain.
+// Tests how efficiently the compiler handles sequential arithmetic.
+// Hand-written baseline: 10 instructions.
+fn main() {
+    let a: Field = pub_read()
+    let b: Field = pub_read()
+    let sum: Field = a + b
+    let prod: Field = a * b
+    let result: Field = sum + prod
+    pub_write(result)
+}

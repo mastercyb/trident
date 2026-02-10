@@ -1,0 +1,10 @@
+program hash_preimage
+
+// Benchmark: hash preimage verification (Neptune lock script pattern).
+// Hand-written TASM baseline: 11 instructions.
+fn main() {
+    let secret: Field = divine()
+    let computed: Digest = hash(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    let expected: Digest = divine5()
+    assert_digest(computed, expected)
+}

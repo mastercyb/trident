@@ -1,0 +1,14 @@
+program loop_sum
+
+// Benchmark: bounded loop summing N values.
+// Tests loop unrolling and accumulator efficiency.
+// Hand-written baseline: ~21 instructions.
+fn main() {
+    let n: Field = pub_read()
+    let mut total: Field = 0
+    for i in 0..n bounded 16 {
+        let val: Field = divine()
+        total = total + val
+    }
+    pub_write(total)
+}

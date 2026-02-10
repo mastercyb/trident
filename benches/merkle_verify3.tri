@@ -1,0 +1,13 @@
+program merkle_verify3
+
+// Benchmark: depth-3 Merkle path verification.
+// Neptune kernel MAST tree authentication pattern.
+// Hand-written baseline: ~17 instructions.
+use std.crypto.merkle
+
+fn main() {
+    let root: Digest = pub_read5()
+    let leaf: Digest = divine5()
+    let idx: U32 = as_u32(divine())
+    merkle.verify3(leaf, root, idx)
+}
