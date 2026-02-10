@@ -1384,6 +1384,7 @@ mod tests {
         let f = crate::ast::FnDef {
             is_pub: false,
             is_test: false,
+            is_pure: false,
             cfg: None,
             intrinsic: None,
             requires: vec![],
@@ -1402,6 +1403,7 @@ mod tests {
         let f = crate::ast::FnDef {
             is_pub: true,
             is_test: false,
+            is_pure: false,
             cfg: None,
             intrinsic: None,
             requires: vec![],

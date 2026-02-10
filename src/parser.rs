@@ -207,6 +207,7 @@ impl Parser {
             let mut cfg_attr: Option<Spanned<String>> = None;
             let mut intrinsic_attr: Option<Spanned<String>> = None;
             let mut is_test = false;
+            let mut is_pure = false;
             let mut requires_attrs: Vec<Spanned<String>> = Vec::new();
             let mut ensures_attrs: Vec<Spanned<String>> = Vec::new();
             while self.at(&Lexeme::Hash) {
@@ -225,9 +226,11 @@ impl Parser {
                     ensures_attrs.push(Spanned::new(pred, attr.span));
                 } else if attr.node == "test" {
                     is_test = true;
+                } else if attr.node == "pure" {
+                    is_pure = true;
                 } else {
                     self.error_at_current(
-                        "unknown attribute; expected cfg, intrinsic, test, requires, or ensures",
+                        "unknown attribute; expected cfg, intrinsic, test, pure, requires, or ensures",
                     );
                 }
             }
@@ -240,6 +243,9 @@ impl Parser {
                 }
                 if is_test {
                     self.error_at_current("#[test] is only allowed on functions");
+                }
+                if is_pure {
+                    self.error_at_current("#[pure] is only allowed on functions");
                 }
                 if !requires_attrs.is_empty() || !ensures_attrs.is_empty() {
                     self.error_at_current(
@@ -256,6 +262,9 @@ impl Parser {
                 if is_test {
                     self.error_at_current("#[test] is only allowed on functions");
                 }
+                if is_pure {
+                    self.error_at_current("#[pure] is only allowed on functions");
+                }
                 if !requires_attrs.is_empty() || !ensures_attrs.is_empty() {
                     self.error_at_current(
                         "#[requires] and #[ensures] are only allowed on functions",
@@ -271,6 +280,9 @@ impl Parser {
                 if is_test {
                     self.error_at_current("#[test] is only allowed on functions");
                 }
+                if is_pure {
+                    self.error_at_current("#[pure] is only allowed on functions");
+                }
                 if !requires_attrs.is_empty() || !ensures_attrs.is_empty() {
                     self.error_at_current(
                         "#[requires] and #[ensures] are only allowed on functions",
@@ -285,6 +297,7 @@ impl Parser {
                     cfg_attr,
                     intrinsic_attr,
                     is_test,
+                    is_pure,
                     requires_attrs,
                     ensures_attrs,
                 );
@@ -351,6 +364,7 @@ impl Parser {
         cfg: Option<Spanned<String>>,
         intrinsic: Option<Spanned<String>>,
         is_test: bool,
+        is_pure: bool,
         requires: Vec<Spanned<String>>,
         ensures: Vec<Spanned<String>>,
     ) -> FnDef {
@@ -381,6 +395,7 @@ impl Parser {
             cfg,
             intrinsic,
             is_test,
+            is_pure,
             requires,
             ensures,
             name,

@@ -99,6 +99,8 @@ pub struct FnDef {
     pub cfg: Option<Spanned<String>>,
     pub intrinsic: Option<Spanned<String>>,
     pub is_test: bool,
+    /// Pure annotation: `#[pure]` — no I/O side effects allowed.
+    pub is_pure: bool,
     /// Precondition annotations: `#[requires(predicate)]`.
     pub requires: Vec<Spanned<String>>,
     /// Postcondition annotations: `#[ensures(predicate)]`.

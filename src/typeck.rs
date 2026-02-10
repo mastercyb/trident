@@ -90,6 +90,8 @@ pub(crate) struct TypeChecker {
     cfg_flags: HashSet<String>,
     /// Target VM configuration (digest width, hash rate, field limbs, etc.).
     target_config: crate::target::TargetConfig,
+    /// Whether we are currently inside a `#[pure]` function body.
+    in_pure_fn: bool,
 }
 
 impl Default for TypeChecker {
@@ -117,6 +119,7 @@ impl TypeChecker {
             call_resolutions: Vec::new(),
             cfg_flags: HashSet::from(["debug".to_string()]),
             target_config: config,
+            in_pure_fn: false,
         };
         tc.register_builtins();
         tc
@@ -678,6 +681,9 @@ impl TypeChecker {
             }
         }
 
+        let prev_pure = self.in_pure_fn;
+        self.in_pure_fn = func.is_pure;
+
         self.push_scope();
 
         // Bind parameters
@@ -690,6 +696,7 @@ impl TypeChecker {
         self.check_block(&body.node);
 
         self.pop_scope();
+        self.in_pure_fn = prev_pure;
     }
 
     fn check_block(&mut self, block: &Block) -> Ty {
@@ -975,6 +982,17 @@ impl TypeChecker {
                 }
             }
             Stmt::Emit { event_name, fields } | Stmt::Seal { event_name, fields } => {
+                if self.in_pure_fn {
+                    let kind = if matches!(stmt, Stmt::Emit { .. }) {
+                        "emit"
+                    } else {
+                        "seal"
+                    };
+                    self.error(
+                        format!("#[pure] function cannot use '{}' (I/O side effect)", kind),
+                        _span,
+                    );
+                }
                 self.check_event_stmt(event_name, fields);
             }
             Stmt::Asm { target, .. } => {
@@ -1253,6 +1271,20 @@ impl TypeChecker {
                     .iter()
                     .map(|a| self.check_expr(&a.node, a.span))
                     .collect();
+
+                // Reject I/O builtins inside #[pure] functions.
+                if self.in_pure_fn {
+                    let base = fn_name.rsplit('.').next().unwrap_or(&fn_name);
+                    if is_io_builtin(base) {
+                        self.error(
+                            format!(
+                                "#[pure] function cannot call '{}' (I/O side effect)",
+                                fn_name
+                            ),
+                            span,
+                        );
+                    }
+                }
 
                 // Check if this is a generic function call.
                 if let Some(gdef) = self.generic_fns.get(&fn_name).cloned() {
@@ -2063,6 +2095,30 @@ impl TypeChecker {
     }
 }
 
+/// Returns true if a builtin function name performs I/O side effects.
+/// Used by the `#[pure]` annotation checker.
+fn is_io_builtin(name: &str) -> bool {
+    matches!(
+        name,
+        "pub_read"
+            | "pub_write"
+            | "sec_read"
+            | "divine"
+            | "sponge_init"
+            | "sponge_absorb"
+            | "sponge_squeeze"
+            | "sponge_absorb_mem"
+            | "ram_read"
+            | "ram_write"
+            | "ram_read_block"
+            | "ram_write_block"
+            | "merkle_step"
+            | "merkle_step_mem"
+    ) || name.starts_with("pub_read")
+        || name.starts_with("pub_write")
+        || name.starts_with("divine")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2865,5 +2921,76 @@ mod tests {
                 d.span
             );
         }
+    }
+
+    // --- #[pure] annotation tests ---
+
+    #[test]
+    fn test_pure_fn_no_io_compiles() {
+        let result = check("program test\n#[pure]\nfn add(a: Field, b: Field) -> Field {\n    a + b\n}\nfn main() {}");
+        assert!(
+            result.is_ok(),
+            "pure fn without I/O should pass: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_pure_fn_rejects_pub_read() {
+        let diags =
+            check_err("program test\n#[pure]\nfn f() -> Field {\n    pub_read()\n}\nfn main() {}");
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("#[pure]") && d.message.contains("pub_read")));
+    }
+
+    #[test]
+    fn test_pure_fn_rejects_pub_write() {
+        let diags =
+            check_err("program test\n#[pure]\nfn f(x: Field) {\n    pub_write(x)\n}\nfn main() {}");
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("#[pure]") && d.message.contains("pub_write")));
+    }
+
+    #[test]
+    fn test_pure_fn_rejects_divine() {
+        let diags =
+            check_err("program test\n#[pure]\nfn f() -> Field {\n    divine()\n}\nfn main() {}");
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("#[pure]") && d.message.contains("divine")));
+    }
+
+    #[test]
+    fn test_pure_fn_allows_assert() {
+        // assert is not I/O — it's a control flow operation
+        let result =
+            check("program test\n#[pure]\nfn f(x: Field) {\n    assert(x == 0)\n}\nfn main() {}");
+        assert!(
+            result.is_ok(),
+            "assert should be allowed in pure fn: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_pure_fn_allows_hash() {
+        // hash is a deterministic pure computation (same inputs → same outputs)
+        let result = check("program test\n#[pure]\nfn f(a: Field, b: Field, c: Field, d: Field, e: Field, f2: Field, g: Field, h: Field, i: Field, j: Field) -> Digest {\n    hash(a, b, c, d, e, f2, g, h, i, j)\n}\nfn main() {}");
+        assert!(
+            result.is_ok(),
+            "hash should be allowed in pure fn: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_pure_fn_rejects_sponge_init() {
+        let diags =
+            check_err("program test\n#[pure]\nfn f() {\n    sponge_init()\n}\nfn main() {}");
+        assert!(diags
+            .iter()
+            .any(|d| d.message.contains("#[pure]") && d.message.contains("sponge_init")));
     }
 }

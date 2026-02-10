@@ -252,6 +252,12 @@ impl<'a> FormatCtx<'a> {
             self.output.push_str("#[test]\n");
         }
 
+        // Pure attribute
+        if f.is_pure {
+            self.output.push_str(indent);
+            self.output.push_str("#[pure]\n");
+        }
+
         // Spec annotations
         for req in &f.requires {
             self.output.push_str(indent);

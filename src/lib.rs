@@ -2302,4 +2302,26 @@ fn main() {
             result.err()
         );
     }
+
+    #[test]
+    fn test_pure_fn_compiles() {
+        let source = "program test\n#[pure]\nfn add(a: Field, b: Field) -> Field {\n    a + b\n}\nfn main() {\n    let x = add(1, 2)\n    assert(x == 3)\n}";
+        let result = compile(source, "test.tri");
+        assert!(result.is_ok(), "pure fn should compile: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_pure_fn_format_roundtrip() {
+        let source = "program test\n\n#[pure]\nfn add(a: Field, b: Field) -> Field {\n    a + b\n}\n\nfn main() {\n}\n";
+        let formatted = format_source(source, "test.tri").unwrap();
+        let formatted2 = format_source(&formatted, "test.tri").unwrap();
+        assert_eq!(
+            formatted, formatted2,
+            "pure fn formatting should be idempotent"
+        );
+        assert!(
+            formatted.contains("#[pure]"),
+            "formatted output should contain #[pure]"
+        );
+    }
 }
