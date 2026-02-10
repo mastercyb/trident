@@ -1,0 +1,23 @@
+program sponge_absorb
+
+// Benchmark: sponge-based hashing (absorb + squeeze).
+// Initialize sponge, absorb 10 divined field elements, squeeze digest,
+// write first element of result.
+// Hand-written TASM baseline: 7 instructions.
+fn main() {
+    sponge_init()
+    let x0: Field = divine()
+    let x1: Field = divine()
+    let x2: Field = divine()
+    let x3: Field = divine()
+    let x4: Field = divine()
+    let x5: Field = divine()
+    let x6: Field = divine()
+    let x7: Field = divine()
+    let x8: Field = divine()
+    let x9: Field = divine()
+    sponge_absorb(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9)
+    let result: Digest = sponge_squeeze()
+    let (r0, r1, r2, r3, r4) = result
+    pub_write(r0)
+}

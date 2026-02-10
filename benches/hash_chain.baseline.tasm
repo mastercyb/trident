@@ -1,0 +1,17 @@
+// Hand-written TASM: triple hash chain
+// Divine leaf, hash three times, write final result
+    divine 1
+    push 0 push 0 push 0 push 0
+    push 0 push 0 push 0 push 0 push 0
+    hash
+    pop 4
+    push 0 push 0 push 0 push 0
+    push 0 push 0 push 0 push 0 push 0
+    hash
+    pop 4
+    push 0 push 0 push 0 push 0
+    push 0 push 0 push 0 push 0 push 0
+    hash
+    pop 4
+    write_io 1
+    halt

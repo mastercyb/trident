@@ -1,0 +1,13 @@
+// Hand-written TASM: token transfer balance verification
+// divine sender_bal, read amount, compute diffs, range-check, write outputs
+    divine 1
+    read_io 1
+    dup 1 dup 1 push -1 mul add
+    split pop 1
+    swap 1
+    divine 1 add
+    split pop 1
+    write_io 1
+    swap 1
+    write_io 1
+    halt

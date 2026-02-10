@@ -1,0 +1,17 @@
+program token_transfer
+
+// Benchmark: token transfer balance verification.
+// Verify sender has sufficient balance, compute new balances,
+// range-check both to ensure non-negative (U32), write outputs.
+// Hand-written TASM baseline: 18 instructions.
+fn main() {
+    let sender_bal: Field = divine()
+    let amount: Field = pub_read()
+    let new_bal: Field = sub(sender_bal, amount)
+    let _: U32 = as_u32(new_bal)
+    let receiver_bal: Field = divine()
+    let new_recv: Field = receiver_bal + amount
+    let _: U32 = as_u32(new_recv)
+    pub_write(new_bal)
+    pub_write(new_recv)
+}

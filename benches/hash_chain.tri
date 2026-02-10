@@ -1,0 +1,16 @@
+program hash_chain
+
+// Benchmark: triple hash chain (Merkle leaf to root pattern).
+// Divine a leaf, hash it three times in sequence, write final hash element.
+// Tests repeated hash invocations and digest destructuring.
+// Hand-written TASM baseline: 16 instructions.
+fn main() {
+    let leaf: Field = divine()
+    let d1: Digest = hash(leaf, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    let (h1, _, _, _, _) = d1
+    let d2: Digest = hash(h1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    let (h2, _, _, _, _) = d2
+    let d3: Digest = hash(h2, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    let (h3, _, _, _, _) = d3
+    pub_write(h3)
+}

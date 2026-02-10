@@ -1,0 +1,25 @@
+// Hand-written TASM: conditional authentication
+// Read auth_hash; if zero output 0, else divine secret, hash, verify, output 1
+    read_io 1
+    dup 0
+    push 0
+    eq
+    skiz call __no_auth
+    call __auth
+    halt
+__no_auth:
+    pop 1
+    push 0
+    write_io 1
+    return
+__auth:
+    divine 1
+    push 0 push 0 push 0 push 0
+    push 0 push 0 push 0 push 0 push 0
+    hash
+    swap 5
+    eq assert
+    pop 4
+    push 1
+    write_io 1
+    return

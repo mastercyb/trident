@@ -1,0 +1,9 @@
+// Hand-written TASM: sponge absorb + squeeze
+// Init sponge, divine 10 elements, absorb, squeeze, write first element
+    sponge_init
+    divine 10
+    sponge_absorb
+    sponge_squeeze
+    write_io 1
+    pop 4
+    halt

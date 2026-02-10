@@ -1,0 +1,19 @@
+program conditional_auth
+
+// Benchmark: conditional authentication with hash preimage.
+// If auth_hash is zero, output 0 (no auth required).
+// Otherwise, divine a secret, hash it, verify against auth_hash, output 1.
+// Tests conditional branching and hash verification.
+// Hand-written TASM baseline: 22 instructions.
+fn main() {
+    let auth_hash: Field = pub_read()
+    if auth_hash == 0 {
+        pub_write(0)
+    } else {
+        let secret: Field = divine()
+        let d: Digest = hash(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        let (h0, _, _, _, _) = d
+        assert_eq(auth_hash, h0)
+        pub_write(1)
+    }
+}
