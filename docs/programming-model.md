@@ -1,13 +1,13 @@
 # Trident Programming Model
 
-This document describes the Neptune blockchain programming model as it applies to
-Trident programs. It covers how programs run inside Triton VM, what blockchain
+This document describes the [Neptune](https://neptune.cash/) blockchain programming model as it applies to
+Trident programs. It covers how programs run inside [Triton VM](https://triton-vm.org/), what blockchain
 state they can access, and how the standard library exposes these capabilities.
 
 ## Triton VM Execution Model
 
-Trident compiles to TASM (Triton Assembly), which runs inside Triton VM -- a
-STARK-based zero-knowledge virtual machine. Programs are **isolated**: they have
+Trident compiles to [TASM](https://triton-vm.org/spec/) (Triton Assembly), which runs inside [Triton VM](https://triton-vm.org/) -- a
+[STARK](https://starkware.co/stark/)-based [zero-knowledge](https://en.wikipedia.org/wiki/Zero-knowledge_proof) virtual machine. Programs are **isolated**: they have
 no syscalls, no environment variables, no network access. A program's entire
 world consists of:
 
@@ -20,11 +20,11 @@ world consists of:
 | **RAM**               | `read_mem`/`write_mem`| No                  |
 | Stack, sponge, jumps  | various              | No                   |
 
-The verifier only ever sees the **Claim** and the **Proof**:
+The verifier only ever sees the **Claim** and the **Proof** (a [STARK proof](https://starkware.co/stark/)):
 
 ```
 Claim {
-    program_digest: Digest,   // Tip5 hash of the program
+    program_digest: Digest,   // Tip5 hash of the program (see https://eprint.iacr.org/2023/107)
     version: u32,
     input: Vec<Field>,        // public input consumed by read_io
     output: Vec<Field>,       // public output produced by write_io
@@ -44,12 +44,12 @@ hidden. This is the zero-knowledge property.
   authentication paths).
 
 - **`merkle.step()` / `merkle_step`**: Reads a sibling digest from the secret
-  digest queue and computes one Merkle tree step. Used to authenticate data
+  digest queue and computes one [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree) step. Used to authenticate data
   against a known root hash.
 
 ### The Divine-and-Authenticate Pattern
 
-Since programs cannot directly access blockchain state, Neptune uses a universal
+Since programs cannot directly access blockchain state, [Neptune](https://neptune.cash/) uses a universal
 pattern:
 
 1. The public input contains a **MAST hash** (Merkle root) of a known structure
@@ -61,12 +61,12 @@ pattern:
 This pattern is used everywhere: accessing transaction fields, block headers,
 UTXO data, timestamps, fees, etc.
 
-## Neptune Transaction Model
+## [Neptune](https://neptune.cash/) Transaction Model
 
 ### Transaction Kernel
 
 Every Neptune transaction has a **TransactionKernel** with 8 fields, organized
-as a Merkle tree of height 3:
+as a [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree) of height 3:
 
 | Leaf | Field              | Type                        | Description                          |
 |------|--------------------|-----------------------------|--------------------------------------|
@@ -84,7 +84,7 @@ public input for both lock scripts and type scripts.
 
 ### Script Types
 
-Neptune has two kinds of scripts that Trident programs implement:
+[Neptune](https://neptune.cash/) has two kinds of scripts that Trident programs implement:
 
 #### Lock Scripts (ownership)
 
@@ -159,13 +159,13 @@ The actual lock script is provided by the spender as part of the witness.
 | NativeCurrency   | `state[0..4]` = amount (u128)    | sum(inputs) + coinbase = sum(outputs) + fee |
 | TimeLock         | `state[0]` = release timestamp   | `release_date < tx_timestamp`      |
 
-## Neptune Address Types
+## [Neptune](https://neptune.cash/) Address Types
 
 Neptune supports two address types, which differ in their cryptographic scheme:
 
 ### Generation Addresses (lattice-based)
 
-- **Bech32m prefix**: `nolga` (Neptune Lattice-based Generation Address)
+- **[Bech32m](https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki) prefix**: `nolga` (Neptune Lattice-based Generation Address)
 - **Flag value**: 79
 - **Encryption**: Lattice KEM (post-quantum) wrapping AES-256-GCM
 - **Lock script**: hash-lock on `lock_postimage`
@@ -175,7 +175,7 @@ Neptune supports two address types, which differ in their cryptographic scheme:
 
 ### Symmetric Addresses (shared-secret)
 
-- **Bech32m prefix**: `nolsa` (Neptune Symmetric Address)
+- **[Bech32m](https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki) prefix**: `nolsa` (Neptune Symmetric Address)
 - **Flag value**: 80
 - **Encryption**: AES-256-GCM with shared symmetric key
 - **Lock script**: hash-lock on `lock_after_image`
@@ -310,8 +310,8 @@ auth.verify_preimage(expected_hash)
 
 ## Arithmetic
 
-All arithmetic in Triton VM operates in the prime field with
-`p = 2^64 - 2^32 + 1` elements (the "Oxfoi prime"). This means:
+All arithmetic in [Triton VM](https://triton-vm.org/) operates in the [prime field](https://en.wikipedia.org/wiki/Finite_field) with
+`p = 2^64 - 2^32 + 1` elements (the [Goldilocks prime](https://en.wikipedia.org/wiki/Goldilocks_(polynomial))). This means:
 
 - Field elements range from 0 to p-1
 - Addition, multiplication wrap modulo p

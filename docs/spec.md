@@ -11,9 +11,9 @@ A minimal, security-first language for provable computation on Triton VM.
 
 ## 1. Executive Summary
 
-Trident is a minimal, security-first programming language targeting Triton VM — a STARK-native virtual machine designed for recursive zero-knowledge proof verification. The language follows the Vyper philosophy: **deliberate limitation as a feature**, not a compromise.
+Trident is a minimal, security-first programming language targeting [Triton VM](https://triton-vm.org/) — a [STARK](https://starkware.co/stark/)-native virtual machine designed for recursive [zero-knowledge proof](https://en.wikipedia.org/wiki/Zero-knowledge_proof) verification. The language follows the [Vyper](https://docs.vyperlang.org/) philosophy: **deliberate limitation as a feature**, not a compromise.
 
-Trident compiles directly to TASM (Triton Assembly) with no intermediate representation. Every language construct maps predictably to known TASM patterns. The compiler is a thin, auditable translation layer — not an optimization engine.
+Trident compiles directly to [TASM](https://triton-vm.org/spec/) (Triton Assembly) with no intermediate representation. Every language construct maps predictably to known TASM patterns. The compiler is a thin, auditable translation layer — not an optimization engine.
 
 The language exists to solve one problem: **writing provable programs for Triton VM without spending months in assembly**. It explicitly does not aim to be a general-purpose language.
 
@@ -26,7 +26,7 @@ The language exists to solve one problem: **writing provable programs for Triton
 
 ### 2.1 Why Not an IR?
 
-Triton VM's ISA (~45 instructions) is already cleaner than most assembly languages. An intermediate representation would:
+[Triton VM's ISA](https://triton-vm.org/spec/) (~45 instructions) is already cleaner than most assembly languages. An intermediate representation would:
 
 - Double the audit surface (source→IR mapping + IR→TASM mapping)
 - Add 40-50% to compiler engineering effort
@@ -37,11 +37,11 @@ Direct compilation (source → AST → type check → TASM emit) keeps the compi
 
 An IR may become justified if: (a) a second frontend language is needed, (b) optimization becomes critical, or (c) the team grows significantly. None of these conditions hold today.
 
-### 2.2 Why Vyper, Not Solidity?
+### 2.2 Why [Vyper](https://docs.vyperlang.org/), Not Solidity?
 
 Solidity's design philosophy — maximal expressiveness, familiar OOP patterns, escape hatches everywhere — optimizes for developer convenience at the cost of auditability. In zero-knowledge systems, the proving cost of every instruction is real and measurable. Hidden complexity becomes hidden cost.
 
-Vyper demonstrated that deliberate limitation produces:
+[Vyper](https://docs.vyperlang.org/) demonstrated that deliberate limitation produces:
 
 - **Auditable code**: one obvious way to do everything
 - **Predictable costs**: no hidden allocations or implicit loops
@@ -50,15 +50,15 @@ Vyper demonstrated that deliberate limitation produces:
 
 For Triton VM, these properties are even more critical. Every instruction expands the algebraic execution trace. Every unnecessary abstraction inflates proving time. The language must make costs visible.
 
-### 2.3 Why Not Cairo?
+### 2.3 Why Not [Cairo](https://www.cairo-lang.org/)?
 
-Cairo is the closest analog but carries baggage from its evolution:
+[Cairo](https://www.cairo-lang.org/) is the closest analog but carries baggage from its evolution:
 
 - Cairo 0 → Cairo 1 was a full rewrite that split the ecosystem
 - Sierra IR adds complexity justified by StarkNet's needs (gas metering, contract isolation) that Triton VM doesn't share
 - Cairo's 252-bit field encourages different idioms than Triton's 64-bit field
 
-We learn from Cairo's successes (hint architecture, felt-aware type system, bounded execution) while avoiding its accumulated complexity.
+We learn from [Cairo](https://www.cairo-lang.org/)'s successes (hint architecture, felt-aware type system, bounded execution) while avoiding its accumulated complexity.
 
 ### 2.4 Core Design Principles
 
@@ -81,7 +81,7 @@ We learn from Cairo's successes (hint architecture, felt-aware type system, boun
 ### 3.1 Primitive Types
 
 ```
-Field           // B-field element: integers mod p (p = 2^64 - 2^32 + 1)
+Field           // B-field element: integers mod p (p = 2^64 - 2^32 + 1, the Goldilocks prime)
 XField          // Extension field element: F_p[X] / <X^3 - X + 1>
 Bool            // 0 or 1 (a Field element, constrained)
 U32             // Unsigned 32-bit integer (a Field element, range-checked)
@@ -261,7 +261,7 @@ use std.io            // std.io.pub_read(), std.io.pub_write()
 use std.logic         // std.logic.not(), std.logic.and(), std.logic.or()
 ```
 
-These modules are backed by optimized TASM from tasm-lib but are written in Trident syntax with `#[intrinsic]` annotations that tell the compiler to emit specific TASM patterns:
+These modules are backed by optimized TASM from [tasm-lib](https://github.com/TritonVM/tasm-lib) but are written in Trident syntax with `#[intrinsic]` annotations that tell the compiler to emit specific TASM patterns:
 
 ```
 // std/hash.tri
@@ -433,7 +433,7 @@ sub(a, b)       // field subtraction: a + (p - b)
 neg(a)          // additive inverse: p - a
 ```
 
-**Design rationale:** Making subtraction explicit reminds the developer they're in a prime field. `(1 - 2)` doesn't give `-1` — it gives `p - 1`. This is the Cairo felt footgun, and Trident avoids it by forcing explicitness. When you write `sub(a, b)` you know exactly what's happening.
+**Design rationale:** Making subtraction explicit reminds the developer they're in a [prime field](https://en.wikipedia.org/wiki/Finite_field). `(1 - 2)` doesn't give `-1` — it gives `p - 1`. This is the [Cairo](https://www.cairo-lang.org/) felt footgun, and Trident avoids it by forcing explicitness. When you write `sub(a, b)` you know exactly what's happening.
 
 ### 6.2 U32 Arithmetic
 
@@ -583,7 +583,7 @@ fn prove_sqrt(x: Field) {
 ### 8.2 Hashing
 
 ```
-// Fixed-input hash (10 field elements → Digest)
+// Fixed-input Tip5 hash (10 field elements → Digest)
 let d: Digest = hash(a, b, c, d, e, f, g, h, i, j)
 
 // Variable-length hashing via sponge
@@ -595,7 +595,7 @@ let squeezed: [Field; 10] = sponge_squeeze()
 sponge_absorb_mem(ptr)
 ```
 
-### 8.3 Merkle Tree Operations
+### 8.3 [Merkle Tree](https://en.wikipedia.org/wiki/Merkle_tree) Operations
 
 ```
 // Single Merkle step — one level of the tree
@@ -614,7 +614,7 @@ use std.merkle
 std.merkle.verify(root, leaf, leaf_index, depth)
 ```
 
-### 8.4 Dot Products (for STARK Verification)
+### 8.4 Dot Products (for [STARK](https://starkware.co/stark/) Verification)
 
 ```
 // Extension field dot product from RAM
@@ -808,7 +808,7 @@ error[E0042]: u32 operation on unchecked Field value
 
 ### 13.1 Why Cost Matters
 
-In Triton VM, proving time is directly determined by the **padded height** of the Algebraic Execution Tables (AETs). The padded height is the smallest power of 2 that is greater than or equal to the height of the tallest table. Doubling the padded height roughly doubles the proving time and memory consumption. This means:
+In [Triton VM](https://triton-vm.org/), proving time is directly determined by the **padded height** of the Algebraic Execution Tables (AETs). The padded height is the smallest power of 2 that is greater than or equal to the height of the tallest table. Doubling the padded height roughly doubles the proving time and memory consumption. This means:
 
 - A program with 1,000 processor cycles and a program with 1,023 processor cycles have identical proving cost (padded to 1,024).
 - A program with 1,025 processor cycles costs roughly **twice as much** to prove as one with 1,024 (padded to 2,048).
@@ -818,7 +818,7 @@ This makes cost computation not just useful but **essential**. Trident computes 
 
 ### 13.2 The Multi-Table Cost Model
 
-Triton VM's execution trace is spread across multiple tables. Each instruction contributes rows to different tables simultaneously. The proving cost is determined by the **tallest** table, not the sum. Understanding which table dominates is critical for optimization.
+[Triton VM](https://triton-vm.org/)'s execution trace is spread across multiple tables. Each instruction contributes rows to different tables simultaneously. The proving cost is determined by the **tallest** table, not the sum. Understanding which table dominates is critical for optimization.
 
 **Table overview:**
 
@@ -897,7 +897,7 @@ Every TASM instruction has a known, fixed contribution to each table. The compil
 
 `*` = U32 table contribution depends on operand values (bit decomposition). The compiler uses worst-case (32-bit) for static analysis.
 
-**Note on Hash Table rows**: The Tip5 permutation has 5 rounds. Together with setup, each hash-related instruction contributes 6 rows to the Hash Table. This is why `hash`, `sponge_*`, and `merkle_step` are the most expensive operations — not in clock cycles, but in their coprocessor impact.
+**Note on Hash Table rows**: The [Tip5](https://eprint.iacr.org/2023/107) permutation has 5 rounds. Together with setup, each hash-related instruction contributes 6 rows to the Hash Table. This is why `hash`, `sponge_*`, and `merkle_step` are the most expensive operations — not in clock cycles, but in their coprocessor impact.
 
 ### 12.5 Static Cost Computation Algorithm
 
@@ -985,8 +985,8 @@ proving_time ≈ padded_height × columns × log(padded_height) × field_op_time
 ```
 
 Where:
-- `columns` ≈ 300 (total columns across all tables — this is fixed by Triton VM's arithmetization)
-- `log(padded_height)` accounts for FRI folding
+- `columns` ≈ 300 (total columns across all tables — this is fixed by [Triton VM](https://triton-vm.org/)'s arithmetization)
+- `log(padded_height)` accounts for [FRI](https://eccc.weizmann.ac.il/report/2017/134/) folding
 - `field_op_time` depends on hardware (~1-5 ns per 64-bit field op)
 
 The compiler reports estimates for reference hardware. Actual times will vary by CPU, but the **relative** costs between functions are reliable.
@@ -1126,7 +1126,7 @@ Understanding the cost model informs several architectural decisions in Trident 
 
 **Prefer `sponge_absorb_mem` over `sponge_absorb`** when absorbing data from RAM. Both cost 6 Hash Table rows, but `sponge_absorb_mem` avoids the 10 `read_mem` instructions needed to get data from RAM onto the stack first. This saves ~10 processor cycles and ~10 RAM table rows per absorption.
 
-**Minimize Merkle tree depth.** Each `merkle_step` costs 6 Hash Table rows + U32 table rows. A depth-20 tree verification: 120 hash rows. A depth-32 tree: 192 hash rows. If the padded height boundary is between 128 and 256, the difference between depth 20 and depth 22 could double proving cost.
+**Minimize [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree) depth.** Each `merkle_step` costs 6 Hash Table rows + U32 table rows. A depth-20 tree verification: 120 hash rows. A depth-32 tree: 192 hash rows. If the padded height boundary is between 128 and 256, the difference between depth 20 and depth 22 could double proving cost.
 
 **Batch U32 operations.** The U32 coprocessor table grows with bit decompositions. Multiple u32 operations on the same value share decomposition work. The compiler does not currently optimize this automatically — the developer should sequence related u32 operations together.
 
@@ -1580,9 +1580,9 @@ Trident is successful if:
 
 ## Appendix B: Comparison with Related Languages
 
-| Feature | Trident | Cairo 1 | Leo (Aleo) | Vyper | Noir |
+| Feature | Trident | [Cairo 1](https://www.cairo-lang.org/) | [Leo](https://leo-lang.org/) (Aleo) | [Vyper](https://docs.vyperlang.org/) | [Noir](https://noir-lang.org/) |
 |---------|---------|---------|------------|-------|------|
-| Target VM | Triton (STARK) | Cairo (STARK) | Aleo (SNARK) | EVM | ACIR (SNARK) |
+| Target VM | [Triton](https://triton-vm.org/) ([STARK](https://starkware.co/stark/)) | Cairo (STARK) | Aleo (SNARK) | EVM | ACIR (SNARK) |
 | Module system | Yes (DAG) | Yes (crates) | Yes | No | Yes (crates) |
 | IR | None | Sierra | R1CS | None | SSA → ACIR |
 | Type system | 5 primitives | Rich | Rich | Basic | Rich |
@@ -1609,7 +1609,7 @@ If a program compiles and a proof is generated, the computation is correct. The 
 Every program has a compile-time-computable upper bound on its execution trace. No unbounded loops, no dynamic allocation, no recursion. The cost of proving is known before the prover runs. There are no surprises.
 
 **Prong III — Provable.**
-Every valid execution produces a STARK proof. The proof is zero-knowledge (secret inputs remain hidden), succinct (logarithmic in trace length), and post-quantum secure (no elliptic curves, no trusted setup). The proof can verify itself — enabling recursive composition.
+Every valid execution produces a STARK proof. The proof is [zero-knowledge](https://en.wikipedia.org/wiki/Zero-knowledge_proof) (secret inputs remain hidden), succinct (logarithmic in trace length), and post-quantum secure (no elliptic curves, no trusted setup). The proof can verify itself — enabling recursive composition.
 
 ---
 

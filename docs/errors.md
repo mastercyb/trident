@@ -1,6 +1,6 @@
 # Error Catalog
 
-A reference of all Trident compiler errors with explanations and fixes.
+A reference of all [Trident](../README.md) compiler errors with explanations and fixes.
 
 ## Lexer Errors
 
@@ -24,7 +24,7 @@ error: unexpected '-'; Trident has no subtraction operator
   help: use the `sub(a, b)` function instead of `a - b`
 ```
 
-**Cause:** Trident deliberately omits the `-` operator. The `->` arrow for return types uses `-`, but standalone `-` is not allowed.
+**Cause:** Trident deliberately omits the `-` operator (see [design rationale](spec.md#61-field-arithmetic)). The `->` arrow for return types uses `-`, but standalone `-` is not allowed.
 
 **Fix:** Use `std.field.sub(a, b)` or `std.field.neg(a)`:
 
@@ -42,7 +42,7 @@ error: unexpected '/'; Trident has no division operator
   help: use the `/% (divmod)` operator instead: `let (quot, rem) = a /% b`
 ```
 
-**Cause:** Trident has no `/` operator. Division in a prime field is actually multiplication by the modular inverse, which is expensive. The `/% (divmod)` operator makes this cost explicit.
+**Cause:** Trident has no `/` operator. Division in a [prime field](https://en.wikipedia.org/wiki/Finite_field) is actually multiplication by the modular inverse, which is expensive. The `/% (divmod)` operator makes this cost explicit.
 
 **Fix:** Use the divmod operator:
 
@@ -432,7 +432,7 @@ error: recursive function call detected: main -> foo -> main
   help: Trident does not allow recursion; use `for` loops instead
 ```
 
-**Cause:** A function directly or indirectly calls itself. Trident prohibits recursion because Triton VM cannot handle unbounded call depths.
+**Cause:** A function directly or indirectly calls itself. Trident prohibits recursion because [Triton VM](https://triton-vm.org/) cannot handle unbounded call depths.
 
 **Fix:** Rewrite the algorithm using `for` loops with `bounded`:
 

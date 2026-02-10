@@ -1,17 +1,17 @@
 # Optimization Guide
 
-Strategies for reducing the proving cost of Trident programs.
+Strategies for reducing the proving cost of Trident programs on [Triton VM](https://triton-vm.org/).
 
 ## Understanding Cost
 
-Triton VM proves computation correctness using six execution tables. The **proving cost** is determined by the **tallest table**, padded to the next power of two. Reducing the tallest table has the most impact; reducing a table that is already shorter than the tallest has no effect on proving cost.
+[Triton VM](https://triton-vm.org/) proves computation correctness using six execution tables. The **proving cost** is determined by the **tallest table**, padded to the next power of two. Reducing the tallest table has the most impact; reducing a table that is already shorter than the tallest has no effect on proving cost.
 
 ### The Six Tables
 
 | Table | Grows With | Typical Driver |
 |-------|-----------|----------------|
 | **Processor** | Every instruction executed | Loop iterations, function calls |
-| **Hash** | Every `hash` instruction | Tip5 calls (6 rows per hash) |
+| **Hash** | Every `hash` instruction | [Tip5](https://eprint.iacr.org/2023/107) calls (6 rows per hash) |
 | **U32** | Range checks, bitwise ops | `as_u32`, `split`, `&`, `^`, `log2`, `pow` |
 | **Op Stack** | Stack underflow handling | Deep variable access, large structs |
 | **RAM** | Memory read/write | Array indexing, struct field access, spilling |
@@ -41,7 +41,7 @@ The comparison shows which functions got cheaper or more expensive.
 
 ### 1. Reduce Hash Table Cost
 
-The Hash table is often the tallest because each `hash` / `tip5` call adds 6 rows.
+The Hash table is often the tallest because each `hash` / [`tip5`](https://eprint.iacr.org/2023/107) call adds 6 rows.
 
 **Strategies:**
 
@@ -66,7 +66,7 @@ sponge_absorb(e10, e11, e12, e13, e14, e15, e16, e17, e18, e19)
 let d: Digest = sponge_squeeze()
 ```
 
-- **Reduce Merkle tree depth**: Shallower trees need fewer hash operations. A depth-3 tree requires 3 hash calls per authentication; depth-4 requires 4.
+- **Reduce [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree) depth**: Shallower trees need fewer hash operations. A depth-3 tree requires 3 hash calls per authentication; depth-4 requires 4.
 
 ### 2. Reduce Processor Table Cost
 
@@ -184,7 +184,7 @@ This immediately shows where to focus optimization efforts.
 
 ## Common Patterns
 
-### Merkle Proof Verification
+### [Merkle](https://en.wikipedia.org/wiki/Merkle_tree) Proof Verification
 
 Merkle proofs are hash-heavy. Use the shallowest tree that fits your data:
 

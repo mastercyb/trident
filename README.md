@@ -1,8 +1,8 @@
 # Trident
 
-A minimal, security-first language for provable computation on Triton VM.
+A minimal, security-first language for provable computation on [Triton VM](https://triton-vm.org/).
 
-Trident compiles directly to TASM (Triton Assembly) with no intermediate representation. Every language construct maps predictably to known TASM patterns. The compiler is a thin, auditable translation layer -- not an optimization engine.
+Trident compiles directly to [TASM](https://triton-vm.org/spec/) (Triton Assembly) with no intermediate representation. Every language construct maps predictably to known TASM patterns. The compiler is a thin, auditable translation layer -- not an optimization engine.
 
 ## Quick Start
 
@@ -55,11 +55,11 @@ trident build hello.tri -o hello.tasm
 
 | Type | Width | Description |
 |------|-------|-------------|
-| `Field` | 1 | Base field element (mod p, p = 2^64 - 2^32 + 1) |
+| `Field` | 1 | Base field element (mod p, [Goldilocks prime](https://en.wikipedia.org/wiki/Goldilocks_(polynomial)) p = 2^64 - 2^32 + 1) |
 | `XField` | 3 | Extension field element |
 | `Bool` | 1 | Boolean (0 or 1) |
 | `U32` | 1 | Unsigned 32-bit integer (range-checked) |
-| `Digest` | 5 | Tip5 hash digest |
+| `Digest` | 5 | [Tip5](https://eprint.iacr.org/2023/107) hash digest |
 | `[T; N]` | N*width(T) | Fixed-size array |
 | `(T, U)` | width(T)+width(U) | Tuple |
 
@@ -175,7 +175,7 @@ fn custom_hash(a: Field, b: Field) -> Field {
 | Module | Functions | Purpose |
 |--------|-----------|---------|
 | `std.io` | `pub_read`, `pub_write`, `divine` | Public and secret I/O |
-| `std.hash` | `tip5`, `sponge_init/absorb/squeeze` | Tip5 hashing |
+| `std.hash` | `tip5`, `sponge_init/absorb/squeeze` | [Tip5](https://eprint.iacr.org/2023/107) hashing |
 | `std.field` | `add`, `sub`, `mul`, `neg`, `inv` | Field arithmetic |
 | `std.convert` | `as_u32`, `as_field`, `split` | Type conversions |
 | `std.u32` | `log2`, `pow`, `popcount` | U32 operations |
@@ -183,9 +183,9 @@ fn custom_hash(a: Field, b: Field) -> Field {
 | `std.xfield` | `new`, `inv` | Extension field ops |
 | `std.mem` | `read`, `write`, `read_block`, `write_block` | RAM access |
 | `std.storage` | `read`, `write`, `read_digest`, `write_digest` | Persistent storage |
-| `std.merkle` | `verify1`..`verify4`, `authenticate_leaf3` | Merkle proofs |
+| `std.merkle` | `verify1`..`verify4`, `authenticate_leaf3` | [Merkle proofs](https://en.wikipedia.org/wiki/Merkle_tree) |
 | `std.auth` | `verify_preimage`, `verify_digest_preimage` | Authorization |
-| `std.kernel` | `authenticate_field`, `tree_height` | Neptune kernel |
+| `std.kernel` | `authenticate_field`, `tree_height` | [Neptune](https://neptune.cash/) kernel |
 | `std.utxo` | `authenticate` | UTXO verification |
 
 ## CLI Reference
@@ -256,7 +256,7 @@ Start the Language Server Protocol server.
 
 ## Cost Model
 
-Trident tracks proving cost across all six Triton VM tables:
+Trident tracks proving cost across all six [Triton VM](https://triton-vm.org/) tables:
 
 | Table | What It Measures |
 |-------|-----------------|
@@ -267,13 +267,13 @@ Trident tracks proving cost across all six Triton VM tables:
 | RAM | Memory read/write operations |
 | Jump Stack | Function call/return overhead |
 
-The **padded height** (next power of two of the tallest table) determines actual proving cost. Use `--costs` to see the breakdown and `--hints` for optimization suggestions.
+The **padded height** (next power of two of the tallest table) determines actual [STARK](https://starkware.co/stark/) proving cost. Use `--costs` to see the breakdown and `--hints` for optimization suggestions.
 
 ## Editor Support
 
-- **Zed**: Extension in `editor/zed/` with syntax highlighting and bracket matching
-- **Helix**: Configuration in `editor/helix/languages.toml`
-- **Any LSP client**: Run `trident lsp` for diagnostics, completions, hover, go-to-definition, and signature help
+- **[Zed](https://zed.dev/)**: Extension in `editor/zed/` with syntax highlighting and bracket matching
+- **[Helix](https://helix-editor.com/)**: Configuration in `editor/helix/languages.toml`
+- **Any [LSP](https://microsoft.github.io/language-server-protocol/) client**: Run `trident lsp` for diagnostics, completions, hover, go-to-definition, and signature help
 
 ## Project Structure
 
@@ -311,11 +311,11 @@ flags = ["release"]
 ## Design Principles
 
 1. **No intermediate representation** -- Source to TASM directly, for auditability
-2. **Deliberate limitation** -- One obvious way to do everything (Vyper philosophy)
+2. **Deliberate limitation** -- One obvious way to do everything ([Vyper](https://docs.vyperlang.org/) philosophy)
 3. **Cost transparency** -- Every function annotated with proving cost
 4. **Bounded execution** -- All loops require explicit bounds, no recursion
 5. **Compile-time everything** -- All type widths and array sizes known statically
-6. **Minimal dependencies** -- 4 runtime crates (clap, ariadne, tower-lsp, tokio)
+6. **Minimal dependencies** -- 4 runtime crates ([clap](https://crates.io/crates/clap), [ariadne](https://crates.io/crates/ariadne), [tower-lsp](https://crates.io/crates/tower-lsp), [tokio](https://crates.io/crates/tokio))
 
 ## License
 

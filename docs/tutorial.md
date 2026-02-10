@@ -1,6 +1,6 @@
 # Trident Tutorial
 
-A step-by-step guide to writing provable programs with Trident.
+A step-by-step guide to writing provable programs with Trident for [Triton VM](https://triton-vm.org/).
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ Trident has five primitive types, all with known compile-time widths:
 
 ### Field
 
-The base type. A prime field element modulo p = 2^64 - 2^32 + 1. Supports `+`, `*`, `==`.
+The base type. A prime field element modulo p = 2^64 - 2^32 + 1 (the [Goldilocks prime](https://en.wikipedia.org/wiki/Goldilocks_(polynomial))). Supports `+`, `*`, `==`.
 
 ```
 let x: Field = 42
@@ -86,7 +86,7 @@ let m: U32 = n + n
 
 ### XField
 
-Extension field element (3 base field elements). Used for FRI and IPA operations.
+Extension field element (3 base field elements). Used for [FRI](https://eccc.weizmann.ac.il/report/2017/134/) and IPA operations.
 
 ```
 let x: XField = std.xfield.new(1, 0, 0)
@@ -94,7 +94,7 @@ let x: XField = std.xfield.new(1, 0, 0)
 
 ### Digest
 
-A Tip5 hash digest (5 field elements). Returned by hash functions.
+A [Tip5](https://eprint.iacr.org/2023/107) hash digest (5 field elements). Returned by hash functions.
 
 ```
 let d: Digest = tip5(a, b, c, 0, 0, 0, 0, 0, 0, 0)
@@ -288,7 +288,7 @@ for i in 0..10 bounded 10 {
 }
 ```
 
-The `bounded N` annotation tells the compiler the maximum number of iterations. This is required because Triton VM cannot execute unbounded loops. The loop variable `i` has type `Field`.
+The `bounded N` annotation tells the compiler the maximum number of iterations. This is required because [Triton VM](https://triton-vm.org/) cannot execute unbounded loops. The loop variable `i` has type `Field`.
 
 Dynamic ranges are allowed with `bounded`:
 
@@ -424,7 +424,7 @@ std.assert.digest(claimed_root, actual_root)
 
 ## 10. Hashing
 
-Tip5 is the native hash function (10 inputs, 5 outputs):
+[Tip5](https://eprint.iacr.org/2023/107) is the native hash function (10 inputs, 5 outputs):
 
 ```
 use std.hash
@@ -542,7 +542,7 @@ Test functions are excluded from production builds.
 
 ## 14. Cost Analysis
 
-Every operation in Triton VM has a measurable proving cost. Use the build flags to analyze:
+Every operation in [Triton VM](https://triton-vm.org/) has a measurable proving cost. Use the build flags to analyze:
 
 ```bash
 # Full cost report
@@ -572,7 +572,7 @@ See the [Optimization Guide](optimization.md) for strategies to reduce proving c
 
 ## 15. Inline Assembly
 
-For operations not yet covered by the language, use inline TASM:
+For operations not yet covered by the language, use inline [TASM](https://triton-vm.org/spec/):
 
 ```
 fn custom_op(a: Field, b: Field) -> Field {
@@ -589,6 +589,8 @@ Use with care: the compiler trusts the effect annotation. An incorrect annotatio
 ## Next Steps
 
 - [Language Specification](spec.md) -- Complete reference for all language constructs
-- [Programming Model](programming-model.md) -- How programs run in Triton VM
+- [Programming Model](programming-model.md) -- How programs run in [Triton VM](https://triton-vm.org/)
 - [Optimization Guide](optimization.md) -- Strategies to reduce proving cost
 - [Error Catalog](errors.md) -- All error messages explained
+- [Triton VM specification](https://triton-vm.org/spec/) -- Target VM instruction set
+- [tasm-lib](https://github.com/TritonVM/tasm-lib) -- Reusable TASM snippets
