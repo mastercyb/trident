@@ -115,6 +115,9 @@ enum Command {
         /// Output machine-readable JSON report (for LLM/CI consumption)
         #[arg(long)]
         json: bool,
+        /// Synthesize and suggest specifications (invariants, pre/postconditions)
+        #[arg(long)]
+        synthesize: bool,
     },
     /// Show content hashes of functions (BLAKE3)
     Hash {
@@ -248,7 +251,8 @@ fn main() {
             smt,
             z3,
             json,
-} => cmd_verify(input, verbose, smt, z3, json),
+            synthesize,
+        } => cmd_verify(input, verbose, smt, z3, json, synthesize),
         Command::Hash { input, full } => cmd_hash(input, full),
         Command::Bench { dir } => cmd_bench(dir),
         Command::Generate { input, output } => cmd_generate(input, output),
@@ -827,6 +831,7 @@ fn cmd_verify(
     smt_output: Option<PathBuf>,
     run_z3: bool,
     json: bool,
+    synthesize: bool,
 ) {
     let entry = if input.is_dir() {
         let toml_path = input.join("trident.toml");
@@ -864,8 +869,9 @@ fn cmd_verify(
 
     eprintln!("Verifying {}...", input.display());
 
-    // Parse for symbolic analysis (needed for verbose, SMT, Z3, and JSON)
-    let system = if verbose || smt_output.is_some() || run_z3 || json {
+    // Parse for symbolic analysis (needed for verbose, SMT, Z3, JSON, and synthesize)
+    let need_parse = verbose || smt_output.is_some() || run_z3 || json || synthesize;
+    let (system, parsed_file) = if need_parse {
         if let Ok(source) = std::fs::read_to_string(&entry) {
             let filename = entry.to_string_lossy().to_string();
             match trident::parse_source_silent(&source, &filename) {
@@ -874,15 +880,15 @@ fn cmd_verify(
                     if verbose {
                         eprintln!("\nConstraint system: {}", sys.summary());
                     }
-                    Some(sys)
+                    (Some(sys), Some(file))
                 }
-                Err(_) => None,
+                Err(_) => (None, None),
             }
         } else {
-            None
+            (None, None)
         }
     } else {
-        None
+        (None, None)
     };
 
     // --smt: write SMT-LIB2 encoding to file
@@ -955,6 +961,16 @@ fn cmd_verify(
                     eprintln!("  Install Z3 or use --smt to export for external solvers.");
                 }
             }
+        }
+    }
+
+    // --synthesize: automatic invariant synthesis
+    if synthesize {
+        if let Some(ref file) = parsed_file {
+            let specs = trident::synthesize::synthesize_specs(file);
+            eprintln!("\n{}", trident::synthesize::format_report(&specs));
+        } else {
+            eprintln!("warning: could not parse file for synthesis");
         }
     }
 

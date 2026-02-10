@@ -21,6 +21,7 @@ pub mod solve;
 pub mod span;
 pub mod stack;
 pub mod sym;
+pub mod synthesize;
 pub mod target;
 pub mod typeck;
 pub mod types;
