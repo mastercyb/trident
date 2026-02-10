@@ -1,5 +1,8 @@
 # Trident Development Plan
 
+## Features
+
+
 ## Compiler
 
 - [x] Size-generic functions: `fn sum<N>(arr: [Field; N]) -> Field`
@@ -51,6 +54,7 @@
 - [x] Quick Reference card: types, operators, builtins, grammar, CLI
 - [x] STARK education article: arithmetization, FRI, Triton VM tables, recursive verification
 - [x] Documentation updated for universality
+- [x] Lifecycle docs: Writing, Compiling, Running, Deploying, Generating Proofs, Verifying Proofs
 - [ ] Language spec: clean up spec.md for public release
 
 ## Website
@@ -81,9 +85,13 @@
 
 ## Multi-Target
 
-- [ ] Additional VM backends (Miden, Cairo, SP1)
+- [ ] OpenVM backend (RISC-V zkVM, Rust guest programs, EVM proof verification)
+- [ ] Miden backend (Polygon Miden, stack-based, Winterfell prover)
+- [ ] SP1 backend (Succinct, RISC-V, Plonky3 prover)
+- [ ] Cairo backend (StarkNet/StarkWare, Sierra intermediate)
 - [ ] Cross-target testing framework
 - [ ] Target-specific optimizations
+- [ ] Target comparison benchmarks (same program, different backends)
 ---
 
 ## Done
@@ -132,4 +140,6 @@ tutorial, optimization guide, error catalog, fungible token example,
 vision manifesto, developer guide (zero-to-ZK), blockchain developer
 guide (EVM/SVM migration), quick reference card, comparative analysis.
 Updated for universality (multi-target architecture, TargetConfig, backend
-traits).
+traits). Lifecycle documentation: Writing a Program, Compiling a Program,
+Running a Program, Deploying a Program, Generating Proofs, Verifying
+Proofs.

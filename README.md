@@ -326,6 +326,19 @@ backend = "triton"
 
 ## Documentation
 
+### Program Lifecycle
+
+The complete journey from source code to verified proof:
+
+| Stage | Guide | What happens |
+|-------|-------|-------------|
+| 1. Write | [Writing a Program](docs/writing-a-program.md) | Types, functions, modules, control flow |
+| 2. Compile | [Compiling a Program](docs/compiling-a-program.md) | Build, check, cost analysis, error handling |
+| 3. Run | [Running a Program](docs/running-a-program.md) | Execute TASM in Triton VM, I/O model, testing |
+| 4. Deploy | [Deploying a Program](docs/deploying-a-program.md) | Neptune UTXO scripts, multi-target deployment |
+| 5. Prove | [Generating Proofs](docs/generating-proofs.md) | Execution trace to STARK proof, cost optimization |
+| 6. Verify | [Verifying Proofs](docs/verifying-proofs.md) | Proof checking, on-chain verification, quantum safety |
+
 ### Learning Paths
 
 | You are... | Start here |
@@ -337,6 +350,15 @@ backend = "triton"
 
 ### All Documents
 
+**Lifecycle guides** (start here):
+- [Writing a Program](docs/writing-a-program.md) -- Program structure, types, functions, modules, inline asm
+- [Compiling a Program](docs/compiling-a-program.md) -- Build pipeline, errors, cost analysis, testing
+- [Running a Program](docs/running-a-program.md) -- Execution in Triton VM, I/O model, debugging
+- [Deploying a Program](docs/deploying-a-program.md) -- Neptune scripts, multi-target, deployment checklist
+- [Generating Proofs](docs/generating-proofs.md) -- Trace to proof, cost optimization, recursive proofs
+- [Verifying Proofs](docs/verifying-proofs.md) -- Proof checking, on-chain verification, quantum safety
+
+**Background and reference**:
 - [Vision](docs/vision.md) -- Why Trident exists and what you can build
 - [Tutorial](docs/tutorial.md) -- Step-by-step developer guide
 - [For Developers](docs/for-developers.md) -- Zero-knowledge from scratch (for Rust/Python/Go devs)
