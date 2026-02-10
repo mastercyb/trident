@@ -3213,4 +3213,218 @@ mod tests {
             assert!(!out.is_empty(), "target {} produced empty output", target);
         }
     }
+
+    // ─── Cross-Target Integration Tests ─────────────────────────────
+
+    #[test]
+    fn test_cross_target_arithmetic() {
+        let source = "program test\nfn main() {\n  let a: Field = 10\n  let b: Field = 20\n  let c: Field = a + b\n  let d: Field = a * b\n  let e: Field = d + c\n  pub_write(e)\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty output for arithmetic", target);
+            // Each target should have its add and mul instructions
+            match *target {
+                "triton" => {
+                    assert!(out.contains("add"), "{}: missing add", target);
+                    assert!(out.contains("mul"), "{}: missing mul", target);
+                }
+                "miden" => {
+                    assert!(out.contains("add"), "{}: missing add", target);
+                    assert!(out.contains("mul"), "{}: missing mul", target);
+                }
+                "openvm" | "sp1" => {
+                    assert!(out.contains("add"), "{}: missing add", target);
+                    assert!(out.contains("mul"), "{}: missing mul", target);
+                }
+                "cairo" => {
+                    assert!(out.contains("felt252_add"), "{}: missing add", target);
+                    assert!(out.contains("felt252_mul"), "{}: missing mul", target);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn test_cross_target_control_flow() {
+        let source = "program test\nfn main() {\n  let x: Field = pub_read()\n  if x == 0 {\n    pub_write(1)\n  } else {\n    pub_write(2)\n  }\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty output for control flow", target);
+            // All targets should have labels for branching
+            assert!(
+                out.contains("__main"),
+                "{}: missing main label in control flow",
+                target
+            );
+        }
+    }
+
+    #[test]
+    fn test_cross_target_function_calls() {
+        let source = "program test\nfn add_one(x: Field) -> Field {\n  x + 1\n}\nfn main() {\n  let r: Field = add_one(41)\n  pub_write(r)\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty for function calls", target);
+            // Should have both main and add_one labels
+            assert!(out.contains("__main"), "{}: missing __main", target);
+            assert!(out.contains("__add_one"), "{}: missing __add_one", target);
+        }
+    }
+
+    #[test]
+    fn test_cross_target_loops() {
+        let source = "program test\nfn main() {\n  let n: Field = 5\n  let mut sum: Field = 0\n  for i in 0..n bounded 10 {\n    sum = sum + i\n  }\n  pub_write(sum)\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty for loops", target);
+            // Loops desugar to labels and jumps in all targets
+            assert!(
+                out.contains("__main"),
+                "{}: missing main in loop test",
+                target
+            );
+        }
+    }
+
+    #[test]
+    fn test_cross_target_io() {
+        let source = "program test\nfn main() {\n  let x: Field = pub_read()\n  let y: Field = pub_read()\n  pub_write(x + y)\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty for IO", target);
+            match *target {
+                "triton" => {
+                    assert!(out.contains("read_io"), "{}: missing read_io", target);
+                    assert!(out.contains("write_io"), "{}: missing write_io", target);
+                }
+                "miden" => {
+                    assert!(
+                        out.contains("sdepth") && out.contains("drop"),
+                        "{}: missing miden IO pattern",
+                        target
+                    );
+                }
+                "openvm" | "sp1" => {
+                    assert!(out.contains("ecall"), "{}: missing ecall for IO", target);
+                }
+                "cairo" => {
+                    assert!(
+                        out.contains("input") || out.contains("output"),
+                        "{}: missing cairo IO",
+                        target
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn test_cross_target_events() {
+        let source = "program test\nevent Transfer {\n  amount: Field,\n}\nfn main() {\n  emit Transfer { amount: 100 }\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty for events", target);
+        }
+    }
+
+    #[test]
+    fn test_cross_target_multiple_functions() {
+        let source = "program test\nfn double(x: Field) -> Field {\n  x * 2\n}\nfn triple(x: Field) -> Field {\n  x * 3\n}\nfn main() {\n  let a: Field = double(5)\n  let b: Field = triple(5)\n  pub_write(a + b)\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(out.contains("__double"), "{}: missing __double", target);
+            assert!(out.contains("__triple"), "{}: missing __triple", target);
+            assert!(out.contains("__main"), "{}: missing __main", target);
+        }
+    }
+
+    #[test]
+    fn test_cross_target_u32_operations() {
+        let source = "program test\nfn main() {\n  let a: U32 = as_u32(10)\n  let b: U32 = as_u32(20)\n  if a < b {\n    pub_write(1)\n  } else {\n    pub_write(0)\n  }\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty for U32 ops", target);
+        }
+    }
+
+    #[test]
+    fn test_cross_target_output_size_comparison() {
+        // Benchmark: same program compiled to all targets — compare sizes
+        let source = "program test\nfn fib(n: Field) -> Field {\n  let mut a: Field = 0\n  let mut b: Field = 1\n  for i in 0..n bounded 20 {\n    let t: Field = b\n    b = a + b\n    a = t\n  }\n  a\n}\nfn main() {\n  let r: Field = fib(10)\n  pub_write(r)\n}";
+        let mut sizes: Vec<(&str, usize)> = Vec::new();
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty for fib benchmark", target);
+            sizes.push((target, out.len()));
+        }
+        // All targets should produce non-trivial output
+        for (target, size) in &sizes {
+            assert!(*size > 50, "{}: output too small ({})", target, size);
+        }
+        // Sanity: outputs should differ between target families
+        let triton_size = sizes[0].1;
+        let cairo_size = sizes[4].1;
+        assert_ne!(
+            triton_size, cairo_size,
+            "triton and cairo should produce different-sized output"
+        );
+    }
+
+    #[test]
+    fn test_cross_target_nested_calls() {
+        let source = "program test\nfn inc(x: Field) -> Field {\n  x + 1\n}\nfn add_two(x: Field) -> Field {\n  inc(inc(x))\n}\nfn main() {\n  pub_write(add_two(40))\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(out.contains("__inc"), "{}: missing __inc", target);
+            assert!(out.contains("__add_two"), "{}: missing __add_two", target);
+        }
+    }
+
+    #[test]
+    fn test_cross_target_struct() {
+        let source = "program test\nstruct Point {\n  x: Field,\n  y: Field,\n}\nfn origin() -> Point {\n  Point { x: 0, y: 0 }\n}\nfn main() {\n  let p: Point = origin()\n  pub_write(p.x)\n  pub_write(p.y)\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty for struct test", target);
+            assert!(out.contains("__origin"), "{}: missing __origin", target);
+        }
+    }
+
+    #[test]
+    fn test_cross_target_mutable_variables() {
+        let source = "program test\nfn main() {\n  let mut x: Field = 0\n  x = x + 1\n  x = x + 2\n  x = x + 3\n  pub_write(x)\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty for mutable vars", target);
+        }
+    }
+
+    #[test]
+    fn test_cross_target_divine() {
+        let source = "program test\nfn main() {\n  let secret: Field = divine()\n  let d: Digest = divine5()\n  let (a, b, c, e, f) = d\n  pub_write(secret + a)\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty for divine test", target);
+        }
+    }
+
+    #[test]
+    fn test_cross_target_hash() {
+        let source = "program test\nfn main() {\n  let d: Digest = hash(1, 2, 3, 4, 5, 6, 7, 8, 9, 0)\n  let (a, b, c, e, f) = d\n  pub_write(a)\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty for hash test", target);
+        }
+    }
+
+    #[test]
+    fn test_cross_target_seal() {
+        let source = "program test\nevent Secret {\n  val: Field,\n}\nfn main() {\n  seal Secret { val: 42 }\n}";
+        for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
+            let out = compile_with_target(source, target);
+            assert!(!out.is_empty(), "{}: empty for seal test", target);
+        }
+    }
 }
