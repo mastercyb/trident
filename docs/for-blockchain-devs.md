@@ -812,4 +812,4 @@ types, functions, modules, I/O, hashing, events, testing, and cost analysis.
 - [Triton VM Specification](https://triton-vm.org/spec/) -- TASM instruction set
 - [Neptune Cash](https://neptune.cash/) -- Production blockchain built on Triton VM
 - [Tip5 Hash Function](https://eprint.iacr.org/2023/107) -- The algebraic hash used everywhere
-- [STARK Proofs](https://starkware.co/stark/) -- The proof system underlying Triton VM
+- [How STARK Proofs Work](stark-proofs.md) -- From execution traces to quantum-safe proofs

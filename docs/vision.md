@@ -78,7 +78,7 @@ fn main() {
 ```
 
 That is a complete provable program. Build it with `trident build hello.tri`,
-feed it to the Triton VM prover, and you get a [STARK](https://starkware.co/stark/)
+feed it to the Triton VM prover, and you get a [STARK](stark-proofs.md)
 proof that `a + b = sum` for secret values of `a` and `b`. Quantum-safe.
 Zero-knowledge. No trusted setup. No elliptic curves. No vendor lock-in.
 
@@ -196,7 +196,7 @@ fn prove_sqrt(x: Field) {
 ```
 
 The prover does the hard work. The program constrains the result. The
-[STARK](https://starkware.co/stark/) proof guarantees the constraint holds.
+[STARK](stark-proofs.md) proof guarantees the constraint holds.
 This generalizes to any computation where verification is cheaper than
 computation: matrix multiplication, database queries, ML inference, search.
 
@@ -796,7 +796,7 @@ The numbers are small. The foundation is solid. The rest is building.
 - [Neptune Cash](https://neptune.cash/) -- Proof-of-Work blockchain running Triton VM in production
 - [tasm-lib](https://github.com/TritonVM/tasm-lib) -- Reusable TASM snippets and patterns
 - [Tip5 Hash Function](https://eprint.iacr.org/2023/107) -- The algebraic hash (ePrint 2023/107)
-- [STARK Proofs](https://starkware.co/stark/) -- Introduction to STARKs
+- [How STARK Proofs Work](stark-proofs.md) -- From execution traces to quantum-safe proofs
 - [FRI Protocol](https://eccc.weizmann.ac.il/report/2017/134/) -- The Fast Reed-Solomon IOP (ECCC 2017/134)
 - [Goldilocks Field](https://xn--2-umb.com/22/goldilocks/) -- The base field (p = 2^64 - 2^32 + 1)
 - [NIST Post-Quantum Cryptography](https://csrc.nist.gov/Projects/post-quantum-cryptography) -- The standardization effort

@@ -15,7 +15,7 @@ A minimal, security-first language for provable computation on Triton VM.
 
 ## 1. Executive Summary
 
-Trident is a minimal, security-first programming language targeting [Triton VM](https://triton-vm.org/) — a [STARK](https://starkware.co/stark/)-native virtual machine designed for recursive [zero-knowledge proof](https://en.wikipedia.org/wiki/Zero-knowledge_proof) verification. The language follows the [Vyper](https://docs.vyperlang.org/) philosophy: **deliberate limitation as a feature**, not a compromise.
+Trident is a minimal, security-first programming language targeting [Triton VM](https://triton-vm.org/) — a [STARK](stark-proofs.md)-native virtual machine designed for recursive [zero-knowledge proof](https://en.wikipedia.org/wiki/Zero-knowledge_proof) verification. The language follows the [Vyper](https://docs.vyperlang.org/) philosophy: **deliberate limitation as a feature**, not a compromise.
 
 Trident compiles directly to [TASM](https://triton-vm.org/spec/) (Triton Assembly) with no intermediate representation. Every language construct maps predictably to known TASM patterns. The compiler is a thin, auditable translation layer — not an optimization engine.
 
@@ -618,7 +618,7 @@ use std.merkle
 std.merkle.verify(root, leaf, leaf_index, depth)
 ```
 
-### 8.4 Dot Products (for [STARK](https://starkware.co/stark/) Verification)
+### 8.4 Dot Products (for [STARK](stark-proofs.md) Verification)
 
 ```
 // Extension field dot product from RAM
@@ -1586,7 +1586,7 @@ Trident is successful if:
 
 | Feature | Trident | [Cairo 1](https://www.cairo-lang.org/) | [Leo](https://leo-lang.org/) (Aleo) | [Vyper](https://docs.vyperlang.org/) | [Noir](https://noir-lang.org/) |
 |---------|---------|---------|------------|-------|------|
-| Target VM | [Triton](https://triton-vm.org/) ([STARK](https://starkware.co/stark/)) | Cairo (STARK) | Aleo (SNARK) | EVM | ACIR (SNARK) |
+| Target VM | [Triton](https://triton-vm.org/) ([STARK](stark-proofs.md)) | Cairo (STARK) | Aleo (SNARK) | EVM | ACIR (SNARK) |
 | Module system | Yes (DAG) | Yes (crates) | Yes | No | Yes (crates) |
 | IR | None | Sierra | R1CS | None | SSA → ACIR |
 | Type system | 5 primitives | Rich | Rich | Basic | Rich |

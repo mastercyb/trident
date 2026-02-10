@@ -8,7 +8,7 @@ Trident compiles directly to [TASM](https://triton-vm.org/spec/) (Triton Assembl
 
 [Triton VM](https://triton-vm.org/) is the only zero-knowledge virtual machine that is simultaneously **quantum-safe**, **private**, **programmable**, and **mineable**. No elliptic curves anywhere in the proof pipeline -- security rests entirely on hash functions ([Tip5](https://eprint.iacr.org/2023/107) + [FRI](https://eccc.weizmann.ac.il/report/2017/134/)), making proofs resistant to quantum attacks with no trusted setup.
 
-The VM is purpose-built for ZK: hash operations cost 1 clock cycle + 6 coprocessor rows (vs. thousands of cycles in RISC-V zkVMs). Native instructions for [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree) authentication, sponge hashing, and extension field dot products make recursive [STARK](https://starkware.co/stark/) verification practical inside the VM itself. [Neptune Cash](https://neptune.cash/) demonstrates this architecture in production as a Proof-of-Work blockchain where miners generate STARK proofs of arbitrary computation.
+The VM is purpose-built for ZK: hash operations cost 1 clock cycle + 6 coprocessor rows (vs. thousands of cycles in RISC-V zkVMs). Native instructions for [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree) authentication, sponge hashing, and extension field dot products make recursive [STARK](docs/stark-proofs.md) verification practical inside the VM itself. [Neptune Cash](https://neptune.cash/) demonstrates this architecture in production as a Proof-of-Work blockchain where miners generate STARK proofs of arbitrary computation.
 
 Trident exists because writing programs in raw TASM assembly doesn't scale. The language gives developers structured types, modules, bounded loops, and a cost model -- while preserving the direct, auditable mapping to the VM that makes formal reasoning about proving cost possible.
 
@@ -280,7 +280,7 @@ Trident tracks proving cost across all six [Triton VM](https://triton-vm.org/) t
 | RAM | Memory read/write operations |
 | Jump Stack | Function call/return overhead |
 
-The **padded height** (next power of two of the tallest table) determines actual [STARK](https://starkware.co/stark/) proving cost. Use `--costs` to see the breakdown and `--hints` for optimization suggestions.
+The **padded height** (next power of two of the tallest table) determines actual [STARK](docs/stark-proofs.md) proving cost. Use `--costs` to see the breakdown and `--hints` for optimization suggestions.
 
 ## Editor Support
 
@@ -319,6 +319,7 @@ flags = ["release"]
 - [Tutorial](docs/tutorial.md) -- Step-by-step developer guide
 - [For Developers](docs/for-developers.md) -- Zero-knowledge from scratch (for Rust/Python/Go devs)
 - [For Blockchain Devs](docs/for-blockchain-devs.md) -- Mental model migration (for Solidity/Anchor/CosmWasm devs)
+- [How STARK Proofs Work](docs/stark-proofs.md) -- From execution traces to quantum-safe proofs
 - [Language Reference](docs/reference.md) -- Quick lookup: types, operators, builtins, grammar
 - [Language Specification](docs/spec.md) -- Complete design specification
 - [Programming Model](docs/programming-model.md) -- Triton VM execution model

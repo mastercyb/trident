@@ -315,6 +315,10 @@ Key properties that matter for you as a developer:
   hundreds of bytes), but this is usually an acceptable trade-off for the
   security and simplicity benefits.
 
+For the full technical picture -- arithmetization, polynomial commitments,
+FRI folding, and how it all connects to Triton VM's six execution tables --
+see [How STARK Proofs Work](stark-proofs.md).
+
 ---
 
 ## 9. What Happens When You Build, Prove, and Verify?
@@ -617,7 +621,7 @@ them explicit rather than hiding them behind abstractions.
   proximity proof at the heart of STARKs
 - [Goldilocks prime](https://xn--2-umb.com/22/goldilocks/) -- Why
   `2^64 - 2^32 + 1`
-- [STARKs overview (StarkWare)](https://starkware.co/stark/) -- High-level
-  explanation of the STARK proof system
+- [How STARK Proofs Work](stark-proofs.md) -- Deep dive into the proof
+  system underlying Triton VM
 - [Vyper](https://docs.vyperlang.org/) -- The language philosophy that inspired
   Trident's "deliberate limitation" approach

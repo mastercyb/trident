@@ -7,7 +7,7 @@ state they can access, and how the standard library exposes these capabilities.
 ## Triton VM Execution Model
 
 Trident compiles to [TASM](https://triton-vm.org/spec/) (Triton Assembly), which runs inside [Triton VM](https://triton-vm.org/) -- a
-[STARK](https://starkware.co/stark/)-based [zero-knowledge](https://en.wikipedia.org/wiki/Zero-knowledge_proof) virtual machine. Programs are **isolated**: they have
+[STARK](stark-proofs.md)-based [zero-knowledge](https://en.wikipedia.org/wiki/Zero-knowledge_proof) virtual machine. Programs are **isolated**: they have
 no syscalls, no environment variables, no network access. A program's entire
 world consists of:
 
@@ -20,7 +20,7 @@ world consists of:
 | **RAM**               | `read_mem`/`write_mem`| No                  |
 | Stack, sponge, jumps  | various              | No                   |
 
-The verifier only ever sees the **Claim** and the **Proof** (a [STARK proof](https://starkware.co/stark/)):
+The verifier only ever sees the **Claim** and the **Proof** (a [STARK proof](stark-proofs.md)):
 
 ```
 Claim {

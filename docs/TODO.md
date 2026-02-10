@@ -38,6 +38,7 @@
 - [x] For Developers guide: zero-to-ZK bridge for conventional programmers
 - [x] For Blockchain Devs guide: mental model migration from EVM/SVM/CosmWasm
 - [x] Quick Reference card: types, operators, builtins, grammar, CLI
+- [x] STARK education article: arithmetization, FRI, Triton VM tables, recursive verification
 - [ ] Language spec: clean up spec.md for public release
 
 ## Website
