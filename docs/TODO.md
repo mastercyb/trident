@@ -136,7 +136,6 @@ Long-term, exploratory, not committed.
 - [ ] Provable data pipelines (ETL, aggregation, supply chain verification)
 - [ ] Hardware acceleration backends (FPGA, ASIC, GPU proving)
 - [ ] Differential privacy in ZK (combine divine/seal with DP mechanisms)
-- [ ] Coq/Lean extraction (`trident extract --coq`, shallow + deep embedding)
 
 ---
 
@@ -188,3 +187,27 @@ guide (EVM/SVM migration), quick reference card, comparative analysis.
 Updated for universality. Lifecycle docs (Write, Compile, Run, Deploy,
 Prove, Verify). Design docs: universal-design, content-addressed,
 formal-verification, opportunities, proving-roadmap, gold-standard.
+
+**Formal Verification** — symbolic execution engine (sym.rs), algebraic
+solver (Schwartz-Zippel over Goldilocks F_p), bounded model checker,
+`trident verify` CLI with verification reports, redundant assertion
+elimination, counterexample generation. SMT-LIB2 backend (smt.rs) with
+Z3/CVC5 integration. `#[requires]`, `#[ensures]`, `#[invariant]`
+annotations. Machine-readable JSON output. `trident generate` command
+for LLM-assisted verified code generation. Automatic invariant synthesis
+(template-based, CEGIS refinement, postcondition inference). Semantic
+equivalence checking (hash, polynomial normalization, differential
+testing). Verification certificates.
+
+**Content-Addressed Codebase** — AST normalization with de Bruijn
+indices, BLAKE3 content hashing (hash.rs), local codebase database
+(ucm.rs), compilation and verification caching, `trident ucm` CLI
+(add/list/view/rename/stats/history/deps), `trident hash` command.
+Global registry (registry.rs): HTTP server + client, publish/pull/search
+by name/type/tag/verification status, 31 tests. On-chain registry
+(onchain.rs): depth-4 Merkle tree (16 entries), FieldElement/Digest
+types with simulated Tip5, proof generation (register/verify/update/
+equivalence), certificate serialization, 28 tests. On-chain registry
+contract (ext/triton/registry.tri): register, verify_membership,
+update_certificate, lookup, register_equivalence operations with
+Merkle proof verification, authorization, and events.

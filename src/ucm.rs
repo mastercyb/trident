@@ -198,6 +198,11 @@ impl Codebase {
         self.definitions.get(hash)
     }
 
+    /// Get the content hash for a name.
+    pub fn hash_for_name(&self, name: &str) -> Option<&ContentHash> {
+        self.names.get(name)
+    }
+
     /// Look up a definition by hash.
     pub fn lookup_hash(&self, hash: &ContentHash) -> Option<&Definition> {
         self.definitions.get(hash)

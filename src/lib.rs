@@ -11,6 +11,7 @@ pub mod lexeme;
 pub mod lexer;
 pub mod linker;
 pub mod lsp;
+pub mod onchain;
 pub mod parser;
 pub mod project;
 pub mod registry;
