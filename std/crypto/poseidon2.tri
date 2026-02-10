@@ -1,0 +1,992 @@
+module std.crypto.poseidon2
+
+// Poseidon2 hash function over the Goldilocks field (p = 2^64 - 2^32 + 1).
+//
+// Implements the Poseidon2 permutation (Grassi et al., 2023) with:
+//   - State width t = 8, rate = 4, capacity = 4
+//   - S-box: x^7
+//   - 8 full rounds (4 initial + 4 final) and 22 partial rounds
+//   - External linear layer: circulant(2,1,1,...,1)
+//   - Internal linear layer: diag(2,3,5,9,17,33,65,129) + ones_matrix
+//   - Round constants: deterministic from BLAKE3-seeded generation
+//
+// This is the SNARK-friendly hash used for content addressing throughout
+// the Trident toolchain. Matching parameters to src/poseidon2.rs ensures
+// that hashes computed in Trident programs can be verified against
+// compiler-generated content hashes on-chain.
+use std.core.field
+
+// ---------------------------------------------------------------------------
+// Poseidon2 state: 8 field elements
+// ---------------------------------------------------------------------------
+pub struct State {
+    s0: Field,
+    s1: Field,
+    s2: Field,
+    s3: Field,
+    s4: Field,
+    s5: Field,
+    s6: Field,
+    s7: Field,
+}
+
+pub fn zero_state() -> State {
+    State { s0: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0, s6: 0, s7: 0 }
+}
+
+// ---------------------------------------------------------------------------
+// S-box: x^7 over the Goldilocks field
+// ---------------------------------------------------------------------------
+// gcd(7, p-1) = 1 for p = 2^64 - 2^32 + 1, so x^7 is a permutation.
+fn sbox(x: Field) -> Field {
+    let x2: Field = x * x
+    let x3: Field = x2 * x
+    let x6: Field = x3 * x3
+    x6 * x
+}
+
+// ---------------------------------------------------------------------------
+// External linear layer: circulant(2,1,1,...,1)
+// new[i] = state[i] + sum(state)
+// This equals 2*state[i] + sum(others).
+// ---------------------------------------------------------------------------
+fn external_linear(st: State) -> State {
+    let sum: Field = st.s0 + st.s1 + st.s2 + st.s3 + st.s4 + st.s5 + st.s6 + st.s7
+    State { s0: st.s0 + sum, s1: st.s1 + sum, s2: st.s2 + sum, s3: st.s3 + sum, s4: st.s4 + sum, s5: st.s5 + sum, s6: st.s6 + sum, s7: st.s7 + sum }
+}
+
+// ---------------------------------------------------------------------------
+// Internal linear layer: diag(d_0,...,d_7) + ones_matrix
+// new[i] = d_i * state[i] + sum(state)
+// d_i = 1 + 2^i: [2, 3, 5, 9, 17, 33, 65, 129]
+// ---------------------------------------------------------------------------
+fn internal_linear(st: State) -> State {
+    let sum: Field = st.s0 + st.s1 + st.s2 + st.s3 + st.s4 + st.s5 + st.s6 + st.s7
+    State { s0: st.s0 * 2 + sum, s1: st.s1 * 3 + sum, s2: st.s2 * 5 + sum, s3: st.s3 * 9 + sum, s4: st.s4 * 17 + sum, s5: st.s5 * 33 + sum, s6: st.s6 * 65 + sum, s7: st.s7 * 129 + sum }
+}
+
+// ---------------------------------------------------------------------------
+// Full round: add round constants + sbox all elements + external linear
+// ---------------------------------------------------------------------------
+fn full_round(
+    st: State,
+    rc0: Field,
+    rc1: Field,
+    rc2: Field,
+    rc3: Field,
+    rc4: Field,
+    rc5: Field,
+    rc6: Field,
+    rc7: Field
+) -> State {
+    let t: State = State { s0: sbox(st.s0 + rc0), s1: sbox(st.s1 + rc1), s2: sbox(st.s2 + rc2), s3: sbox(st.s3 + rc3), s4: sbox(st.s4 + rc4), s5: sbox(st.s5 + rc5), s6: sbox(st.s6 + rc6), s7: sbox(st.s7 + rc7) }
+    external_linear(t)
+}
+
+// ---------------------------------------------------------------------------
+// Partial round: add round constant to s0 only + sbox s0 only + internal linear
+// ---------------------------------------------------------------------------
+fn partial_round(st: State, rc: Field) -> State {
+    let new_s0: Field = sbox(st.s0 + rc)
+    let t: State = State { s0: new_s0, s1: st.s1, s2: st.s2, s3: st.s3, s4: st.s4, s5: st.s5, s6: st.s6, s7: st.s7 }
+    internal_linear(t)
+}
+
+// ---------------------------------------------------------------------------
+// Round constants
+// ---------------------------------------------------------------------------
+// These are the deterministic round constants matching src/poseidon2.rs.
+// Generated from BLAKE3("Poseidon2-Goldilocks-t8-RF8-RP22-{round}-{element}"),
+// taking the first 8 bytes as a little-endian u64, reduced mod p.
+//
+// Layout: 4 full rounds (8 constants each) = 32,
+//         22 partial rounds (1 constant each) = 22,
+//         4 full rounds (8 constants each) = 32.
+// Total: 86 round constants.
+//
+// For efficiency in a constrained environment, these constants are
+// embedded as literals. The Rust implementation (src/poseidon2.rs)
+// generates them identically at runtime.
+//
+// Note: The actual constant values depend on the BLAKE3 derivation.
+// We use a parametric approach: the permutation function accepts
+// all round constants as arguments, allowing the caller to supply
+// the correct values. This avoids hardcoding 86 field constants
+// in source and enables verification against the Rust implementation.
+// ---------------------------------------------------------------------------
+// Permutation: 4 full + 22 partial + 4 full rounds
+// ---------------------------------------------------------------------------
+// The permutation takes the state and all 86 round constants.
+// This is the core cryptographic primitive.
+//
+// For practical use, wrap this with functions that supply the
+// correct constants for a given security parameter set.
+// Apply 4 full rounds with 32 round constants (rc[0..32]).
+fn apply_full_rounds_4(
+    st: State,
+    c0: Field,
+    c1: Field,
+    c2: Field,
+    c3: Field,
+    c4: Field,
+    c5: Field,
+    c6: Field,
+    c7: Field,
+    c8: Field,
+    c9: Field,
+    c10: Field,
+    c11: Field,
+    c12: Field,
+    c13: Field,
+    c14: Field,
+    c15: Field,
+    c16: Field,
+    c17: Field,
+    c18: Field,
+    c19: Field,
+    c20: Field,
+    c21: Field,
+    c22: Field,
+    c23: Field,
+    c24: Field,
+    c25: Field,
+    c26: Field,
+    c27: Field,
+    c28: Field,
+    c29: Field,
+    c30: Field,
+    c31: Field
+) -> State {
+    let s1: State = full_round(st, c0, c1, c2, c3, c4, c5, c6, c7)
+    let s2: State = full_round(s1, c8, c9, c10, c11, c12, c13, c14, c15)
+    let s3: State = full_round(s2, c16, c17, c18, c19, c20, c21, c22, c23)
+    full_round(s3, c24, c25, c26, c27, c28, c29, c30, c31)
+}
+
+// Apply 11 partial rounds with 11 round constants.
+fn apply_partial_rounds_11(
+    st: State,
+    c0: Field,
+    c1: Field,
+    c2: Field,
+    c3: Field,
+    c4: Field,
+    c5: Field,
+    c6: Field,
+    c7: Field,
+    c8: Field,
+    c9: Field,
+    c10: Field
+) -> State {
+    let s1: State = partial_round(st, c0)
+    let s2: State = partial_round(s1, c1)
+    let s3: State = partial_round(s2, c2)
+    let s4: State = partial_round(s3, c3)
+    let s5: State = partial_round(s4, c4)
+    let s6: State = partial_round(s5, c5)
+    let s7: State = partial_round(s6, c6)
+    let s8: State = partial_round(s7, c7)
+    let s9: State = partial_round(s8, c8)
+    let s10: State = partial_round(s9, c9)
+    partial_round(s10, c10)
+}
+
+// Full Poseidon2 permutation.
+//
+// Takes the 8-element state and 86 round constants:
+//   - first_full[0..31]:  32 constants for 4 initial full rounds
+//   - partial[0..21]:     22 constants for 22 partial rounds
+//   - last_full[0..31]:   32 constants for 4 final full rounds
+//
+// Returns the permuted state.
+pub fn permute(
+    st: State,
+    ff0: Field,
+    ff1: Field,
+    ff2: Field,
+    ff3: Field,
+    ff4: Field,
+    ff5: Field,
+    ff6: Field,
+    ff7: Field,
+    ff8: Field,
+    ff9: Field,
+    ff10: Field,
+    ff11: Field,
+    ff12: Field,
+    ff13: Field,
+    ff14: Field,
+    ff15: Field,
+    ff16: Field,
+    ff17: Field,
+    ff18: Field,
+    ff19: Field,
+    ff20: Field,
+    ff21: Field,
+    ff22: Field,
+    ff23: Field,
+    ff24: Field,
+    ff25: Field,
+    ff26: Field,
+    ff27: Field,
+    ff28: Field,
+    ff29: Field,
+    ff30: Field,
+    ff31: Field,
+    p0: Field,
+    p1: Field,
+    p2: Field,
+    p3: Field,
+    p4: Field,
+    p5: Field,
+    p6: Field,
+    p7: Field,
+    p8: Field,
+    p9: Field,
+    p10: Field,
+    p11: Field,
+    p12: Field,
+    p13: Field,
+    p14: Field,
+    p15: Field,
+    p16: Field,
+    p17: Field,
+    p18: Field,
+    p19: Field,
+    p20: Field,
+    p21: Field,
+    lf0: Field,
+    lf1: Field,
+    lf2: Field,
+    lf3: Field,
+    lf4: Field,
+    lf5: Field,
+    lf6: Field,
+    lf7: Field,
+    lf8: Field,
+    lf9: Field,
+    lf10: Field,
+    lf11: Field,
+    lf12: Field,
+    lf13: Field,
+    lf14: Field,
+    lf15: Field,
+    lf16: Field,
+    lf17: Field,
+    lf18: Field,
+    lf19: Field,
+    lf20: Field,
+    lf21: Field,
+    lf22: Field,
+    lf23: Field,
+    lf24: Field,
+    lf25: Field,
+    lf26: Field,
+    lf27: Field,
+    lf28: Field,
+    lf29: Field,
+    lf30: Field,
+    lf31: Field
+) -> State {
+    // First 4 full rounds (32 constants)
+    // 22 partial rounds (22 constants)
+    // Last 4 full rounds (32 constants)
+    // First 4 full rounds
+    let s1: State = apply_full_rounds_4(
+        st,
+        ff0,
+        ff1,
+        ff2,
+        ff3,
+        ff4,
+        ff5,
+        ff6,
+        ff7,
+        ff8,
+        ff9,
+        ff10,
+        ff11,
+        ff12,
+        ff13,
+        ff14,
+        ff15,
+        ff16,
+        ff17,
+        ff18,
+        ff19,
+        ff20,
+        ff21,
+        ff22,
+        ff23,
+        ff24,
+        ff25,
+        ff26,
+        ff27,
+        ff28,
+        ff29,
+        ff30,
+        ff31
+    )
+    // First 11 partial rounds
+    let s2: State = apply_partial_rounds_11(
+        s1,
+        p0,
+        p1,
+        p2,
+        p3,
+        p4,
+        p5,
+        p6,
+        p7,
+        p8,
+        p9,
+        p10
+    )
+    // Remaining 11 partial rounds
+    let s3: State = apply_partial_rounds_11(
+        s2,
+        p11,
+        p12,
+        p13,
+        p14,
+        p15,
+        p16,
+        p17,
+        p18,
+        p19,
+        p20,
+        p21
+    )
+    // Last 4 full rounds
+    apply_full_rounds_4(
+        s3,
+        lf0,
+        lf1,
+        lf2,
+        lf3,
+        lf4,
+        lf5,
+        lf6,
+        lf7,
+        lf8,
+        lf9,
+        lf10,
+        lf11,
+        lf12,
+        lf13,
+        lf14,
+        lf15,
+        lf16,
+        lf17,
+        lf18,
+        lf19,
+        lf20,
+        lf21,
+        lf22,
+        lf23,
+        lf24,
+        lf25,
+        lf26,
+        lf27,
+        lf28,
+        lf29,
+        lf30,
+        lf31
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Sponge construction: absorb-squeeze API
+// ---------------------------------------------------------------------------
+// The sponge operates on the state with rate = 4 (elements s0..s3)
+// and capacity = 4 (elements s4..s7).
+// Absorb 4 field elements into the rate portion by addition.
+pub fn absorb4(st: State, a: Field, b: Field, c: Field, d: Field) -> State {
+    State { s0: st.s0 + a, s1: st.s1 + b, s2: st.s2 + c, s3: st.s3 + d, s4: st.s4, s5: st.s5, s6: st.s6, s7: st.s7 }
+}
+
+// Absorb 1 field element (padded with zeros in rate positions 1-3).
+pub fn absorb1(st: State, a: Field) -> State {
+    State { s0: st.s0 + a, s1: st.s1, s2: st.s2, s3: st.s3, s4: st.s4, s5: st.s5, s6: st.s6, s7: st.s7 }
+}
+
+// Absorb 2 field elements (padded with zeros in rate positions 2-3).
+pub fn absorb2(st: State, a: Field, b: Field) -> State {
+    State { s0: st.s0 + a, s1: st.s1 + b, s2: st.s2, s3: st.s3, s4: st.s4, s5: st.s5, s6: st.s6, s7: st.s7 }
+}
+
+// Squeeze the rate portion: returns the 4 rate elements.
+pub fn squeeze4(st: State) -> (Field, Field, Field, Field) {
+    (st.s0, st.s1, st.s2, st.s3)
+}
+
+// Squeeze a single element from the rate portion.
+pub fn squeeze1(st: State) -> Field {
+    st.s0
+}
+
+// ---------------------------------------------------------------------------
+// High-level hash functions
+// ---------------------------------------------------------------------------
+// These convenience functions compute a Poseidon2 hash of a small number
+// of field elements. The caller must supply the 86 round constants.
+//
+// For compact call sites, a program would typically define a wrapper
+// that captures the constants and delegates to these functions.
+// Hash 1 field element -> 1 field element.
+// Domain separation: capacity element s4 = 1 (single-input domain tag).
+pub fn hash1(
+    input: Field,
+    ff0: Field,
+    ff1: Field,
+    ff2: Field,
+    ff3: Field,
+    ff4: Field,
+    ff5: Field,
+    ff6: Field,
+    ff7: Field,
+    ff8: Field,
+    ff9: Field,
+    ff10: Field,
+    ff11: Field,
+    ff12: Field,
+    ff13: Field,
+    ff14: Field,
+    ff15: Field,
+    ff16: Field,
+    ff17: Field,
+    ff18: Field,
+    ff19: Field,
+    ff20: Field,
+    ff21: Field,
+    ff22: Field,
+    ff23: Field,
+    ff24: Field,
+    ff25: Field,
+    ff26: Field,
+    ff27: Field,
+    ff28: Field,
+    ff29: Field,
+    ff30: Field,
+    ff31: Field,
+    p0: Field,
+    p1: Field,
+    p2: Field,
+    p3: Field,
+    p4: Field,
+    p5: Field,
+    p6: Field,
+    p7: Field,
+    p8: Field,
+    p9: Field,
+    p10: Field,
+    p11: Field,
+    p12: Field,
+    p13: Field,
+    p14: Field,
+    p15: Field,
+    p16: Field,
+    p17: Field,
+    p18: Field,
+    p19: Field,
+    p20: Field,
+    p21: Field,
+    lf0: Field,
+    lf1: Field,
+    lf2: Field,
+    lf3: Field,
+    lf4: Field,
+    lf5: Field,
+    lf6: Field,
+    lf7: Field,
+    lf8: Field,
+    lf9: Field,
+    lf10: Field,
+    lf11: Field,
+    lf12: Field,
+    lf13: Field,
+    lf14: Field,
+    lf15: Field,
+    lf16: Field,
+    lf17: Field,
+    lf18: Field,
+    lf19: Field,
+    lf20: Field,
+    lf21: Field,
+    lf22: Field,
+    lf23: Field,
+    lf24: Field,
+    lf25: Field,
+    lf26: Field,
+    lf27: Field,
+    lf28: Field,
+    lf29: Field,
+    lf30: Field,
+    lf31: Field
+) -> Field {
+    // 86 round constants (same signature groups as permute)
+    // Initialize state: input in s0, domain tag 1 in s4
+    let st: State = State { s0: input, s1: 0, s2: 0, s3: 0, s4: 1, s5: 0, s6: 0, s7: 0 }
+    let result: State = permute(
+        st,
+        ff0,
+        ff1,
+        ff2,
+        ff3,
+        ff4,
+        ff5,
+        ff6,
+        ff7,
+        ff8,
+        ff9,
+        ff10,
+        ff11,
+        ff12,
+        ff13,
+        ff14,
+        ff15,
+        ff16,
+        ff17,
+        ff18,
+        ff19,
+        ff20,
+        ff21,
+        ff22,
+        ff23,
+        ff24,
+        ff25,
+        ff26,
+        ff27,
+        ff28,
+        ff29,
+        ff30,
+        ff31,
+        p0,
+        p1,
+        p2,
+        p3,
+        p4,
+        p5,
+        p6,
+        p7,
+        p8,
+        p9,
+        p10,
+        p11,
+        p12,
+        p13,
+        p14,
+        p15,
+        p16,
+        p17,
+        p18,
+        p19,
+        p20,
+        p21,
+        lf0,
+        lf1,
+        lf2,
+        lf3,
+        lf4,
+        lf5,
+        lf6,
+        lf7,
+        lf8,
+        lf9,
+        lf10,
+        lf11,
+        lf12,
+        lf13,
+        lf14,
+        lf15,
+        lf16,
+        lf17,
+        lf18,
+        lf19,
+        lf20,
+        lf21,
+        lf22,
+        lf23,
+        lf24,
+        lf25,
+        lf26,
+        lf27,
+        lf28,
+        lf29,
+        lf30,
+        lf31
+    )
+    squeeze1(result)
+}
+
+// Hash 2 field elements -> 1 field element.
+// Domain separation: capacity element s4 = 2.
+pub fn hash2(
+    a: Field,
+    b: Field,
+    ff0: Field,
+    ff1: Field,
+    ff2: Field,
+    ff3: Field,
+    ff4: Field,
+    ff5: Field,
+    ff6: Field,
+    ff7: Field,
+    ff8: Field,
+    ff9: Field,
+    ff10: Field,
+    ff11: Field,
+    ff12: Field,
+    ff13: Field,
+    ff14: Field,
+    ff15: Field,
+    ff16: Field,
+    ff17: Field,
+    ff18: Field,
+    ff19: Field,
+    ff20: Field,
+    ff21: Field,
+    ff22: Field,
+    ff23: Field,
+    ff24: Field,
+    ff25: Field,
+    ff26: Field,
+    ff27: Field,
+    ff28: Field,
+    ff29: Field,
+    ff30: Field,
+    ff31: Field,
+    p0: Field,
+    p1: Field,
+    p2: Field,
+    p3: Field,
+    p4: Field,
+    p5: Field,
+    p6: Field,
+    p7: Field,
+    p8: Field,
+    p9: Field,
+    p10: Field,
+    p11: Field,
+    p12: Field,
+    p13: Field,
+    p14: Field,
+    p15: Field,
+    p16: Field,
+    p17: Field,
+    p18: Field,
+    p19: Field,
+    p20: Field,
+    p21: Field,
+    lf0: Field,
+    lf1: Field,
+    lf2: Field,
+    lf3: Field,
+    lf4: Field,
+    lf5: Field,
+    lf6: Field,
+    lf7: Field,
+    lf8: Field,
+    lf9: Field,
+    lf10: Field,
+    lf11: Field,
+    lf12: Field,
+    lf13: Field,
+    lf14: Field,
+    lf15: Field,
+    lf16: Field,
+    lf17: Field,
+    lf18: Field,
+    lf19: Field,
+    lf20: Field,
+    lf21: Field,
+    lf22: Field,
+    lf23: Field,
+    lf24: Field,
+    lf25: Field,
+    lf26: Field,
+    lf27: Field,
+    lf28: Field,
+    lf29: Field,
+    lf30: Field,
+    lf31: Field
+) -> Field {
+    let st: State = State { s0: a, s1: b, s2: 0, s3: 0, s4: 2, s5: 0, s6: 0, s7: 0 }
+    let result: State = permute(
+        st,
+        ff0,
+        ff1,
+        ff2,
+        ff3,
+        ff4,
+        ff5,
+        ff6,
+        ff7,
+        ff8,
+        ff9,
+        ff10,
+        ff11,
+        ff12,
+        ff13,
+        ff14,
+        ff15,
+        ff16,
+        ff17,
+        ff18,
+        ff19,
+        ff20,
+        ff21,
+        ff22,
+        ff23,
+        ff24,
+        ff25,
+        ff26,
+        ff27,
+        ff28,
+        ff29,
+        ff30,
+        ff31,
+        p0,
+        p1,
+        p2,
+        p3,
+        p4,
+        p5,
+        p6,
+        p7,
+        p8,
+        p9,
+        p10,
+        p11,
+        p12,
+        p13,
+        p14,
+        p15,
+        p16,
+        p17,
+        p18,
+        p19,
+        p20,
+        p21,
+        lf0,
+        lf1,
+        lf2,
+        lf3,
+        lf4,
+        lf5,
+        lf6,
+        lf7,
+        lf8,
+        lf9,
+        lf10,
+        lf11,
+        lf12,
+        lf13,
+        lf14,
+        lf15,
+        lf16,
+        lf17,
+        lf18,
+        lf19,
+        lf20,
+        lf21,
+        lf22,
+        lf23,
+        lf24,
+        lf25,
+        lf26,
+        lf27,
+        lf28,
+        lf29,
+        lf30,
+        lf31
+    )
+    squeeze1(result)
+}
+
+// Hash 4 field elements -> 4 field elements (full rate input/output).
+// Domain separation: capacity element s4 = 4.
+pub fn hash4(
+    a: Field,
+    b: Field,
+    c: Field,
+    d: Field,
+    ff0: Field,
+    ff1: Field,
+    ff2: Field,
+    ff3: Field,
+    ff4: Field,
+    ff5: Field,
+    ff6: Field,
+    ff7: Field,
+    ff8: Field,
+    ff9: Field,
+    ff10: Field,
+    ff11: Field,
+    ff12: Field,
+    ff13: Field,
+    ff14: Field,
+    ff15: Field,
+    ff16: Field,
+    ff17: Field,
+    ff18: Field,
+    ff19: Field,
+    ff20: Field,
+    ff21: Field,
+    ff22: Field,
+    ff23: Field,
+    ff24: Field,
+    ff25: Field,
+    ff26: Field,
+    ff27: Field,
+    ff28: Field,
+    ff29: Field,
+    ff30: Field,
+    ff31: Field,
+    p0: Field,
+    p1: Field,
+    p2: Field,
+    p3: Field,
+    p4: Field,
+    p5: Field,
+    p6: Field,
+    p7: Field,
+    p8: Field,
+    p9: Field,
+    p10: Field,
+    p11: Field,
+    p12: Field,
+    p13: Field,
+    p14: Field,
+    p15: Field,
+    p16: Field,
+    p17: Field,
+    p18: Field,
+    p19: Field,
+    p20: Field,
+    p21: Field,
+    lf0: Field,
+    lf1: Field,
+    lf2: Field,
+    lf3: Field,
+    lf4: Field,
+    lf5: Field,
+    lf6: Field,
+    lf7: Field,
+    lf8: Field,
+    lf9: Field,
+    lf10: Field,
+    lf11: Field,
+    lf12: Field,
+    lf13: Field,
+    lf14: Field,
+    lf15: Field,
+    lf16: Field,
+    lf17: Field,
+    lf18: Field,
+    lf19: Field,
+    lf20: Field,
+    lf21: Field,
+    lf22: Field,
+    lf23: Field,
+    lf24: Field,
+    lf25: Field,
+    lf26: Field,
+    lf27: Field,
+    lf28: Field,
+    lf29: Field,
+    lf30: Field,
+    lf31: Field
+) -> (Field, Field, Field, Field) {
+    let st: State = State { s0: a, s1: b, s2: c, s3: d, s4: 4, s5: 0, s6: 0, s7: 0 }
+    let result: State = permute(
+        st,
+        ff0,
+        ff1,
+        ff2,
+        ff3,
+        ff4,
+        ff5,
+        ff6,
+        ff7,
+        ff8,
+        ff9,
+        ff10,
+        ff11,
+        ff12,
+        ff13,
+        ff14,
+        ff15,
+        ff16,
+        ff17,
+        ff18,
+        ff19,
+        ff20,
+        ff21,
+        ff22,
+        ff23,
+        ff24,
+        ff25,
+        ff26,
+        ff27,
+        ff28,
+        ff29,
+        ff30,
+        ff31,
+        p0,
+        p1,
+        p2,
+        p3,
+        p4,
+        p5,
+        p6,
+        p7,
+        p8,
+        p9,
+        p10,
+        p11,
+        p12,
+        p13,
+        p14,
+        p15,
+        p16,
+        p17,
+        p18,
+        p19,
+        p20,
+        p21,
+        lf0,
+        lf1,
+        lf2,
+        lf3,
+        lf4,
+        lf5,
+        lf6,
+        lf7,
+        lf8,
+        lf9,
+        lf10,
+        lf11,
+        lf12,
+        lf13,
+        lf14,
+        lf15,
+        lf16,
+        lf17,
+        lf18,
+        lf19,
+        lf20,
+        lf21,
+        lf22,
+        lf23,
+        lf24,
+        lf25,
+        lf26,
+        lf27,
+        lf28,
+        lf29,
+        lf30,
+        lf31
+    )
+    squeeze4(result)
+}
