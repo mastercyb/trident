@@ -390,12 +390,12 @@ impl TableCost {
 
     pub fn scale(&self, factor: u64) -> TableCost {
         TableCost {
-            processor: self.processor * factor,
-            hash: self.hash * factor,
-            u32_table: self.u32_table * factor,
-            op_stack: self.op_stack * factor,
-            ram: self.ram * factor,
-            jump_stack: self.jump_stack * factor,
+            processor: self.processor.saturating_mul(factor),
+            hash: self.hash.saturating_mul(factor),
+            u32_table: self.u32_table.saturating_mul(factor),
+            op_stack: self.op_stack.saturating_mul(factor),
+            ram: self.ram.saturating_mul(factor),
+            jump_stack: self.jump_stack.saturating_mul(factor),
         }
     }
 

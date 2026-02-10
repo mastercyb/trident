@@ -217,6 +217,18 @@ impl TargetConfig {
         if name.is_empty() {
             return Err(err("missing target.name".to_string()));
         }
+        if stack_depth == 0 {
+            return Err(err("stack.depth must be > 0".to_string()));
+        }
+        if digest_width == 0 {
+            return Err(err("hash.digest_width must be > 0".to_string()));
+        }
+        if hash_rate == 0 {
+            return Err(err("hash.rate must be > 0".to_string()));
+        }
+        if field_limbs == 0 {
+            return Err(err("field.limbs must be > 0".to_string()));
+        }
 
         let arch = match architecture.as_str() {
             "stack" => Arch::Stack,
