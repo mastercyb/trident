@@ -14,6 +14,7 @@ pub mod lsp;
 pub mod onchain;
 pub mod package;
 pub mod parser;
+pub mod poseidon2;
 pub mod project;
 pub mod registry;
 pub mod report;

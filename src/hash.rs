@@ -1,9 +1,13 @@
-//! Content addressing for Trident: AST normalization + BLAKE3 hashing.
+//! Content addressing for Trident: AST normalization + Poseidon2 hashing.
 //!
-//! Every function definition gets a cryptographic identity (BLAKE3 hash)
+//! Every function definition gets a cryptographic identity (Poseidon2 hash)
 //! based on its normalized AST. Names are replaced with de Bruijn indices,
 //! dependency references are replaced with their hashes, and the result is
 //! deterministically serialized before hashing.
+//!
+//! Uses Poseidon2 over the Goldilocks field for SNARK-friendly content
+//! addressing — content hashes are cheaply provable inside ZK proofs,
+//! enabling trustless compilation verification and on-chain registries.
 //!
 //! Properties:
 //! - Two functions with identical computation but different variable names
@@ -229,12 +233,11 @@ impl Normalizer {
         self.buf.clone()
     }
 
-    /// Hash a single function definition.
+    /// Hash a single function definition using Poseidon2 over Goldilocks.
     pub fn hash_fn(func: &FnDef, fn_hashes: HashMap<String, ContentHash>) -> ContentHash {
         let mut normalizer = Normalizer::new().with_fn_hashes(fn_hashes);
         let bytes = normalizer.normalize_fn(func);
-        let hash = blake3::hash(&bytes);
-        ContentHash(*hash.as_bytes())
+        ContentHash(crate::poseidon2::hash_bytes(&bytes))
     }
 
     /// Hash all functions in a file.
@@ -641,20 +644,21 @@ pub fn hash_file(file: &File) -> HashMap<String, ContentHash> {
 }
 
 /// Hash a complete file's content (all items serialized together).
+/// Uses Poseidon2 for SNARK-friendly file-level content addressing.
 pub fn hash_file_content(file: &File) -> ContentHash {
     let fn_hashes = hash_file(file);
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(&[HASH_VERSION]);
+    let mut buf = Vec::new();
+    buf.push(HASH_VERSION);
     // Hash file metadata
-    hasher.update(file.name.node.as_bytes());
+    buf.extend_from_slice(file.name.node.as_bytes());
     // Hash all function hashes in sorted order for determinism
     let mut sorted: Vec<_> = fn_hashes.iter().collect();
     sorted.sort_by_key(|(name, _)| (*name).clone());
     for (name, hash) in sorted {
-        hasher.update(name.as_bytes());
-        hasher.update(&hash.0);
+        buf.extend_from_slice(name.as_bytes());
+        buf.extend_from_slice(&hash.0);
     }
-    ContentHash(*hasher.finalize().as_bytes())
+    ContentHash(crate::poseidon2::hash_bytes(&buf))
 }
 
 #[cfg(test)]

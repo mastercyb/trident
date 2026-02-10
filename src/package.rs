@@ -422,13 +422,9 @@ fn resolve_path_dep(
         )
     })?;
 
-    // Content-hash the source with BLAKE3.
-    let hash_bytes = blake3::hash(source.as_bytes());
-    let hash_hex: String = hash_bytes
-        .as_bytes()
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect();
+    // Content-hash the source with Poseidon2 (SNARK-friendly).
+    let hash_raw = crate::poseidon2::hash_bytes(source.as_bytes());
+    let hash_hex: String = hash_raw.iter().map(|b| format!("{:02x}", b)).collect();
 
     let source_desc = format!("path:{}", rel_path.display());
 
