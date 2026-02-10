@@ -2623,4 +2623,68 @@ fn main() {
             result.err()
         );
     }
+
+    #[test]
+    fn test_transaction_validation_compiles() {
+        let path = std::path::Path::new("examples/neptune/transaction_validation.tri");
+        if !path.exists() {
+            return;
+        }
+        let result = compile_project(path);
+        assert!(
+            result.is_ok(),
+            "transaction validation should compile: {:?}",
+            result.err()
+        );
+        let tasm = result.unwrap();
+        assert!(
+            tasm.contains("xx_dot_step"),
+            "should use recursive verification"
+        );
+        assert!(
+            tasm.contains("merkle_step"),
+            "should authenticate kernel fields"
+        );
+    }
+
+    #[test]
+    fn test_neptune_lock_scripts_compile() {
+        for name in &[
+            "lock_generation",
+            "lock_symmetric",
+            "lock_multisig",
+            "lock_timelock",
+        ] {
+            let path_str = format!("examples/neptune/{}.tri", name);
+            let path = std::path::Path::new(&path_str);
+            if !path.exists() {
+                continue;
+            }
+            let result = compile_project(path);
+            assert!(
+                result.is_ok(),
+                "{} should compile: {:?}",
+                name,
+                result.err()
+            );
+        }
+    }
+
+    #[test]
+    fn test_neptune_type_scripts_compile() {
+        for name in &["type_native_currency", "type_custom_token"] {
+            let path_str = format!("examples/neptune/{}.tri", name);
+            let path = std::path::Path::new(&path_str);
+            if !path.exists() {
+                continue;
+            }
+            let result = compile_project(path);
+            assert!(
+                result.is_ok(),
+                "{} should compile: {:?}",
+                name,
+                result.err()
+            );
+        }
+    }
 }

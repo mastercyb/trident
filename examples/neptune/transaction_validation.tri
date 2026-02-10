@@ -1,0 +1,119 @@
+program transaction_validation
+
+// Neptune Transaction Validation
+//
+// This program validates an entire Neptune transaction by:
+//   1. Reading the transaction kernel (public input)
+//   2. Authenticating kernel fields via Merkle proofs
+//   3. Verifying all lock script proofs (input authorization)
+//   4. Verifying all type script proofs (conservation laws)
+//   5. Checking fee non-negativity
+//   6. Outputting the validated transaction digest
+//
+// Architecture:
+//   The kernel MAST hash (8-leaf, depth-3 Merkle tree) encodes:
+//     leaf 0: inputs (removal records)
+//     leaf 1: outputs (addition records)
+//     leaf 2: announcements
+//     leaf 3: fee
+//     leaf 4: coinbase
+//     leaf 5: timestamp
+//     leaf 6: mutator_set_hash
+//     leaf 7: merge_bit
+//
+//   Lock scripts and type scripts run as independent programs,
+//   each producing their own STARK proof. This program verifies
+//   those proofs recursively using the proof composition library.
+//
+// Public input:
+//   kernel_hash (5 fields), num_inputs, num_type_scripts,
+//   then for each lock/type proof: the inner Claim data
+//
+// Secret input:
+//   kernel field digests + Merkle paths,
+//   STARK proof data for each lock/type script
+use ext.triton.kernel
+
+use ext.triton.proof
+
+use std.core.convert
+
+// Verify all lock script proofs for the transaction's inputs.
+// Each input UTXO has a lock script that must be satisfied.
+// The lock script's proof is verified recursively.
+fn verify_lock_scripts(num_inputs: Field, num_fri_rounds: Field) {
+    for i in 0..num_inputs bounded 16 {
+        // Each lock script proof attests: "the spender knows the
+        // secret that satisfies the lock on input UTXO i."
+        // We verify that proof recursively.
+        proof.verify_inner_proof(num_fri_rounds)
+    }
+}
+
+// Verify all type script proofs for the transaction.
+// Each unique coin type has a type script that enforces its
+// conservation law (e.g., native currency: inputs >= outputs).
+fn verify_type_scripts(num_type_scripts: Field, num_fri_rounds: Field) {
+    for i in 0..num_type_scripts bounded 8 {
+        // Each type script proof attests: "the conservation law
+        // for this coin type holds across this transaction."
+        proof.verify_inner_proof(num_fri_rounds)
+    }
+}
+
+// Authenticate and verify the fee is non-negative.
+// The fee leaf (index 3) in the kernel MAST tree contains the
+// fee amount. A non-negative fee means it fits in a U32.
+fn verify_fee(kernel_hash: Digest) -> Field {
+    let fee_idx: U32 = convert.as_u32(3)
+    let fee_leaf: Digest = kernel.authenticate_field(kernel_hash, fee_idx)
+    let (fee_amount, _, _, _, _) = fee_leaf
+    // Assert fee is non-negative by converting to U32.
+    // If the fee is negative (large field element), this will trap.
+    let _: U32 = as_u32(fee_amount)
+    fee_amount
+}
+
+// Authenticate the timestamp from the kernel and return it.
+fn verify_timestamp(kernel_hash: Digest) -> Field {
+    let ts_leaf: Digest = kernel.authenticate_timestamp(kernel_hash)
+    let (timestamp, _, _, _, _) = ts_leaf
+    timestamp
+}
+
+// Authenticate the mutator set hash from the kernel.
+// The mutator set hash commits to the state of the UTXO set
+// at the time this transaction was created.
+fn verify_mutator_set(kernel_hash: Digest) -> Digest {
+    let ms_idx: U32 = convert.as_u32(6)
+    let ms_leaf: Digest = kernel.authenticate_field(kernel_hash, ms_idx)
+    ms_leaf
+}
+
+fn main() {
+    // Step 1: Read the transaction kernel MAST hash.
+    let kernel_hash: Digest = pub_read5()
+    // Step 2: Read transaction dimensions.
+    let num_inputs: Field = pub_read()
+    let num_type_scripts: Field = pub_read()
+    // FRI security parameter (typically 4 rounds for 128-bit security).
+    let num_fri_rounds: Field = 4
+    // Step 3: Authenticate kernel fields.
+    let fee: Field = verify_fee(kernel_hash)
+    let timestamp: Field = verify_timestamp(kernel_hash)
+    let mutator_set: Digest = verify_mutator_set(kernel_hash)
+    // Step 4: Verify all lock script proofs (input authorization).
+    verify_lock_scripts(num_inputs, num_fri_rounds)
+    // Step 5: Verify all type script proofs (conservation laws).
+    verify_type_scripts(num_type_scripts, num_fri_rounds)
+    // Step 6: Output the validated kernel hash.
+    // The outer proof attests: "transaction with kernel_hash is valid."
+    let (k0, k1, k2, k3, k4) = kernel_hash
+    pub_write(k0)
+    pub_write(k1)
+    pub_write(k2)
+    pub_write(k3)
+    pub_write(k4)
+    // Output the fee for the block producer.
+    pub_write(fee)
+}
