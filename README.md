@@ -317,17 +317,12 @@ flags = ["release"]
 
 ### Learning Paths
 
-**New to zero-knowledge?** Start here:
-[For Developers](docs/for-developers.md) -> [Tutorial](docs/tutorial.md) -> [How STARK Proofs Work](docs/stark-proofs.md) -> [Optimization Guide](docs/optimization.md)
-
-**Coming from Solidity/Anchor/CosmWasm?** Start here:
-[For Blockchain Devs](docs/for-blockchain-devs.md) -> [Tutorial](docs/tutorial.md) -> [Programming Model](docs/programming-model.md) -> [Optimization Guide](docs/optimization.md)
-
-**Evaluating Triton VM for your project?** Start here:
-[Vision](docs/vision.md) -> [Comparative Analysis](docs/analysis.md) -> [How STARK Proofs Work](docs/stark-proofs.md) -> [Programming Model](docs/programming-model.md)
-
-**Already writing Trident? Keep these open:**
-[Language Reference](docs/reference.md) | [Error Catalog](docs/errors.md) | [Optimization Guide](docs/optimization.md)
+| You are... | Start here |
+|---|---|
+| New to zero-knowledge | [For Developers](docs/for-developers.md) &#8594; [Tutorial](docs/tutorial.md) &#8594; [How STARK Proofs Work](docs/stark-proofs.md) &#8594; [Optimization Guide](docs/optimization.md) |
+| Coming from Solidity / Anchor / CosmWasm | [For Blockchain Devs](docs/for-blockchain-devs.md) &#8594; [Tutorial](docs/tutorial.md) &#8594; [Programming Model](docs/programming-model.md) &#8594; [Optimization Guide](docs/optimization.md) |
+| Evaluating Triton VM for your project | [Vision](docs/vision.md) &#8594; [Comparative Analysis](docs/analysis.md) &#8594; [How STARK Proofs Work](docs/stark-proofs.md) &#8594; [Programming Model](docs/programming-model.md) |
+| Already writing Trident | [Language Reference](docs/reference.md) &#8729; [Error Catalog](docs/errors.md) &#8729; [Optimization Guide](docs/optimization.md) |
 
 ### All Documents
 
@@ -345,12 +340,12 @@ flags = ["release"]
 
 ## Design Principles
 
-1. **No intermediate representation** -- Source to TASM directly, for auditability
-2. **Deliberate limitation** -- One obvious way to do everything ([Vyper](https://docs.vyperlang.org/) philosophy)
-3. **Cost transparency** -- Every function annotated with proving cost
-4. **Bounded execution** -- All loops require explicit bounds, no recursion
-5. **Compile-time everything** -- All type widths and array sizes known statically
-6. **Minimal dependencies** -- 4 runtime crates ([clap](https://crates.io/crates/clap), [ariadne](https://crates.io/crates/ariadne), [tower-lsp](https://crates.io/crates/tower-lsp), [tokio](https://crates.io/crates/tokio))
+1. No intermediate representation: source to TASM directly, for auditability
+2. Deliberate limitation: one obvious way to do everything ([Vyper](https://docs.vyperlang.org/) philosophy)
+3. Cost transparency: every function annotated with proving cost
+4. Bounded execution: all loops require explicit bounds, no recursion
+5. Compile-time everything: all type widths and array sizes known statically
+6. Minimal dependencies: 4 runtime crates ([clap](https://crates.io/crates/clap), [ariadne](https://crates.io/crates/ariadne), [tower-lsp](https://crates.io/crates/tower-lsp), [tokio](https://crates.io/crates/tokio))
 
 ## Getting Help
 
