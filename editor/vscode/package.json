@@ -1,27 +1,40 @@
 {
   "name": "trident",
   "displayName": "Trident",
-  "description": "Trident ZK language support for VS Code and Cursor",
+  "description": "Trident — universal language for provable computation",
   "version": "0.1.0",
   "publisher": "mastercyb",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Programming Languages"],
-  "activationEvents": ["onLanguage:trident"],
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:trident"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
         "id": "trident",
-        "aliases": ["Trident", "trident"],
-        "extensions": [".tri"],
+        "aliases": [
+          "Trident",
+          "trident"
+        ],
+        "extensions": [
+          ".tri"
+        ],
         "configuration": "./language-configuration.json"
       },
       {
         "id": "tasm",
-        "aliases": ["TASM"],
-        "extensions": [".tasm"]
+        "aliases": [
+          "TASM"
+        ],
+        "extensions": [
+          ".tasm"
+        ]
       }
     ],
     "grammars": [

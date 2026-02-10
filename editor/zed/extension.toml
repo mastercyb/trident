@@ -1,6 +1,6 @@
 id = "trident"
 name = "Trident"
-description = "Trident ZK language support"
+description = "Trident — universal language for provable computation"
 version = "0.1.0"
 schema_version = 1
 authors = ["mastercyb"]
