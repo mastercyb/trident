@@ -1,14 +1,353 @@
 /// Static cost analysis for Trident programs.
 ///
-/// Computes the trace heights of all 6 Triton VM Algebraic Execution Tables
-/// by walking the AST and summing per-instruction costs. This gives an upper
-/// bound on proving cost without executing the program.
+/// Computes the trace heights of all Algebraic Execution Tables for the
+/// configured target VM by walking the AST and summing per-instruction costs.
+/// This gives an upper bound on proving cost without executing the program.
+///
+/// The cost model is target-agnostic: `CostModel` is a trait that any backend
+/// implements to provide table names, per-instruction costs, and formatting.
+/// `TritonCostModel` implements the trait for Triton VM's 6 tables.
 use std::collections::HashMap;
 use std::path::Path;
 
 use crate::ast::*;
 use crate::diagnostic::Diagnostic;
 use crate::span::Span;
+
+// ---------------------------------------------------------------------------
+// CostModel trait — target-agnostic cost interface
+// ---------------------------------------------------------------------------
+
+/// Trait for target-specific cost models.
+///
+/// Each target VM implements this to provide table names, per-instruction
+/// costs, and formatting for cost reports. The cost analyzer delegates all
+/// target-specific knowledge through this trait.
+pub trait CostModel {
+    /// Names of the execution tables (e.g. ["processor", "hash", "u32", ...]).
+    fn table_names(&self) -> &[&str];
+
+    /// Short display names for compact annotations (e.g. ["cc", "hash", "u32", ...]).
+    fn table_short_names(&self) -> &[&str];
+
+    /// Cost of a builtin function call by name.
+    fn builtin_cost(&self, name: &str) -> TableCost;
+
+    /// Cost of a binary operation.
+    fn binop_cost(&self, op: &BinOp) -> TableCost;
+
+    /// Overhead cost for a function call/return pair.
+    fn call_overhead(&self) -> TableCost;
+
+    /// Cost of a single stack manipulation (push/dup/swap).
+    fn stack_op(&self) -> TableCost;
+
+    /// Overhead cost for an if/else branch.
+    fn if_overhead(&self) -> TableCost;
+
+    /// Overhead cost per loop iteration.
+    fn loop_overhead(&self) -> TableCost;
+
+    /// Number of hash table rows per hash permutation.
+    fn hash_rows_per_permutation(&self) -> u64;
+
+    /// Target display name for reports.
+    fn target_name(&self) -> &str;
+}
+
+// ---------------------------------------------------------------------------
+// TritonCostModel — Triton VM's 6-table cost model
+// ---------------------------------------------------------------------------
+
+/// Triton VM cost model with 6 Algebraic Execution Tables.
+pub struct TritonCostModel;
+
+impl TritonCostModel {
+    /// Worst-case U32 table rows for 32-bit operations.
+    const U32_WORST: u64 = 33;
+
+    /// Simple arithmetic/logic op: 1 processor cycle, 1 op_stack row.
+    const SIMPLE_OP: TableCost = TableCost {
+        processor: 1,
+        hash: 0,
+        u32_table: 0,
+        op_stack: 1,
+        ram: 0,
+        jump_stack: 0,
+    };
+
+    /// U32-table op with stack effect.
+    const U32_OP: TableCost = TableCost {
+        processor: 1,
+        hash: 0,
+        u32_table: Self::U32_WORST,
+        op_stack: 1,
+        ram: 0,
+        jump_stack: 0,
+    };
+
+    /// U32-table op without stack growth.
+    const U32_NOSTACK: TableCost = TableCost {
+        processor: 1,
+        hash: 0,
+        u32_table: Self::U32_WORST,
+        op_stack: 0,
+        ram: 0,
+        jump_stack: 0,
+    };
+
+    /// Hash-table op with stack effect (6 hash rows for Tip5 permutation).
+    const HASH_OP: TableCost = TableCost {
+        processor: 1,
+        hash: 6,
+        u32_table: 0,
+        op_stack: 1,
+        ram: 0,
+        jump_stack: 0,
+    };
+
+    /// Two-element assertion: 2 processor cycles, 2 op_stack rows.
+    const ASSERT2: TableCost = TableCost {
+        processor: 2,
+        hash: 0,
+        u32_table: 0,
+        op_stack: 2,
+        ram: 0,
+        jump_stack: 0,
+    };
+
+    /// Single RAM read/write: 2 processor cycles, 2 op_stack, 1 ram.
+    const RAM_RW: TableCost = TableCost {
+        processor: 2,
+        hash: 0,
+        u32_table: 0,
+        op_stack: 2,
+        ram: 1,
+        jump_stack: 0,
+    };
+
+    /// Block RAM read/write: 2 processor cycles, 2 op_stack, 5 ram.
+    const RAM_BLOCK_RW: TableCost = TableCost {
+        processor: 2,
+        hash: 0,
+        u32_table: 0,
+        op_stack: 2,
+        ram: 5,
+        jump_stack: 0,
+    };
+
+    /// Pure processor op (no stack/ram/hash effect): 1 processor cycle only.
+    const PURE_PROC: TableCost = TableCost {
+        processor: 1,
+        hash: 0,
+        u32_table: 0,
+        op_stack: 0,
+        ram: 0,
+        jump_stack: 0,
+    };
+}
+
+impl CostModel for TritonCostModel {
+    fn table_names(&self) -> &[&str] {
+        &["processor", "hash", "u32", "op_stack", "ram", "jump_stack"]
+    }
+
+    fn table_short_names(&self) -> &[&str] {
+        &["cc", "hash", "u32", "opst", "ram", "jump"]
+    }
+
+    fn builtin_cost(&self, name: &str) -> TableCost {
+        match name {
+            // I/O
+            "pub_read" | "pub_read2" | "pub_read3" | "pub_read4" | "pub_read5" => Self::SIMPLE_OP,
+            "pub_write" | "pub_write2" | "pub_write3" | "pub_write4" | "pub_write5" => {
+                Self::SIMPLE_OP
+            }
+
+            // Non-deterministic input
+            "divine" | "divine3" | "divine5" => Self::SIMPLE_OP,
+
+            // Assertions
+            "assert" => Self::SIMPLE_OP,
+            "assert_eq" => Self::ASSERT2,
+            "assert_digest" => Self::ASSERT2,
+
+            // Field ops
+            "inv" => Self::PURE_PROC,
+            "neg" => TableCost {
+                processor: 2,
+                hash: 0,
+                u32_table: 0,
+                op_stack: 1,
+                ram: 0,
+                jump_stack: 0,
+            },
+            "sub" => TableCost {
+                processor: 3,
+                hash: 0,
+                u32_table: 0,
+                op_stack: 2,
+                ram: 0,
+                jump_stack: 0,
+            },
+
+            // U32 ops
+            "split" => Self::U32_OP,
+            "log2" => Self::U32_NOSTACK,
+            "pow" => Self::U32_OP,
+            "popcount" => Self::U32_NOSTACK,
+
+            // Hash ops (6 hash table rows each for Tip5 permutation)
+            "hash" => Self::HASH_OP,
+            "sponge_init" => TableCost {
+                processor: 1,
+                hash: 6,
+                u32_table: 0,
+                op_stack: 0,
+                ram: 0,
+                jump_stack: 0,
+            },
+            "sponge_absorb" => Self::HASH_OP,
+            "sponge_squeeze" => Self::HASH_OP,
+            "sponge_absorb_mem" => TableCost {
+                processor: 1,
+                hash: 6,
+                u32_table: 0,
+                op_stack: 1,
+                ram: 10,
+                jump_stack: 0,
+            },
+
+            // Merkle
+            "merkle_step" => TableCost {
+                processor: 1,
+                hash: 6,
+                u32_table: Self::U32_WORST,
+                op_stack: 0,
+                ram: 0,
+                jump_stack: 0,
+            },
+            "merkle_step_mem" => TableCost {
+                processor: 1,
+                hash: 6,
+                u32_table: Self::U32_WORST,
+                op_stack: 0,
+                ram: 5,
+                jump_stack: 0,
+            },
+
+            // RAM
+            "ram_read" => Self::RAM_RW,
+            "ram_write" => Self::RAM_RW,
+            "ram_read_block" => Self::RAM_BLOCK_RW,
+            "ram_write_block" => Self::RAM_BLOCK_RW,
+
+            // Dot steps
+            "xx_dot_step" => TableCost {
+                processor: 1,
+                hash: 0,
+                u32_table: 0,
+                op_stack: 0,
+                ram: 6,
+                jump_stack: 0,
+            },
+            "xb_dot_step" => TableCost {
+                processor: 1,
+                hash: 0,
+                u32_table: 0,
+                op_stack: 0,
+                ram: 4,
+                jump_stack: 0,
+            },
+
+            // Conversions
+            "as_u32" => TableCost {
+                processor: 2,
+                hash: 0,
+                u32_table: Self::U32_WORST,
+                op_stack: 1,
+                ram: 0,
+                jump_stack: 0,
+            },
+            "as_field" => TableCost::ZERO,
+
+            // XField
+            "xfield" => TableCost::ZERO,
+            "xinvert" => Self::PURE_PROC,
+
+            _ => TableCost::ZERO,
+        }
+    }
+
+    fn binop_cost(&self, op: &BinOp) -> TableCost {
+        match op {
+            BinOp::Add => Self::SIMPLE_OP,
+            BinOp::Mul => Self::SIMPLE_OP,
+            BinOp::Eq => Self::SIMPLE_OP,
+            BinOp::Lt => Self::U32_OP,
+            BinOp::BitAnd => Self::U32_OP,
+            BinOp::BitXor => Self::U32_OP,
+            BinOp::DivMod => Self::U32_NOSTACK,
+            BinOp::XFieldMul => Self::SIMPLE_OP,
+        }
+    }
+
+    fn call_overhead(&self) -> TableCost {
+        TableCost {
+            processor: 2,
+            hash: 0,
+            u32_table: 0,
+            op_stack: 0,
+            ram: 0,
+            jump_stack: 2,
+        }
+    }
+
+    fn stack_op(&self) -> TableCost {
+        TableCost {
+            processor: 1,
+            hash: 0,
+            u32_table: 0,
+            op_stack: 1,
+            ram: 0,
+            jump_stack: 0,
+        }
+    }
+
+    fn if_overhead(&self) -> TableCost {
+        TableCost {
+            processor: 3,
+            hash: 0,
+            u32_table: 0,
+            op_stack: 2,
+            ram: 0,
+            jump_stack: 1,
+        }
+    }
+
+    fn loop_overhead(&self) -> TableCost {
+        TableCost {
+            processor: 8,
+            hash: 0,
+            u32_table: 0,
+            op_stack: 4,
+            ram: 0,
+            jump_stack: 1,
+        }
+    }
+
+    fn hash_rows_per_permutation(&self) -> u64 {
+        6
+    }
+
+    fn target_name(&self) -> &str {
+        "Triton VM"
+    }
+}
+
+// ---------------------------------------------------------------------------
+// TableCost — per-table cost vector
+// ---------------------------------------------------------------------------
 
 /// Cost across all 6 Triton VM tables.
 #[derive(Clone, Debug, Default)]
@@ -158,272 +497,11 @@ impl TableCost {
     }
 }
 
-// --- Per-instruction cost constants ---
-
-/// Worst-case U32 table rows for 32-bit operations.
-const U32_WORST: u64 = 33;
-
-/// Simple arithmetic/logic op: 1 processor cycle, 1 op_stack row.
-/// Used for add, mul, eq, xfield_mul, pub_read, pub_write, divine, assert, etc.
-const SIMPLE_OP: TableCost = TableCost {
-    processor: 1,
-    hash: 0,
-    u32_table: 0,
-    op_stack: 1,
-    ram: 0,
-    jump_stack: 0,
-};
-
-/// U32-table op with stack effect: 1 processor cycle, worst-case u32, 1 op_stack.
-/// Used for lt, bit_and, bit_xor, split, pow.
-const U32_OP: TableCost = TableCost {
-    processor: 1,
-    hash: 0,
-    u32_table: U32_WORST,
-    op_stack: 1,
-    ram: 0,
-    jump_stack: 0,
-};
-
-/// U32-table op without stack growth: 1 processor cycle, worst-case u32, 0 op_stack.
-/// Used for div_mod, log2, popcount.
-const U32_NOSTACK: TableCost = TableCost {
-    processor: 1,
-    hash: 0,
-    u32_table: U32_WORST,
-    op_stack: 0,
-    ram: 0,
-    jump_stack: 0,
-};
-
-/// Hash-table op with stack effect: 1 processor cycle, 6 hash rows, 1 op_stack.
-/// Used for hash, sponge_absorb, sponge_squeeze.
-const HASH_OP: TableCost = TableCost {
-    processor: 1,
-    hash: 6,
-    u32_table: 0,
-    op_stack: 1,
-    ram: 0,
-    jump_stack: 0,
-};
-
-/// Two-element assertion: 2 processor cycles, 2 op_stack rows.
-/// Used for assert_eq, assert_digest.
-const ASSERT2: TableCost = TableCost {
-    processor: 2,
-    hash: 0,
-    u32_table: 0,
-    op_stack: 2,
-    ram: 0,
-    jump_stack: 0,
-};
-
-/// Single RAM read/write: 2 processor cycles, 2 op_stack, 1 ram.
-/// Used for ram_read, ram_write.
-const RAM_RW: TableCost = TableCost {
-    processor: 2,
-    hash: 0,
-    u32_table: 0,
-    op_stack: 2,
-    ram: 1,
-    jump_stack: 0,
-};
-
-/// Block RAM read/write: 2 processor cycles, 2 op_stack, 5 ram.
-/// Used for ram_read_block, ram_write_block.
-const RAM_BLOCK_RW: TableCost = TableCost {
-    processor: 2,
-    hash: 0,
-    u32_table: 0,
-    op_stack: 2,
-    ram: 5,
-    jump_stack: 0,
-};
-
-/// Pure processor op (no stack/ram/hash effect): 1 processor cycle only.
-/// Used for inv, xinvert.
-const PURE_PROC: TableCost = TableCost {
-    processor: 1,
-    hash: 0,
-    u32_table: 0,
-    op_stack: 0,
-    ram: 0,
-    jump_stack: 0,
-};
-
-fn cost_binop(op: &BinOp) -> TableCost {
-    match op {
-        BinOp::Add => SIMPLE_OP,
-        BinOp::Mul => SIMPLE_OP,
-        BinOp::Eq => SIMPLE_OP,
-        BinOp::Lt => U32_OP,
-        BinOp::BitAnd => U32_OP,
-        BinOp::BitXor => U32_OP,
-        BinOp::DivMod => U32_NOSTACK,
-        BinOp::XFieldMul => SIMPLE_OP,
-    }
-}
-
+/// Convenience function: look up builtin cost using the default Triton cost model.
+/// Used by LSP and other callers that don't have a CostModel reference.
 pub fn cost_builtin(name: &str) -> TableCost {
-    match name {
-        // I/O
-        "pub_read" | "pub_read2" | "pub_read3" | "pub_read4" | "pub_read5" => SIMPLE_OP,
-        "pub_write" | "pub_write2" | "pub_write3" | "pub_write4" | "pub_write5" => SIMPLE_OP,
-
-        // Non-deterministic input
-        "divine" | "divine3" | "divine5" => SIMPLE_OP,
-
-        // Assertions
-        "assert" => SIMPLE_OP,
-        "assert_eq" => ASSERT2,
-        "assert_digest" => ASSERT2,
-
-        // Field ops
-        "inv" => PURE_PROC,
-        "neg" => TableCost {
-            processor: 2,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "sub" => TableCost {
-            processor: 3,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 2,
-            ram: 0,
-            jump_stack: 0,
-        },
-
-        // U32 ops
-        "split" => U32_OP,
-        "log2" => U32_NOSTACK,
-        "pow" => U32_OP,
-        "popcount" => U32_NOSTACK,
-
-        // Hash ops (6 hash table rows each for Tip5 permutation)
-        "hash" => HASH_OP,
-        "sponge_init" => TableCost {
-            processor: 1,
-            hash: 6,
-            u32_table: 0,
-            op_stack: 0,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "sponge_absorb" => HASH_OP,
-        "sponge_squeeze" => HASH_OP,
-        "sponge_absorb_mem" => TableCost {
-            processor: 1,
-            hash: 6,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 10,
-            jump_stack: 0,
-        },
-
-        // Merkle
-        "merkle_step" => TableCost {
-            processor: 1,
-            hash: 6,
-            u32_table: U32_WORST,
-            op_stack: 0,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "merkle_step_mem" => TableCost {
-            processor: 1,
-            hash: 6,
-            u32_table: U32_WORST,
-            op_stack: 0,
-            ram: 5,
-            jump_stack: 0,
-        },
-
-        // RAM
-        "ram_read" => RAM_RW,
-        "ram_write" => RAM_RW,
-        "ram_read_block" => RAM_BLOCK_RW,
-        "ram_write_block" => RAM_BLOCK_RW,
-
-        // Dot steps
-        "xx_dot_step" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 0,
-            ram: 6,
-            jump_stack: 0,
-        },
-        "xb_dot_step" => TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 0,
-            ram: 4,
-            jump_stack: 0,
-        },
-
-        // Conversions (negligible cost)
-        "as_u32" => TableCost {
-            processor: 2,
-            hash: 0,
-            u32_table: U32_WORST,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        },
-        "as_field" => TableCost::ZERO,
-
-        // XField
-        "xfield" => TableCost::ZERO,
-        "xinvert" => PURE_PROC,
-
-        _ => TableCost::ZERO,
-    }
+    TritonCostModel.builtin_cost(name)
 }
-
-/// Cost of a function call/return pair.
-const CALL_OVERHEAD: TableCost = TableCost {
-    processor: 2,
-    hash: 0,
-    u32_table: 0,
-    op_stack: 0,
-    ram: 0,
-    jump_stack: 2,
-};
-
-/// Cost of stack manipulation for a push/dup/swap (1 instruction).
-const STACK_OP: TableCost = TableCost {
-    processor: 1,
-    hash: 0,
-    u32_table: 0,
-    op_stack: 1,
-    ram: 0,
-    jump_stack: 0,
-};
-
-/// Cost of if/else overhead (skiz + call pattern).
-const IF_OVERHEAD: TableCost = TableCost {
-    processor: 3,
-    hash: 0,
-    u32_table: 0,
-    op_stack: 2,
-    ram: 0,
-    jump_stack: 1,
-};
-
-/// Cost of for-loop overhead (setup: dup, push 0, eq, skiz, return, push -1, add, recurse).
-const LOOP_OVERHEAD: TableCost = TableCost {
-    processor: 8,
-    hash: 0,
-    u32_table: 0,
-    op_stack: 4,
-    ram: 0,
-    jump_stack: 1,
-};
 
 // --- Per-function cost result ---
 
@@ -453,7 +531,12 @@ pub struct ProgramCost {
 // --- Cost analyzer ---
 
 /// Computes static cost by walking the AST.
-pub struct CostAnalyzer {
+///
+/// The analyzer is parameterized by a `CostModel` that provides all
+/// target-specific cost constants. Default: `TritonCostModel`.
+pub struct CostAnalyzer<'a> {
+    /// Target-specific cost model.
+    cost_model: &'a dyn CostModel,
     /// Function bodies indexed by name (for resolving calls).
     fn_bodies: HashMap<String, FnDef>,
     /// Cached function costs to avoid recomputation.
@@ -464,15 +547,31 @@ pub struct CostAnalyzer {
     loop_bound_waste: Vec<(String, u64, u64)>,
 }
 
-impl Default for CostAnalyzer {
+impl Default for CostAnalyzer<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl CostAnalyzer {
+/// Static reference to the default Triton cost model for `CostAnalyzer::new()`.
+static TRITON_COST_MODEL: TritonCostModel = TritonCostModel;
+
+impl<'a> CostAnalyzer<'a> {
+    /// Create a new analyzer with the default Triton VM cost model.
     pub fn new() -> Self {
         Self {
+            cost_model: &TRITON_COST_MODEL,
+            fn_bodies: HashMap::new(),
+            fn_costs: HashMap::new(),
+            in_progress: Vec::new(),
+            loop_bound_waste: Vec::new(),
+        }
+    }
+
+    /// Create a new analyzer with a specific cost model.
+    pub fn with_cost_model(cost_model: &'a dyn CostModel) -> Self {
+        Self {
+            cost_model,
             fn_bodies: HashMap::new(),
             fn_costs: HashMap::new(),
             in_progress: Vec::new(),
@@ -505,7 +604,7 @@ impl CostAnalyzer {
 
         // Total cost: start from main if it exists, otherwise sum all.
         let total = if let Some(main_cost) = self.fn_costs.get("main") {
-            main_cost.add(&CALL_OVERHEAD) // call main + halt
+            main_cost.add(&self.cost_model.call_overhead()) // call main + halt
         } else {
             functions
                 .iter()
@@ -515,7 +614,8 @@ impl CostAnalyzer {
         // Estimate program instruction count for attestation.
         // Rough heuristic: total processor cycles ≈ instruction count.
         let instruction_count = total.processor.max(10);
-        let attestation_hash_rows = instruction_count.div_ceil(10) * 6;
+        let hash_rows = self.cost_model.hash_rows_per_permutation();
+        let attestation_hash_rows = instruction_count.div_ceil(10) * hash_rows;
 
         // Padded height includes attestation.
         let max_height = total.max_height().max(attestation_hash_rows);
@@ -579,20 +679,21 @@ impl CostAnalyzer {
     }
 
     fn cost_stmt(&mut self, stmt: &Stmt) -> TableCost {
+        let stack_op = self.cost_model.stack_op();
         match stmt {
             Stmt::Let { init, .. } => {
                 // Cost of evaluating the init expression + stack placement.
-                self.cost_expr(&init.node).add(&STACK_OP)
+                self.cost_expr(&init.node).add(&stack_op)
             }
             Stmt::Assign { value, .. } => {
                 // Cost of evaluating value + swap to replace old value.
-                self.cost_expr(&value.node).add(&STACK_OP).add(&STACK_OP)
+                self.cost_expr(&value.node).add(&stack_op).add(&stack_op)
             }
             Stmt::TupleAssign { names, value } => {
                 let mut cost = self.cost_expr(&value.node);
                 // One swap+pop per element.
                 for _ in names {
-                    cost = cost.add(&STACK_OP).add(&STACK_OP);
+                    cost = cost.add(&stack_op).add(&stack_op);
                 }
                 cost
             }
@@ -609,7 +710,9 @@ impl CostAnalyzer {
                     TableCost::ZERO
                 };
                 // Worst case: max of then/else branches.
-                cond_cost.add(&then_cost.max(&else_cost)).add(&IF_OVERHEAD)
+                cond_cost
+                    .add(&then_cost.max(&else_cost))
+                    .add(&self.cost_model.if_overhead())
             }
             Stmt::For {
                 end, bound, body, ..
@@ -625,7 +728,7 @@ impl CostAnalyzer {
                     1 // unknown, conservative fallback
                 };
                 // Per-iteration: body + loop overhead (dup, check, decrement, recurse).
-                let per_iter = body_cost.add(&LOOP_OVERHEAD);
+                let per_iter = body_cost.add(&self.cost_model.loop_overhead());
                 end_cost.add(&per_iter.scale(iterations))
             }
             Stmt::Expr(expr) => self.cost_expr(&expr.node),
@@ -638,11 +741,12 @@ impl CostAnalyzer {
             }
             Stmt::Emit { fields, .. } => {
                 // push tag + write_io 1 + (field expr + write_io 1) per field
-                let mut cost = STACK_OP; // push tag
-                cost = cost.add(&SIMPLE_OP); // write_io 1 for tag
+                let io_cost = self.cost_model.builtin_cost("pub_write");
+                let mut cost = stack_op.clone(); // push tag
+                cost = cost.add(&io_cost); // write_io 1 for tag
                 for (_name, val) in fields {
                     cost = cost.add(&self.cost_expr(&val.node));
-                    cost = cost.add(&SIMPLE_OP); // write_io 1
+                    cost = cost.add(&io_cost); // write_io 1
                 }
                 cost
             }
@@ -655,12 +759,12 @@ impl CostAnalyzer {
                         !t.is_empty() && !t.starts_with("//")
                     })
                     .count() as u64;
-                STACK_OP.scale(line_count)
+                stack_op.scale(line_count)
             }
             Stmt::Match { expr, arms } => {
                 let scrutinee_cost = self.cost_expr(&expr.node);
                 // Per arm: dup + push + eq + skiz/call overhead = ~5 rows
-                let arm_overhead = STACK_OP.scale(3).add(&IF_OVERHEAD);
+                let arm_overhead = stack_op.scale(3).add(&self.cost_model.if_overhead());
                 let num_literal_arms = arms
                     .iter()
                     .filter(|a| !matches!(a.pattern.node, MatchPattern::Wildcard))
@@ -675,37 +779,38 @@ impl CostAnalyzer {
             }
             Stmt::Seal { fields, .. } => {
                 // push tag + field exprs + padding pushes + hash + write_io 5
-                let mut cost = STACK_OP; // push tag
+                let mut cost = stack_op.clone(); // push tag
                 for (_name, val) in fields {
                     cost = cost.add(&self.cost_expr(&val.node));
                 }
                 let padding = 10 - 1 - fields.len();
                 for _ in 0..padding {
-                    cost = cost.add(&STACK_OP); // push 0 padding
+                    cost = cost.add(&stack_op); // push 0 padding
                 }
-                // hash: 6 hash table rows
-                cost = cost.add(&HASH_OP);
+                // hash
+                cost = cost.add(&self.cost_model.builtin_cost("hash"));
                 // write_io 5
-                cost = cost.add(&SIMPLE_OP);
+                cost = cost.add(&self.cost_model.builtin_cost("pub_write5"));
                 cost
             }
         }
     }
 
     fn cost_expr(&mut self, expr: &Expr) -> TableCost {
+        let stack_op = self.cost_model.stack_op();
         match expr {
             Expr::Literal(_) => {
                 // push instruction: 1 cc, 1 opstack.
-                STACK_OP
+                stack_op
             }
             Expr::Var(_) => {
                 // dup instruction: 1 cc, 1 opstack.
-                STACK_OP
+                stack_op
             }
             Expr::BinOp { op, lhs, rhs } => {
                 let lhs_cost = self.cost_expr(&lhs.node);
                 let rhs_cost = self.cost_expr(&rhs.node);
-                lhs_cost.add(&rhs_cost).add(&cost_binop(op))
+                lhs_cost.add(&rhs_cost).add(&self.cost_model.binop_cost(op))
             }
             Expr::Call { path, args, .. } => {
                 let fn_name = path.node.as_dotted();
@@ -717,11 +822,11 @@ impl CostAnalyzer {
                 // to handle cross-module calls like "hash.tip5" → "tip5" → "hash"
                 let base_name = fn_name.rsplit('.').next().unwrap_or(&fn_name);
                 let fn_cost = {
-                    let c = cost_builtin(&fn_name);
+                    let c = self.cost_model.builtin_cost(&fn_name);
                     if c.processor > 0 || c.hash > 0 || c.u32_table > 0 || c.ram > 0 {
                         c
                     } else {
-                        cost_builtin(base_name)
+                        self.cost_model.builtin_cost(base_name)
                     }
                 };
                 if fn_cost.processor > 0
@@ -738,16 +843,18 @@ impl CostAnalyzer {
                     } else {
                         TableCost::ZERO
                     };
-                    args_cost.add(&body_cost).add(&CALL_OVERHEAD)
+                    args_cost
+                        .add(&body_cost)
+                        .add(&self.cost_model.call_overhead())
                 }
             }
             Expr::FieldAccess { expr: inner, .. } => {
                 // Evaluate inner struct + dup field elements.
-                self.cost_expr(&inner.node).add(&STACK_OP)
+                self.cost_expr(&inner.node).add(&stack_op)
             }
             Expr::Index { expr: inner, .. } => {
                 // Evaluate inner array + dup indexed element.
-                self.cost_expr(&inner.node).add(&STACK_OP)
+                self.cost_expr(&inner.node).add(&stack_op)
             }
             Expr::StructInit { fields, .. } => {
                 fields.iter().fold(TableCost::ZERO, |acc, (_, val)| {
@@ -775,7 +882,7 @@ impl CostAnalyzer {
                 } = &stmt.node
                 {
                     let body_cost = self.cost_block(&loop_body.node);
-                    let per_iter = body_cost.add(&LOOP_OVERHEAD);
+                    let per_iter = body_cost.add(&self.cost_model.loop_overhead());
                     let iterations = if let Some(b) = bound {
                         *b
                     } else if let Expr::Literal(Literal::Integer(n)) = &end.node {
@@ -830,7 +937,7 @@ impl CostAnalyzer {
             if let Item::Fn(func) = &item.node {
                 // Record function header with call overhead
                 let fn_line = byte_to_line(item.span.start);
-                result.push((fn_line, CALL_OVERHEAD));
+                result.push((fn_line, self.cost_model.call_overhead()));
 
                 if let Some(body) = &func.body {
                     self.collect_block_costs(&body.node, &byte_to_line, &mut result);
