@@ -15,13 +15,13 @@ TypeChecker
 TIRBuilder → Vec<TIROp>              ← 54 ops, target-independent
   │
   ├─→ Lowering       → Vec<String>   ← stack targets (Triton, Miden, EVM)
-  │     │
-  │     ▼
-  │   Linker → .tasm/.masm
   │
   ├─→ LIR → RegLow   → Vec<u8>      ← register targets (x86-64, ARM64, RISC-V)
   │
   └─→ KIR → KernelLow → String       ← GPU targets (CUDA, Metal, Vulkan)
+        │
+        ▼
+      Linker                          ← multi-module resolution (all targets)
 ```
 
 ---

@@ -65,15 +65,15 @@ Source (.tri)
     ├── TIRBuilder → Vec<TIROp>        54 ops, 4 tiers
     │
     └── Lowering (per target)
-         Stack targets:
          ├── TritonLowering  → TASM
          ├── MidenLowering   → MASM
-         Register targets:                         (planned)
          ├── EvmLowering     → EVM bytecode
          ├── WasmLowering    → WASM
-         └── RiscVLowering   → RISC-V ELF
-         GPU targets:                              (planned)
+         ├── RiscVLowering   → RISC-V ELF
          └── KIR             → CUDA / Metal / Vulkan
+              │
+              ▼
+         Linker                ← multi-module resolution (all targets)
 ```
 
 The **TIR** (Trident Intermediate Representation) is a 54-operation,
