@@ -62,17 +62,21 @@ Source (.tri)
     │
     ├── Lexer → Parser → Type Checker
     │
-    ├── TIRBuilder → Vec<TIROp>        53 ops, 4 tiers
+    ├── TIRBuilder → Vec<TIROp>        54 ops, 4 tiers
     │
     └── Lowering (per target)
+         Stack targets:
          ├── TritonLowering  → TASM
          ├── MidenLowering   → MASM
-         ├── EvmLowering     → EVM bytecode       (planned)
-         ├── WasmLowering    → WASM                (planned)
-         └── RiscVLowering   → RISC-V ELF          (planned)
+         Register targets:                         (planned)
+         ├── EvmLowering     → EVM bytecode
+         ├── WasmLowering    → WASM
+         └── RiscVLowering   → RISC-V ELF
+         GPU targets:                              (planned)
+         └── KIR             → CUDA / Metal / Vulkan
 ```
 
-The **TIR** (Trident Intermediate Representation) is a 53-operation,
+The **TIR** (Trident Intermediate Representation) is a 54-operation,
 target-independent IR organized in four tiers:
 
 | Tier | Name | Ops | Compiles to |
@@ -80,7 +84,7 @@ target-independent IR organized in four tiers:
 | 0 | Structure | 11 | Every target — control flow, functions, comments |
 | 1 | Universal | 32 | Every target — arithmetic, I/O, memory, events, storage |
 | 2 | Provable | 6 | Proof-capable targets — sponge, Merkle authentication |
-| 3 | Recursion | 4 | Recursive verification — extension field, FRI folding |
+| 3 | Recursion | 5 | Recursive verification — extension field, FRI folding, proof blocks |
 
 A program using only Tier 0-1 ops compiles everywhere. Tier 2 restricts to
 ZK targets. Tier 3 restricts to targets with recursive verification. The
@@ -228,8 +232,7 @@ The effect annotation (`-1`) declares the net stack change.
 ### Cryptographic Primitives (`std/crypto/`)
 
 SHA-256, Keccak-256, secp256k1, ed25519, ECDSA, Poseidon, bigint
-arithmetic. Bridge-ready: Bitcoin and Ethereum light client verification
-out of the box.
+arithmetic.
 
 ### Backend Extensions (`ext/`)
 
@@ -249,7 +252,7 @@ its own correctness.
 
 The content-addressed registry already stores cryptographic hashes of
 every function. Verification certificates are already machine-checkable
-proof artifacts. The TIR is a clean, well-defined 53-operation IR with
+proof artifacts. The TIR is a clean, well-defined 54-operation IR with
 deterministic lowering to target assembly.
 
 The missing piece: write the lowering logic in Trident itself. Then every
