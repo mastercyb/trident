@@ -348,6 +348,85 @@ Key observations:
 
 ---
 
+### `std.os.*` Lowering by OS Family
+
+The portable OS layer (`std.os.*`) maps intent to OS-native mechanism.
+The compiler reads the `[runtime]` section of the target's OS TOML
+(`account_model`, `storage_model`, `transaction_model`) to select the
+correct lowering strategy. See [stdlib.md](stdlib.md) for full API specs.
+
+#### `std.os.state` — Persistent State
+
+| OS family | OSes | `state.read(key)` lowers to |
+|-----------|------|-----------------------------|
+| Account | Ethereum, Starknet, Near, Cosmos, Ton, Polkadot, Miden | `SLOAD(key)` / storage read syscall |
+| Stateless | Solana | `account.data(derived_index, offset)` |
+| Object | Sui, Aptos | `dynamic_field.borrow(context_object, key)` |
+| UTXO | Neptune, Nockchain, Nervos, Aleo, Aztec | `divine()` + `merkle_authenticate(key, root)` |
+| Process | Linux, macOS, WASI, Browser, Android | File / environment read |
+| Journal | Boundless, Succinct, OpenVM network | **Compile error** — no persistent state |
+
+#### `std.os.caller` — Identity
+
+| OS family | OSes | `caller.id()` lowers to |
+|-----------|------|-------------------------|
+| Account (EVM) | Ethereum | `msg.sender` (padded to Digest) |
+| Account (Cairo) | Starknet | `get_caller_address` |
+| Account (WASM) | Near, Cosmos | `predecessor_account_id` / `info.sender` |
+| Stateless | Solana | `account.key(0)` (first signer) |
+| Object | Sui, Aptos | `tx_context::sender` |
+| Process | Linux, macOS | `getuid()` (padded to Digest) |
+| UTXO | Neptune, Nockchain, Nervos | **Compile error** — no caller; use `std.os.auth` |
+| Journal | Boundless, Succinct | **Compile error** — no identity |
+
+#### `std.os.auth` — Authorization
+
+| OS family | OSes | `auth.verify(cred)` lowers to |
+|-----------|------|-------------------------------|
+| Account (EVM) | Ethereum | `assert(msg.sender == cred)` |
+| Account (Cairo) | Starknet | `assert(get_caller_address() == cred)` |
+| Stateless | Solana | `assert(is_signer(find_account(cred)))` |
+| Object | Sui, Aptos | `assert(tx.sender() == cred)` |
+| UTXO | Neptune, Nockchain | `divine()` + `hash()` + `assert_eq(hash, cred)` |
+| Process | Linux, macOS | `assert(getuid() == cred)` |
+| Journal | Boundless, Succinct | **Compile error** — no identity |
+
+#### `std.os.transfer` — Value Movement
+
+| OS family | OSes | `transfer.send(to, amount)` lowers to |
+|-----------|------|---------------------------------------|
+| Account (EVM) | Ethereum | `CALL(to, amount, "")` |
+| Account (Cairo) | Starknet | `transfer(to, amount)` syscall |
+| Stateless | Solana | `system_program::transfer(signer, to, amount)` |
+| Object | Sui | `coin::split` + `transfer::public_transfer` |
+| UTXO | Neptune | Emit output UTXO (amount in coin state) |
+| Process | Linux, macOS, WASI | **Compile error** — no native value |
+| Journal | Boundless, Succinct | **Compile error** — no native value |
+
+#### `std.os.time` — Clock
+
+| OS family | OSes | `time.now()` lowers to |
+|-----------|------|------------------------|
+| Account (EVM) | Ethereum | `block.timestamp` |
+| Account (Cairo) | Starknet | `get_block_timestamp` |
+| Stateless | Solana | `Clock::unix_timestamp` |
+| Object | Sui | `tx_context::epoch_timestamp_ms` |
+| UTXO | Neptune | `kernel.authenticate_timestamp(root)` |
+| Process | Linux, macOS | `clock_gettime(CLOCK_REALTIME)` |
+| WASI/Browser | WASI, Browser | `wall_clock.now()` / `Date.now()` |
+
+#### OS TOML `[runtime]` Fields
+
+The compiler selects lowering strategy from three fields in `os/*.toml`:
+
+| Field | Values | Effect on `std.os.*` |
+|-------|--------|---------------------|
+| `account_model` | `account`, `stateless`, `object`, `utxo`, `journal`, `process` | Selects caller/auth lowering |
+| `storage_model` | `key-value`, `account-data`, `object-store`, `merkle-authenticated`, `filesystem`, `none` | Selects state lowering |
+| `transaction_model` | `signed`, `proof-based`, `none` | Selects auth/transfer lowering |
+
+---
+
 ## Part III — Adding a Target
 
 ### Adding a VM

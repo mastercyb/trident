@@ -388,6 +388,30 @@ are target-dependent. See [targets.md](targets.md).
 For sponge, Merkle, and extension field builtins (Tier 2-3), see
 [provable.md](provable.md).
 
+### Portable OS (`std.os.*`)
+
+The `std.os.*` modules provide portable OS interaction — state, identity,
+authorization, value transfer, and time. They are not builtins (they're
+standard library functions), but they compile to target-specific lowerings
+just like builtins do.
+
+| Module | Key functions | Available when |
+|--------|---------------|----------------|
+| `std.os.state` | `read(key)`, `write(key, value)`, `exists(key)` | Target has persistent state |
+| `std.os.caller` | `id() -> Digest`, `verify(expected)` | Target has caller concept |
+| `std.os.auth` | `verify(credential) -> Bool` | Target has identity |
+| `std.os.transfer` | `send(to, amount)`, `balance(account)` | Target has native value |
+| `std.os.time` | `now() -> Field`, `block_height() -> Field` | All targets |
+
+These sit between `std.*` (pure computation, all targets) and `ext.<os>.*`
+(OS-native, one target). A program using only `std.*` + `std.os.*` compiles
+to any OS that supports the required concepts. The compiler emits clear
+errors when targeting an OS that lacks a concept (e.g., `std.os.caller.id()`
+on UTXO chains, `std.os.transfer.send()` on journal targets).
+
+For full API specifications and per-OS lowering tables, see
+[stdlib.md](stdlib.md) and [targets.md](targets.md).
+
 ---
 
 ## 7. Attributes

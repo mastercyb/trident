@@ -224,36 +224,81 @@ For programming models:
 
 ---
 
-## `std.*` vs `ext.*`
+## The Portable OS Layer: `std.*` → `std.os.*` → `ext.*`
 
-Programs that use only `std.*` modules are **fully portable** -- they compile
-to any target. Programs that import `ext.<os>.*` modules are OS-specific.
-
-| Layer | Scope | Example |
-|-------|-------|---------|
-| **`std.*`** (universal) | All targets | `std.crypto.hash`, `std.crypto.merkle`, `std.io.io`, `std.core.field` |
-| **`ext.<os>.*`** (OS-specific) | One OS | `ext.neptune.kernel`, `ext.ethereum.storage`, `ext.solana.account` |
+The stdlib has three tiers. Each trades portability for OS access:
 
 ```
-// Portable -- compiles to any backend
-use std.crypto.merkle
+std.*          S0 — Proof primitives      All 20 VMs, all 25 OSes
+std.os.*       S1 — Portable OS           All blockchain + traditional OSes
+ext.<os>.*     S2 — OS-native             One specific OS
+```
 
+| Tier | Layer | Scope | Example |
+|------|-------|-------|---------|
+| S0 | **`std.*`** | All targets | `std.crypto.hash`, `std.crypto.merkle`, `std.io.io` |
+| S1 | **`std.os.*`** | All OSes with the concept | `std.os.state.read`, `std.os.caller.id`, `std.os.auth.verify` |
+| S2 | **`ext.<os>.*`** | One OS | `ext.neptune.kernel`, `ext.ethereum.storage`, `ext.solana.account` |
+
+**S0 — `std.*`**: Pure computation. Hash, Merkle, field arithmetic, I/O
+channels. Works everywhere but cannot touch state, identity, or money.
+
+**S1 — `std.os.*`**: Portable OS abstraction. Names the *intent* (read state,
+check authorization, send value) — the compiler picks the *mechanism* based on
+the target OS. A program using `std.os.state.read(key)` compiles to SLOAD on
+Ethereum, `account.data` on Solana, `dynamic_field.borrow` on Sui, and
+`divine()` + `merkle_authenticate` on Neptune. Same source, different lowering.
+
+**S2 — `ext.<os>.*`**: OS-native API. Full access to OS-specific features
+(PDAs, object ownership, CPI, kernel MAST, IBC). Required when the portable
+layer cannot express what you need.
+
+### `std.os.*` Modules
+
+| Module | Intent | Compile error when... |
+|--------|--------|-----------------------|
+| `std.os.state` | Read/write persistent state | Journal targets (no state) |
+| `std.os.caller` | Who initiated this call | UTXO targets (no caller concept) |
+| `std.os.auth` | Is this operation authorized | Journal targets (no identity) |
+| `std.os.transfer` | Move value between accounts | Journal + process targets (no value) |
+| `std.os.time` | Current time / block height | -- (all OSes have time) |
+
+The compiler emits a clear error when a `std.os.*` function targets an OS
+that doesn't support the concept. For example, `std.os.caller.id()` on
+Neptune produces: *"UTXO chains have no caller — use `std.os.auth.verify()`
+or `ext.neptune.*` for hash-preimage identity."*
+
+### Choosing a Tier
+
+```
+// S0 — pure math, any target
+use std.crypto.merkle
 fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
     std.crypto.merkle.verify(root, leaf, index, depth)
 }
-```
 
-```
-// Ethereum-specific -- requires --target ethereum
+// S1 — portable OS, any blockchain
+use std.os.state
+use std.os.auth
+fn guarded_write(key: Field, value: Field, credential: Digest) {
+    std.os.auth.verify(credential)
+    std.os.state.write(key, value)
+}
+
+// S2 — OS-native, Ethereum only
 use ext.ethereum.storage
-
 fn read_balance(slot: Field) -> Field {
     ext.ethereum.storage.read(slot)
 }
 ```
 
-The compiler rejects `ext.*` imports when targeting a different OS:
+A program can mix all three tiers. Use `std.*` for portable math, `std.os.*`
+for portable OS interaction, and `ext.<os>.*` when you need OS-specific
+features. The compiler rejects `ext.*` imports when targeting a different OS:
 `use ext.ethereum.storage` is a compile error with `--target solana`.
+
+For full `std.os.*` API specifications and per-OS lowering tables, see
+[Standard Library Reference](../reference/stdlib.md).
 
 ---
 
