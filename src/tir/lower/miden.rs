@@ -70,8 +70,8 @@ impl MidenLowering {
             // ── Recursion — extension field & FRI (not yet supported on Miden) ──
             TIROp::ExtMul => self.emit(out, "# ext_mul (recursion: not yet supported)"),
             TIROp::ExtInvert => self.emit(out, "# ext_invert (recursion: not yet supported)"),
-            TIROp::FriFold => self.emit(out, "# fri_fold (recursion: not yet supported)"),
-            TIROp::FriBaseFold => self.emit(out, "# fri_base_fold (recursion: not yet supported)"),
+            TIROp::FoldExt => self.emit(out, "# fold_ext (recursion: not yet supported)"),
+            TIROp::FoldBase => self.emit(out, "# fold_base (recursion: not yet supported)"),
 
             // ── I/O ──
             TIROp::ReadIo(n) => {
@@ -99,9 +99,9 @@ impl MidenLowering {
             TIROp::SpongeInit => self.emit(out, "# sponge_init (use hperm sequence)"),
             TIROp::SpongeAbsorb => self.emit(out, "hperm  # absorb"),
             TIROp::SpongeSqueeze => self.emit(out, "hperm  # squeeze"),
-            TIROp::SpongeAbsorbMem => self.emit(out, "# sponge_absorb_mem (miden: custom)"),
+            TIROp::SpongeLoad => self.emit(out, "# sponge_load (miden: custom)"),
             TIROp::MerkleStep => self.emit(out, "mtree_get  # merkle_step"),
-            TIROp::MerkleStepMem => self.emit(out, "mtree_get  # merkle_step_mem"),
+            TIROp::MerkleLoad => self.emit(out, "mtree_get  # merkle_load"),
 
             // ── Assertions ──
             TIROp::Assert => self.emit(out, "assert"),

@@ -162,11 +162,11 @@ pub enum TIROp {
     SpongeInit,
     SpongeAbsorb,
     SpongeSqueeze,
-    SpongeAbsorbMem,
+    SpongeLoad,
 
     // ── Merkle (2) ──
     MerkleStep,
-    MerkleStepMem,
+    MerkleLoad,
 
     // ═══════════════════════════════════════════════════════════════
     // Tier 3 — Recursion
@@ -179,9 +179,9 @@ pub enum TIROp {
     ExtMul,
     ExtInvert,
 
-    // ── FRI folding (2) ──
-    FriFold,
-    FriBaseFold,
+    // ── Folding (2) ──
+    FoldExt,
+    FoldBase,
 }
 
 // ─── Display ──────────────────────────────────────────────────────
@@ -208,8 +208,8 @@ impl fmt::Display for TIROp {
             TIROp::PopCount => write!(f, "pop_count"),
             TIROp::ExtMul => write!(f, "ext_mul"),
             TIROp::ExtInvert => write!(f, "ext_invert"),
-            TIROp::FriFold => write!(f, "fri_fold"),
-            TIROp::FriBaseFold => write!(f, "fri_base_fold"),
+            TIROp::FoldExt => write!(f, "fold_ext"),
+            TIROp::FoldBase => write!(f, "fold_base"),
             TIROp::ReadIo(n) => write!(f, "read_io {}", n),
             TIROp::WriteIo(n) => write!(f, "write_io {}", n),
             TIROp::Divine(n) => write!(f, "divine {}", n),
@@ -219,9 +219,9 @@ impl fmt::Display for TIROp {
             TIROp::SpongeInit => write!(f, "sponge_init"),
             TIROp::SpongeAbsorb => write!(f, "sponge_absorb"),
             TIROp::SpongeSqueeze => write!(f, "sponge_squeeze"),
-            TIROp::SpongeAbsorbMem => write!(f, "sponge_absorb_mem"),
+            TIROp::SpongeLoad => write!(f, "sponge_load"),
             TIROp::MerkleStep => write!(f, "merkle_step"),
-            TIROp::MerkleStepMem => write!(f, "merkle_step_mem"),
+            TIROp::MerkleLoad => write!(f, "merkle_load"),
             TIROp::Assert => write!(f, "assert"),
             TIROp::AssertVector => write!(f, "assert_vector"),
             TIROp::EmitEvent {
@@ -335,8 +335,8 @@ mod tests {
             TIROp::PopCount,
             TIROp::ExtMul,
             TIROp::ExtInvert,
-            TIROp::FriFold,
-            TIROp::FriBaseFold,
+            TIROp::FoldExt,
+            TIROp::FoldBase,
             TIROp::ReadIo(1),
             TIROp::WriteIo(1),
             TIROp::Divine(1),
@@ -346,9 +346,9 @@ mod tests {
             TIROp::SpongeInit,
             TIROp::SpongeAbsorb,
             TIROp::SpongeSqueeze,
-            TIROp::SpongeAbsorbMem,
+            TIROp::SpongeLoad,
             TIROp::MerkleStep,
-            TIROp::MerkleStepMem,
+            TIROp::MerkleLoad,
             TIROp::Assert,
             TIROp::AssertVector,
             TIROp::EmitEvent {

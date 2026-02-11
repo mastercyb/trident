@@ -65,8 +65,8 @@ impl TritonLowering {
             // ── Recursion — extension field & FRI ──
             TIROp::ExtMul => out.push("    xb_mul".to_string()),
             TIROp::ExtInvert => out.push("    x_invert".to_string()),
-            TIROp::FriFold => out.push("    xx_dot_step".to_string()),
-            TIROp::FriBaseFold => out.push("    xb_dot_step".to_string()),
+            TIROp::FoldExt => out.push("    xx_dot_step".to_string()),
+            TIROp::FoldBase => out.push("    xb_dot_step".to_string()),
 
             // ── I/O ──
             TIROp::ReadIo(n) => out.push(format!("    read_io {}", n)),
@@ -82,9 +82,9 @@ impl TritonLowering {
             TIROp::SpongeInit => out.push("    sponge_init".to_string()),
             TIROp::SpongeAbsorb => out.push("    sponge_absorb".to_string()),
             TIROp::SpongeSqueeze => out.push("    sponge_squeeze".to_string()),
-            TIROp::SpongeAbsorbMem => out.push("    sponge_absorb_mem".to_string()),
+            TIROp::SpongeLoad => out.push("    sponge_absorb_mem".to_string()),
             TIROp::MerkleStep => out.push("    merkle_step".to_string()),
-            TIROp::MerkleStepMem => out.push("    merkle_step_mem".to_string()),
+            TIROp::MerkleLoad => out.push("    merkle_step_mem".to_string()),
 
             // ── Assertions ──
             TIROp::Assert => out.push("    assert".to_string()),

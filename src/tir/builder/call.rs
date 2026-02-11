@@ -159,7 +159,7 @@ impl TIRBuilder {
                 self.emit_and_push(TIROp::SpongeSqueeze, self.target_config.hash_rate);
             }
             "sponge_absorb_mem" => {
-                self.ops.push(TIROp::SpongeAbsorbMem);
+                self.ops.push(TIROp::SpongeLoad);
                 self.push_temp(0);
             }
 
@@ -168,7 +168,7 @@ impl TIRBuilder {
                 self.emit_and_push(TIROp::MerkleStep, 6);
             }
             "merkle_step_mem" => {
-                self.emit_and_push(TIROp::MerkleStepMem, 7);
+                self.emit_and_push(TIROp::MerkleLoad, 7);
             }
 
             // ── RAM ──
@@ -208,10 +208,10 @@ impl TIRBuilder {
                 self.push_temp(3);
             }
             "xx_dot_step" => {
-                self.emit_and_push(TIROp::FriFold, 5);
+                self.emit_and_push(TIROp::FoldExt, 5);
             }
             "xb_dot_step" => {
-                self.emit_and_push(TIROp::FriBaseFold, 5);
+                self.emit_and_push(TIROp::FoldBase, 5);
             }
 
             // ── User-defined function ──

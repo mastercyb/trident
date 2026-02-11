@@ -219,13 +219,13 @@ pub enum LIROp {
     /// Squeeze output from sponge `state` into `dst`.
     SpongeSqueeze { dst: Reg, state: Reg },
     /// Absorb from memory address `addr` into sponge `state`.
-    SpongeAbsorbMem { state: Reg, addr: Reg },
+    SpongeLoad { state: Reg, addr: Reg },
 
     // ── Merkle (2) ──
     /// One Merkle authentication step.
     MerkleStep { dst: Reg, node: Reg, sibling: Reg },
     /// Merkle step reading sibling from memory at `addr`.
-    MerkleStepMem { dst: Reg, node: Reg, addr: Reg },
+    MerkleLoad { dst: Reg, node: Reg, addr: Reg },
 
     // ═══════════════════════════════════════════════════════════════
     // Tier 3 — Recursion
@@ -239,11 +239,11 @@ pub enum LIROp {
     /// dst = inverse of src in the extension field.
     ExtInvert(Reg, Reg),
 
-    // ── FRI folding (2) ──
-    /// FRI fold step.
-    FriFold { dst: Reg, src1: Reg, src2: Reg },
-    /// FRI base fold step.
-    FriBaseFold { dst: Reg, src1: Reg, src2: Reg },
+    // ── Folding (2) ──
+    /// Fold extension field elements.
+    FoldExt { dst: Reg, src1: Reg, src2: Reg },
+    /// Fold base field elements.
+    FoldBase { dst: Reg, src1: Reg, src2: Reg },
 }
 
 // ─── Display ──────────────────────────────────────────────────────
@@ -355,24 +355,24 @@ impl fmt::Display for LIROp {
             LIROp::SpongeSqueeze { dst, state } => {
                 write!(f, "sponge_squeeze {}, {}", dst, state)
             }
-            LIROp::SpongeAbsorbMem { state, addr } => {
-                write!(f, "sponge_absorb_mem {}, {}", state, addr)
+            LIROp::SpongeLoad { state, addr } => {
+                write!(f, "sponge_load {}, {}", state, addr)
             }
             LIROp::MerkleStep { dst, node, sibling } => {
                 write!(f, "merkle_step {}, {}, {}", dst, node, sibling)
             }
-            LIROp::MerkleStepMem { dst, node, addr } => {
-                write!(f, "merkle_step_mem {}, {}, {}", dst, node, addr)
+            LIROp::MerkleLoad { dst, node, addr } => {
+                write!(f, "merkle_load {}, {}, {}", dst, node, addr)
             }
 
             // Tier 3
             LIROp::ExtMul(d, a, b) => write!(f, "ext_mul {}, {}, {}", d, a, b),
             LIROp::ExtInvert(d, s) => write!(f, "ext_inv {}, {}", d, s),
-            LIROp::FriFold { dst, src1, src2 } => {
-                write!(f, "fri_fold {}, {}, {}", dst, src1, src2)
+            LIROp::FoldExt { dst, src1, src2 } => {
+                write!(f, "fold_ext {}, {}, {}", dst, src1, src2)
             }
-            LIROp::FriBaseFold { dst, src1, src2 } => {
-                write!(f, "fri_base_fold {}, {}, {}", dst, src1, src2)
+            LIROp::FoldBase { dst, src1, src2 } => {
+                write!(f, "fold_base {}, {}, {}", dst, src1, src2)
             }
         }
     }
@@ -567,7 +567,7 @@ mod tests {
             LIROp::SpongeInit(r0),
             LIROp::SpongeAbsorb { state: r0, src: r1 },
             LIROp::SpongeSqueeze { dst: r0, state: r1 },
-            LIROp::SpongeAbsorbMem {
+            LIROp::SpongeLoad {
                 state: r0,
                 addr: r1,
             },
@@ -576,7 +576,7 @@ mod tests {
                 node: r1,
                 sibling: r2,
             },
-            LIROp::MerkleStepMem {
+            LIROp::MerkleLoad {
                 dst: r0,
                 node: r1,
                 addr: r2,
@@ -584,12 +584,12 @@ mod tests {
             // Tier 3
             LIROp::ExtMul(r0, r1, r2),
             LIROp::ExtInvert(r0, r1),
-            LIROp::FriFold {
+            LIROp::FoldExt {
                 dst: r0,
                 src1: r1,
                 src2: r2,
             },
-            LIROp::FriBaseFold {
+            LIROp::FoldBase {
                 dst: r0,
                 src1: r1,
                 src2: r2,
