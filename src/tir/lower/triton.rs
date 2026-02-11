@@ -63,10 +63,10 @@ impl TritonLowering {
             TIROp::PopCount => out.push("    pop_count".to_string()),
 
             // ── Recursion — extension field & FRI ──
-            TIROp::XbMul => out.push("    xb_mul".to_string()),
-            TIROp::XInvert => out.push("    x_invert".to_string()),
-            TIROp::XxDotStep => out.push("    xx_dot_step".to_string()),
-            TIROp::XbDotStep => out.push("    xb_dot_step".to_string()),
+            TIROp::ExtMul => out.push("    xb_mul".to_string()),
+            TIROp::ExtInvert => out.push("    x_invert".to_string()),
+            TIROp::FriFold => out.push("    xx_dot_step".to_string()),
+            TIROp::FriBaseFold => out.push("    xb_dot_step".to_string()),
 
             // ── I/O ──
             TIROp::ReadIo(n) => out.push(format!("    read_io {}", n)),

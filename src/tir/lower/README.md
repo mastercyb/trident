@@ -22,7 +22,7 @@ Consumes `Vec<TIROp>` and produces target-specific assembly text.
 | `FnEnd` | flushes deferred blocks | `end` |
 | `EmitEvent` | `push tag; write_io 1` per field | comment + `drop` |
 | `SealEvent` | pad + `hash` + `write_io 5` | pad + `hperm` + `drop` |
-| `XbMul` etc. | native instructions (Triton-specific) | comments (no equivalent) |
+| `ExtMul` / `FriFold` etc. | native recursion instructions | comments (not yet supported) |
 
 ## Adding a backend
 

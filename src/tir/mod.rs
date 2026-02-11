@@ -175,10 +175,10 @@ pub enum TIROp {
     // ═══════════════════════════════════════════════════════════════
 
     // ── Recursion — extension field & FRI (4) ──
-    XbMul,
-    XInvert,
-    XxDotStep,
-    XbDotStep,
+    ExtMul,
+    ExtInvert,
+    FriFold,
+    FriBaseFold,
 }
 
 // ─── Display ──────────────────────────────────────────────────────
@@ -203,10 +203,10 @@ impl fmt::Display for TIROp {
             TIROp::Log2 => write!(f, "log2"),
             TIROp::Pow => write!(f, "pow"),
             TIROp::PopCount => write!(f, "pop_count"),
-            TIROp::XbMul => write!(f, "xb_mul"),
-            TIROp::XInvert => write!(f, "x_invert"),
-            TIROp::XxDotStep => write!(f, "xx_dot_step"),
-            TIROp::XbDotStep => write!(f, "xb_dot_step"),
+            TIROp::ExtMul => write!(f, "ext_mul"),
+            TIROp::ExtInvert => write!(f, "ext_invert"),
+            TIROp::FriFold => write!(f, "fri_fold"),
+            TIROp::FriBaseFold => write!(f, "fri_base_fold"),
             TIROp::ReadIo(n) => write!(f, "read_io {}", n),
             TIROp::WriteIo(n) => write!(f, "write_io {}", n),
             TIROp::Divine(n) => write!(f, "divine {}", n),
@@ -330,10 +330,10 @@ mod tests {
             TIROp::Log2,
             TIROp::Pow,
             TIROp::PopCount,
-            TIROp::XbMul,
-            TIROp::XInvert,
-            TIROp::XxDotStep,
-            TIROp::XbDotStep,
+            TIROp::ExtMul,
+            TIROp::ExtInvert,
+            TIROp::FriFold,
+            TIROp::FriBaseFold,
             TIROp::ReadIo(1),
             TIROp::WriteIo(1),
             TIROp::Divine(1),

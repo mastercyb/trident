@@ -1,8 +1,8 @@
 //! Expression emission: build_expr, build_var_expr, build_field_access, build_index.
 
 use crate::ast::*;
-use crate::tir::TIROp;
 use crate::span::Spanned;
+use crate::tir::TIROp;
 
 use super::layout::resolve_type_width;
 use super::TIRBuilder;
@@ -32,7 +32,7 @@ impl TIRBuilder {
                     BinOp::BitAnd => self.ops.push(TIROp::And),
                     BinOp::BitXor => self.ops.push(TIROp::Xor),
                     BinOp::DivMod => self.ops.push(TIROp::DivMod),
-                    BinOp::XFieldMul => self.ops.push(TIROp::XbMul),
+                    BinOp::XFieldMul => self.ops.push(TIROp::ExtMul),
                 }
                 self.stack.pop(); // rhs temp
                 self.stack.pop(); // lhs temp
@@ -280,7 +280,8 @@ impl TIRBuilder {
                 let elem_width = entry.elem_width.unwrap_or(1);
                 let base_offset = array_width - (idx + 1) * elem_width;
                 for i in 0..elem_width {
-                    self.ops.push(TIROp::Dup(base_offset + (elem_width - 1 - i)));
+                    self.ops
+                        .push(TIROp::Dup(base_offset + (elem_width - 1 - i)));
                 }
                 self.stack.pop();
                 for _ in 0..elem_width {

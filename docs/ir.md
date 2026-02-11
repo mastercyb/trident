@@ -143,10 +143,10 @@ Extension field arithmetic and FRI folding steps required for **recursive
 proof verification** — verifying a STARK proof inside another STARK program.
 
 ```
-XbMul       — base × extension field multiply
-XInvert     — extension field inverse
-XxDotStep   — FRI inner-loop: ext × ext dot-product step
-XbDotStep   — FRI inner-loop: base × ext dot-product step
+ExtMul        — extension field multiply
+ExtInvert     — extension field inverse
+FriFold       — FRI folding step (ext × ext)
+FriBaseFold   — FRI folding step (base × ext)
 ```
 
 These are the primitives that make recursion practical. Every STARK-based

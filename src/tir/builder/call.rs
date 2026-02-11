@@ -1,8 +1,8 @@
 //! Function call dispatch: intrinsic resolution and user-defined calls.
 
 use crate::ast::*;
-use crate::tir::TIROp;
 use crate::span::Spanned;
+use crate::tir::TIROp;
 use crate::typecheck::MonoInstance;
 
 use super::TIRBuilder;
@@ -204,14 +204,14 @@ impl TIRBuilder {
                 self.push_temp(3);
             }
             "xinvert" => {
-                self.ops.push(TIROp::XInvert);
+                self.ops.push(TIROp::ExtInvert);
                 self.push_temp(3);
             }
             "xx_dot_step" => {
-                self.emit_and_push(TIROp::XxDotStep, 5);
+                self.emit_and_push(TIROp::FriFold, 5);
             }
             "xb_dot_step" => {
-                self.emit_and_push(TIROp::XbDotStep, 5);
+                self.emit_and_push(TIROp::FriBaseFold, 5);
             }
 
             // ── User-defined function ──
