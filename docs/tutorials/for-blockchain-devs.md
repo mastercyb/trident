@@ -47,7 +47,7 @@ compiles to multiple STARK VMs:
 | Layer | What It Contains | Example |
 |-------|-----------------|---------|
 | **Universal core** | Types, control flow, I/O, hashing, Merkle proofs | `std.crypto.hash`, `std.crypto.merkle`, `std.io.io` |
-| **Backend extensions** | Target-specific intrinsics | `ext.triton.xfield`, `ext.triton.kernel` |
+| **Backend extensions** | Target-specific intrinsics | `ext.neptune.xfield`, `ext.neptune.kernel` |
 
 Programs that use only `std.*` modules are **fully portable** -- they compile
 and generate valid proofs on any supported backend. Programs that import
@@ -66,10 +66,10 @@ fn verify_membership(root: Digest, leaf: Digest, index: U32, depth: U32) {
 ```
 // Triton-specific program -- uses extension field arithmetic
 use std.crypto.merkle
-use ext.triton.xfield           // binds to Triton VM backend
+use ext.neptune.xfield           // binds to Triton VM backend
 
 fn verify_with_xfield(root: Digest) {
-    // ext.triton.xfield provides extension field operations
+    // ext.neptune.xfield provides extension field operations
     // that map directly to Triton VM instructions
 }
 ```

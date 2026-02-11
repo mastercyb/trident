@@ -1,0 +1,16 @@
+# Nockchain — provable blockchain powered by Nock VM
+# https://nockchain.com
+
+[os]
+name = "nockchain"
+display_name = "Nockchain"
+vm = "nock"
+
+[runtime]
+binding_prefix = "ext.nockchain"
+account_model = "utxo"
+storage_model = "merkle-authenticated"
+transaction_model = "proof-based"
+
+[cross_chain]
+protocols = []

@@ -1,0 +1,16 @@
+# Cosmos (CosmWasm) — smart contract platform for the Cosmos ecosystem
+# https://cosmwasm.com
+
+[os]
+name = "cosmwasm"
+display_name = "Cosmos (CosmWasm)"
+vm = "wasm"
+
+[runtime]
+binding_prefix = "ext.cosmwasm"
+account_model = "account"
+storage_model = "key-value"
+transaction_model = "signed"
+
+[cross_chain]
+protocols = ["ibc"]

@@ -1,0 +1,28 @@
+# RISC-V native target configuration
+# Bare-metal RISC-V execution — no proof generation
+
+[target]
+name = "riscv"
+display_name = "RISC-V (native)"
+architecture = "register"
+output_extension = ".elf"
+
+[field]
+prime = "2^64 - 2^32 + 1"
+bits = 64
+limbs = 1
+
+[stack]
+depth = 32
+spill_ram_base = 0
+
+[hash]
+function = "Software"
+digest_width = 0
+rate = 0
+
+[extension_field]
+degree = 0
+
+[cost]
+tables = ["wall-clock"]

@@ -1,0 +1,28 @@
+# RISC Zero target configuration
+# https://risczero.com/
+
+[target]
+name = "risczero"
+display_name = "RISC Zero"
+architecture = "register"
+output_extension = ".elf"
+
+[field]
+prime = "2^31 - 2^27 + 1"
+bits = 31
+limbs = 1
+
+[stack]
+depth = 32
+spill_ram_base = 268435456
+
+[hash]
+function = "SHA-256"
+digest_width = 8
+rate = 8
+
+[extension_field]
+degree = 4
+
+[cost]
+tables = ["cycles"]

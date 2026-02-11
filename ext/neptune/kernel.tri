@@ -1,4 +1,4 @@
-module ext.triton.kernel
+module ext.neptune.kernel
 
 use std.io.io
 

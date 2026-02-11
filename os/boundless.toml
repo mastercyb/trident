@@ -1,0 +1,16 @@
+# Boundless — verifiable compute network powered by RISC Zero
+# https://beboundless.xyz
+
+[os]
+name = "boundless"
+display_name = "Boundless"
+vm = "risczero"
+
+[runtime]
+binding_prefix = "ext.boundless"
+account_model = "journal"
+storage_model = "none"
+transaction_model = "proof-based"
+
+[cross_chain]
+protocols = ["ethereum-verification"]

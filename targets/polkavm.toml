@@ -1,0 +1,28 @@
+# PolkaVM target configuration
+# https://docs.polkadot.com/polkadot-protocol/smart-contract-basics/polkavm-design/
+
+[target]
+name = "polkavm"
+display_name = "PolkaVM"
+architecture = "register"
+output_extension = ".pvm"
+
+[field]
+prime = "none"
+bits = 64
+limbs = 1
+
+[stack]
+depth = 32
+spill_ram_base = 0
+
+[hash]
+function = "Blake2b"
+digest_width = 1
+rate = 0
+
+[extension_field]
+degree = 0
+
+[cost]
+tables = ["weight"]

@@ -1,4 +1,4 @@
-module ext.triton.registry
+module ext.neptune.registry
 
 use std.io.io
 

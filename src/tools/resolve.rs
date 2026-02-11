@@ -140,9 +140,16 @@ fn legacy_stdlib_fallback(name: &str) -> Option<&'static str> {
         "std.hash" => Some("std.crypto.hash"),
         "std.merkle" => Some("std.crypto.merkle"),
         "std.auth" => Some("std.crypto.auth"),
-        "std.xfield" => Some("ext.triton.xfield"),
-        "std.kernel" => Some("ext.triton.kernel"),
-        "std.utxo" => Some("ext.triton.utxo"),
+        "std.xfield" => Some("ext.neptune.xfield"),
+        "std.kernel" => Some("ext.neptune.kernel"),
+        "std.utxo" => Some("ext.neptune.utxo"),
+        // Backward compatibility: ext.triton.* → ext.neptune.*
+        "ext.triton.xfield" => Some("ext.neptune.xfield"),
+        "ext.triton.kernel" => Some("ext.neptune.kernel"),
+        "ext.triton.utxo" => Some("ext.neptune.utxo"),
+        "ext.triton.proof" => Some("ext.neptune.proof"),
+        "ext.triton.recursive" => Some("ext.neptune.recursive"),
+        "ext.triton.registry" => Some("ext.neptune.registry"),
         _ => None,
     }
 }
@@ -261,7 +268,7 @@ impl ModuleResolver {
     /// Resolve a dotted module name to a file path.
     /// "std.core.assert" → stdlib_dir/core/assert.tri
     /// "std.crypto.hash" → stdlib_dir/crypto/hash.tri
-    /// "ext.triton.xfield" → ext_dir/triton/xfield.tri
+    /// "ext.neptune.xfield" → ext_dir/neptune/xfield.tri
     /// "crypto.sponge" → root_dir/crypto/sponge.tri
     /// "merkle" → root_dir/merkle.tri
     ///

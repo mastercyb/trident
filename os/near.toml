@@ -1,0 +1,16 @@
+# Near Protocol — account-based smart contract platform on Wasm
+# https://near.org
+
+[os]
+name = "near"
+display_name = "Near Protocol"
+vm = "wasm"
+
+[runtime]
+binding_prefix = "ext.near"
+account_model = "account"
+storage_model = "key-value"
+transaction_model = "signed"
+
+[cross_chain]
+protocols = []

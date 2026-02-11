@@ -253,7 +253,7 @@ When the compiler encounters a `use` statement, it resolves the module name to a
 | Module prefix | Search path | Example |
 |---|---|---|
 | `std.*` | Standard library directory (`std/`) | `use std.crypto.hash` resolves to `std/crypto/hash.tri` |
-| `ext.*` | Extension library directory (`ext/`) | `use ext.triton.xfield` resolves to `ext/triton/xfield.tri` |
+| `ext.*` | Extension library directory (`ext/`) | `use ext.neptune.xfield` resolves to `ext/neptune/xfield.tri` |
 | (no prefix) | Project root directory | `use helpers` resolves to `helpers.tri` |
 | (dotted) | Project root, nested | `use crypto.sponge` resolves to `crypto/sponge.tri` |
 

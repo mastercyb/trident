@@ -1,0 +1,28 @@
+# ARM64 native target configuration
+# For testing and local execution — no proof generation
+
+[target]
+name = "arm64"
+display_name = "ARM64"
+architecture = "register"
+output_extension = ".elf"
+
+[field]
+prime = "2^64 - 2^32 + 1"
+bits = 64
+limbs = 1
+
+[stack]
+depth = 31
+spill_ram_base = 0
+
+[hash]
+function = "Software"
+digest_width = 0
+rate = 0
+
+[extension_field]
+degree = 0
+
+[cost]
+tables = ["wall-clock"]

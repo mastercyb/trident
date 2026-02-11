@@ -1,0 +1,28 @@
+# CKB-VM target configuration
+# https://github.com/nervosnetwork/ckb-vm
+
+[target]
+name = "ckb"
+display_name = "CKB-VM"
+architecture = "register"
+output_extension = ".elf"
+
+[field]
+prime = "none"
+bits = 64
+limbs = 1
+
+[stack]
+depth = 32
+spill_ram_base = 0
+
+[hash]
+function = "Blake2b"
+digest_width = 1
+rate = 0
+
+[extension_field]
+degree = 0
+
+[cost]
+tables = ["cycles"]

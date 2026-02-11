@@ -32,9 +32,9 @@ program transaction_validation
 // Secret input:
 //   kernel field digests + Merkle paths,
 //   STARK proof data for each lock/type script
-use ext.triton.kernel
+use ext.neptune.kernel
 
-use ext.triton.proof
+use ext.neptune.proof
 
 use std.core.convert
 

@@ -1,0 +1,16 @@
+# Aptos — resource-oriented smart contract platform on Move VM
+# https://aptos.dev
+
+[os]
+name = "aptos"
+display_name = "Aptos"
+vm = "movevm"
+
+[runtime]
+binding_prefix = "ext.aptos"
+account_model = "account"
+storage_model = "resource-storage"
+transaction_model = "signed"
+
+[cross_chain]
+protocols = []

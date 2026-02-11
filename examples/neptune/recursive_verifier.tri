@@ -27,7 +27,7 @@ program recursive_verifier
 //   then uses divine input to obtain the proof data, and checks all
 //   STARK verification constraints algebraically using xx_dot_step
 //   and xb_dot_step for inner product accumulation.
-use ext.triton.recursive
+use ext.neptune.recursive
 
 // Verify the Fiat-Shamir challenge derivation.
 // The challenges are derived by hashing the proof commitments.

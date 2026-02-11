@@ -1,0 +1,16 @@
+# Starknet — validity rollup on Ethereum powered by Cairo VM
+# https://starknet.io
+
+[os]
+name = "starknet"
+display_name = "Starknet"
+vm = "cairo"
+
+[runtime]
+binding_prefix = "ext.starknet"
+account_model = "account"
+storage_model = "key-value"
+transaction_model = "signed"
+
+[cross_chain]
+protocols = ["ethereum-l2"]

@@ -1,0 +1,16 @@
+# Sui — object-centric smart contract platform on Move VM
+# https://sui.io
+
+[os]
+name = "sui"
+display_name = "Sui"
+vm = "movevm"
+
+[runtime]
+binding_prefix = "ext.sui"
+account_model = "object-centric"
+storage_model = "object-store"
+transaction_model = "signed"
+
+[cross_chain]
+protocols = []

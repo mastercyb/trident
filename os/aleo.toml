@@ -1,0 +1,16 @@
+# Aleo — private-by-default blockchain powered by Leo/snarkVM
+# https://aleo.org
+
+[os]
+name = "aleo"
+display_name = "Aleo"
+vm = "leo"
+
+[runtime]
+binding_prefix = "ext.aleo"
+account_model = "record"
+storage_model = "mapping"
+transaction_model = "proof-based"
+
+[cross_chain]
+protocols = []

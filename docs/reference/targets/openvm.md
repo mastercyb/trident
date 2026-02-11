@@ -18,7 +18,7 @@
 | Stack depth | 32 (register file) |
 | Output format | `.S` (RISC-V assembly) |
 | Cost model | Cycles |
-| Blockchain | OpenVM network |
+| OS | OpenVM network |
 
 Same field as Triton/Miden, different hash and architecture. RISC-V backend
 with cycle-based cost model.

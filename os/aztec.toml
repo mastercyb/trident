@@ -1,0 +1,16 @@
+# Aztec — hybrid private/public L2 on Ethereum
+# https://aztec.network
+
+[os]
+name = "aztec"
+display_name = "Aztec"
+vm = "aztec"
+
+[runtime]
+binding_prefix = "ext.aztec"
+account_model = "note+account"
+storage_model = "note-tree+public-state"
+transaction_model = "proof-based+signed"
+
+[cross_chain]
+protocols = ["ethereum-l2"]

@@ -1,0 +1,28 @@
+# WASM target configuration
+# https://webassembly.org/
+
+[target]
+name = "wasm"
+display_name = "WASM"
+architecture = "stack"
+output_extension = ".wasm"
+
+[field]
+prime = "none"
+bits = 64
+limbs = 1
+
+[stack]
+depth = 0
+spill_ram_base = 0
+
+[hash]
+function = "none"
+digest_width = 0
+rate = 0
+
+[extension_field]
+degree = 0
+
+[cost]
+tables = ["gas"]

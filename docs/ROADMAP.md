@@ -73,7 +73,7 @@ are the remaining roadmap.
 - [x] Canonical forms for pure field arithmetic (polynomial normalization)
 
 ### Phase 5: On-Chain Registry
-- [x] Merkle tree registry contract (`ext/triton/registry.tri`)
+- [x] Merkle tree registry contract (`ext/neptune/registry.tri`)
 - [x] On-chain verification certificate validation (`onchain.rs`)
 - [x] Proof generation (register/verify/update/equivalence)
 
@@ -148,7 +148,7 @@ expressions (`M + N`, `N * 2`), `#[pure]` I/O enforcement.
 **Standard Library** — `std/core/` (assert, convert, field, u32),
 `std/io/` (io, mem, storage), `std/crypto/` (hash, merkle, auth,
 sha256, keccak256, secp256k1, ed25519, ecdsa, poseidon, bigint),
-`ext/triton/` (xfield, kernel, utxo, registry). Digest destructuring.
+`ext/neptune/` (xfield, kernel, utxo, registry). Digest destructuring.
 `#[intrinsic]` restricted to std modules.
 
 **CLI** — `trident build` (--costs, --hotspots, --hints, --annotate,

@@ -1,0 +1,28 @@
+# eBPF / SVM target configuration
+# https://solana.com/docs/programs
+
+[target]
+name = "svm"
+display_name = "eBPF (SVM)"
+architecture = "register"
+output_extension = ".so"
+
+[field]
+prime = "none"
+bits = 64
+limbs = 1
+
+[stack]
+depth = 10
+spill_ram_base = 0
+
+[hash]
+function = "SHA-256"
+digest_width = 1
+rate = 0
+
+[extension_field]
+degree = 0
+
+[cost]
+tables = ["compute_units"]

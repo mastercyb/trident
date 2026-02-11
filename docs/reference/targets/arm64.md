@@ -17,6 +17,6 @@
 | Stack depth | 31 GP registers |
 | Output format | Machine code (ELF / Mach-O) |
 | Cost model | Wall-clock time (no proof cost) |
-| Blockchain | None |
+| OS | macOS, Linux, Android |
 
 Same as x86-64 but for ARM-based machines (Apple Silicon, AWS Graviton).

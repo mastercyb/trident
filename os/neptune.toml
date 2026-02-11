@@ -1,0 +1,16 @@
+# Neptune — provable blockchain powered by Triton VM
+# https://neptune.cash
+
+[os]
+name = "neptune"
+display_name = "Neptune"
+vm = "triton"
+
+[runtime]
+binding_prefix = "ext.neptune"
+account_model = "utxo"
+storage_model = "merkle-authenticated"
+transaction_model = "proof-based"
+
+[cross_chain]
+protocols = []

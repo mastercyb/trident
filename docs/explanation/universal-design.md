@@ -268,7 +268,7 @@ Backend extensions that expose target-unique capabilities. Programs that import
 from `ext.*` are explicitly bound to that target.
 
 ```
-ext/triton/
+ext/neptune/
   xfield.tri      XField type (cubic extension), xx_add, xx_mul, x_invert
   kernel.tri      Neptune kernel interface (authenticate_field, tree_height)
   utxo.tri        UTXO verification
@@ -330,7 +330,7 @@ The `#[cfg(target)]` conditional compilation attribute works for larger blocks:
 
 ```
 #[cfg(triton)]
-use ext.triton.xfield
+use ext.neptune.xfield
 
 fn compute() -> Field {
     #[cfg(triton)]
@@ -414,8 +414,8 @@ and instruction encoding.
   analysis, and tooling work with Triton VM.
 - **Architecture:** 16-element operand stack, Goldilocks field, Tip5 hash.
 - **Output:** `.tasm` files (Triton Assembly).
-- **Extensions:** `ext.triton.xfield`, `ext.triton.kernel`, `ext.triton.utxo`,
-  `ext.triton.proof`, `ext.triton.recursive`, `ext.triton.registry`.
+- **Extensions:** `ext.neptune.xfield`, `ext.neptune.kernel`, `ext.neptune.utxo`,
+  `ext.neptune.proof`, `ext.neptune.recursive`, `ext.neptune.registry`.
 - **Cost model:** 6-table model (processor, hash, u32, op_stack, ram,
   jump_stack) with padded-height estimation, boundary warnings, and hotspot
   analysis.

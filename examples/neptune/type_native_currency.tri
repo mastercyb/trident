@@ -13,7 +13,7 @@ program type_native_currency
 //
 // This is the simplest type script — it only checks that the
 // total value going in is at least the total value going out.
-use ext.triton.kernel
+use ext.neptune.kernel
 
 fn main() {
     // Read the three type-script public inputs.

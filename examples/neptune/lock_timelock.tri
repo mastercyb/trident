@@ -10,7 +10,7 @@ program lock_timelock
 // Secret input:  lock preimage (5 fields), lock hash (5 fields),
 //                unlock_after timestamp (1 field),
 //                kernel timestamp leaf (5 fields) + Merkle siblings
-use ext.triton.kernel
+use ext.neptune.kernel
 
 fn main() {
     // Authentication: Symmetric-style hash-lock.

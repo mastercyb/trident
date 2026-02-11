@@ -1,0 +1,28 @@
+# Nock target configuration
+# https://nockchain.com/
+
+[target]
+name = "nock"
+display_name = "Nock"
+architecture = "tree"
+output_extension = ".jam"
+
+[field]
+prime = "2^64 - 2^32 + 1"
+bits = 64
+limbs = 2
+
+[stack]
+depth = 0
+spill_ram_base = 0
+
+[hash]
+function = "Tip5"
+digest_width = 5
+rate = 10
+
+[extension_field]
+degree = 3
+
+[cost]
+tables = ["reductions"]

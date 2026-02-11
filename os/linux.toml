@@ -1,0 +1,16 @@
+# Linux — POSIX operating system
+# Targets: x86-64, ARM64, RISC-V
+
+[os]
+name = "linux"
+display_name = "Linux"
+vm = "x86-64"       # default; also arm64, riscv
+
+[runtime]
+binding_prefix = "ext.linux"
+account_model = "process"
+storage_model = "filesystem"
+transaction_model = "syscall"
+
+[cross_chain]
+protocols = []

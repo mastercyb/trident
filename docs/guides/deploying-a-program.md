@@ -100,9 +100,9 @@ The relevant standard library modules for Neptune deployment:
 
 | Module | Purpose |
 |--------|---------|
-| `ext.triton.kernel` | Authenticate transaction kernel fields |
-| `ext.triton.utxo` | UTXO verification primitives |
-| `ext.triton.storage` | Persistent storage read/write |
+| `ext.neptune.kernel` | Authenticate transaction kernel fields |
+| `ext.neptune.utxo` | UTXO verification primitives |
+| `ext.neptune.storage` | Persistent storage read/write |
 | `std.crypto.auth` | Hash-lock authentication patterns |
 | `std.crypto.merkle` | Merkle proof verification |
 
@@ -129,7 +129,7 @@ implemented.
 Programs that use only `std.*` modules are fully portable. They contain no
 target-specific instructions and will compile to any backend once it exists.
 
-Programs that import `ext.*` modules (e.g., `ext.triton.kernel`) are bound to
+Programs that import `ext.*` modules (e.g., `ext.neptune.kernel`) are bound to
 that specific backend. They will only compile for the named target.
 
 The `asm` block syntax enables target-specific code paths within otherwise
@@ -314,14 +314,14 @@ Trident includes standard token implementations ready for deployment:
 
 ### On-Chain Registry
 
-The `ext.triton.registry` module provides an on-chain Merkle-tree registry
+The `ext.neptune.registry` module provides an on-chain Merkle-tree registry
 for content-addressed definitions. Programs can be registered, verified,
 looked up, and updated via provable operations.
 
 ### Proof Composition
 
 A Trident program can verify another program's proof internally using the
-`ext.triton.proof` library. This enables recursive proof structures where
+`ext.neptune.proof` library. This enables recursive proof structures where
 the inner program's hash becomes part of the outer program's public input.
 See `examples/neptune/proof_aggregator.tri` for a transaction batching
 example and `examples/neptune/transaction_validation.tri` for the full

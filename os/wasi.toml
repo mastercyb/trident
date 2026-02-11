@@ -1,0 +1,16 @@
+# WASI — WebAssembly System Interface
+# Target: wasm
+
+[os]
+name = "wasi"
+display_name = "WASI"
+vm = "wasm"
+
+[runtime]
+binding_prefix = "ext.wasi"
+account_model = "process"
+storage_model = "filesystem"
+transaction_model = "syscall"
+
+[cross_chain]
+protocols = []

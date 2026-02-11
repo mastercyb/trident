@@ -12,7 +12,7 @@ program type_custom_token
 //   kernel MAST hash, input UTXO hash, output UTXO hash
 // Secret input:
 //   token_id, coin data, config commitment
-use ext.triton.kernel
+use ext.neptune.kernel
 
 // Verify a mint authority secret against the config commitment.
 fn verify_mint_auth(mint_auth_hash: Field) {

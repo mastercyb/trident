@@ -836,9 +836,9 @@ compile for any other target.
 
 | Module | Description |
 |--------|-------------|
-| `ext.triton.xfield` | XField ops, `xx_dot_step`, `xb_dot_step` |
-| `ext.triton.kernel` | Neptune kernel interface |
-| `ext.triton.proof` | Recursive proof composition |
+| `ext.neptune.xfield` | XField ops, `xx_dot_step`, `xb_dot_step` |
+| `ext.neptune.kernel` | Neptune kernel interface |
+| `ext.neptune.proof` | Recursive proof composition |
 
 Importing `ext.<target>.*` binds the program to that target — the compiler
 rejects cross-target imports.

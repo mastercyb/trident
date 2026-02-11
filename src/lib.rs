@@ -2363,12 +2363,12 @@ fn main() {
     #[test]
     fn test_xfield_dot_step_intrinsics() {
         let dir = tempfile::tempdir().unwrap();
-        // Write the entry program that uses xx_dot_step via ext.triton.xfield
+        // Write the entry program that uses xx_dot_step via ext.neptune.xfield
         let main_path = dir.path().join("main.tri");
         std::fs::write(
             &main_path,
             r#"program test
-use ext.triton.xfield
+use ext.neptune.xfield
 
 fn main() {
     let ptr_a: Field = divine()
@@ -2380,10 +2380,10 @@ fn main() {
 "#,
         )
         .unwrap();
-        // Create ext/triton directory and copy xfield.tri
-        let ext_dir = dir.path().join("ext").join("triton");
+        // Create ext/neptune directory and copy xfield.tri
+        let ext_dir = dir.path().join("ext").join("neptune");
         std::fs::create_dir_all(&ext_dir).unwrap();
-        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+        std::fs::copy("ext/neptune/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
 
         let result = compile_project(&main_path);
         assert!(
@@ -2405,7 +2405,7 @@ fn main() {
         std::fs::write(
             &main_path,
             r#"program test
-use ext.triton.xfield
+use ext.neptune.xfield
 
 fn main() {
     let ptr_a: Field = divine()
@@ -2417,9 +2417,9 @@ fn main() {
 "#,
         )
         .unwrap();
-        let ext_dir = dir.path().join("ext").join("triton");
+        let ext_dir = dir.path().join("ext").join("neptune");
         std::fs::create_dir_all(&ext_dir).unwrap();
-        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+        std::fs::copy("ext/neptune/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
 
         let result = compile_project(&main_path);
         assert!(
@@ -2441,7 +2441,7 @@ fn main() {
         std::fs::write(
             &main_path,
             r#"program test
-use ext.triton.recursive
+use ext.neptune.recursive
 
 fn main() {
     let ptr_a: Field = divine()
@@ -2457,10 +2457,10 @@ fn main() {
         )
         .unwrap();
         // Copy library files
-        let ext_dir = dir.path().join("ext").join("triton");
+        let ext_dir = dir.path().join("ext").join("neptune");
         std::fs::create_dir_all(&ext_dir).unwrap();
-        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
-        std::fs::copy("ext/triton/recursive.tri", ext_dir.join("recursive.tri"))
+        std::fs::copy("ext/neptune/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+        std::fs::copy("ext/neptune/recursive.tri", ext_dir.join("recursive.tri"))
             .unwrap_or_default();
         // Copy std files that recursive.tri depends on
         let std_io = dir.path().join("std").join("io");
@@ -2490,7 +2490,7 @@ fn main() {
         std::fs::write(
             &main_path,
             r#"program test
-use ext.triton.recursive
+use ext.neptune.recursive
 
 fn main() {
     let ptr_a: Field = divine()
@@ -2503,10 +2503,10 @@ fn main() {
 "#,
         )
         .unwrap();
-        let ext_dir = dir.path().join("ext").join("triton");
+        let ext_dir = dir.path().join("ext").join("neptune");
         std::fs::create_dir_all(&ext_dir).unwrap();
-        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
-        std::fs::copy("ext/triton/recursive.tri", ext_dir.join("recursive.tri"))
+        std::fs::copy("ext/neptune/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+        std::fs::copy("ext/neptune/recursive.tri", ext_dir.join("recursive.tri"))
             .unwrap_or_default();
         let std_io = dir.path().join("std").join("io");
         let std_core = dir.path().join("std").join("core");
@@ -2535,7 +2535,7 @@ fn main() {
         std::fs::write(
             &main_path,
             r#"program test
-use ext.triton.proof
+use ext.neptune.proof
 
 fn main() {
     proof.verify_inner_proof(4)
@@ -2544,12 +2544,12 @@ fn main() {
         )
         .unwrap();
         // Copy all required library files
-        let ext_dir = dir.path().join("ext").join("triton");
+        let ext_dir = dir.path().join("ext").join("neptune");
         std::fs::create_dir_all(&ext_dir).unwrap();
-        std::fs::copy("ext/triton/proof.tri", ext_dir.join("proof.tri")).unwrap_or_default();
-        std::fs::copy("ext/triton/recursive.tri", ext_dir.join("recursive.tri"))
+        std::fs::copy("ext/neptune/proof.tri", ext_dir.join("proof.tri")).unwrap_or_default();
+        std::fs::copy("ext/neptune/recursive.tri", ext_dir.join("recursive.tri"))
             .unwrap_or_default();
-        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+        std::fs::copy("ext/neptune/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
         let std_io = dir.path().join("std").join("io");
         let std_core = dir.path().join("std").join("core");
         std::fs::create_dir_all(&std_io).unwrap();
@@ -2577,7 +2577,7 @@ fn main() {
         std::fs::write(
             &main_path,
             r#"program test
-use ext.triton.proof
+use ext.neptune.proof
 
 fn main() {
     let n: Field = pub_read()
@@ -2586,12 +2586,12 @@ fn main() {
 "#,
         )
         .unwrap();
-        let ext_dir = dir.path().join("ext").join("triton");
+        let ext_dir = dir.path().join("ext").join("neptune");
         std::fs::create_dir_all(&ext_dir).unwrap();
-        std::fs::copy("ext/triton/proof.tri", ext_dir.join("proof.tri")).unwrap_or_default();
-        std::fs::copy("ext/triton/recursive.tri", ext_dir.join("recursive.tri"))
+        std::fs::copy("ext/neptune/proof.tri", ext_dir.join("proof.tri")).unwrap_or_default();
+        std::fs::copy("ext/neptune/recursive.tri", ext_dir.join("recursive.tri"))
             .unwrap_or_default();
-        std::fs::copy("ext/triton/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
+        std::fs::copy("ext/neptune/xfield.tri", ext_dir.join("xfield.tri")).unwrap_or_default();
         let std_io = dir.path().join("std").join("io");
         let std_core = dir.path().join("std").join("core");
         std::fs::create_dir_all(&std_io).unwrap();

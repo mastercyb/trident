@@ -476,7 +476,7 @@ ext/
 
 Modules under `std/core/` compile identically to every target. Modules under
 `std/io/` and `std/crypto/` use the same syntax everywhere but dispatch to
-target-native instructions. Modules under `ext/triton/` are available only
+target-native instructions. Modules under `ext/neptune/` are available only
 when compiling with `--target triton`. 52 `.tri` files across
 `std/`, `ext/`, and `examples/` form the current library and example surface.
 
@@ -674,7 +674,7 @@ core, an abstraction layer, and per-target backend extensions -- means that
 programs written today for Triton VM are architecturally ready to compile to
 Miden, Cairo, and RISC-V zkVMs as those backends ship. The 3-layer design is
 implemented: `std/core/` for portable logic, `std/io/` and `std/crypto/` for
-abstracted primitives, and `ext/triton/` for Triton-specific power. The
+abstracted primitives, and `ext/neptune/` for Triton-specific power. The
 `--target` flag selects the backend; `asm(triton) { ... }` blocks tag
 target-specific assembly. Write once, prove anywhere.
 

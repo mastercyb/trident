@@ -1,0 +1,16 @@
+# Polkadot — multi-chain smart contract platform on PolkaVM
+# https://polkadot.network
+
+[os]
+name = "polkadot"
+display_name = "Polkadot"
+vm = "polkavm"
+
+[runtime]
+binding_prefix = "ext.polkadot"
+account_model = "account"
+storage_model = "key-value"
+transaction_model = "signed"
+
+[cross_chain]
+protocols = ["xcm"]

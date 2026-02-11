@@ -1,0 +1,28 @@
+# TVM (Ton Virtual Machine) target configuration
+# https://docs.ton.org/v3/documentation/tvm/instructions
+
+[target]
+name = "tvm"
+display_name = "TVM"
+architecture = "stack"
+output_extension = ".boc"
+
+[field]
+prime = "none"
+bits = 257
+limbs = 4
+
+[stack]
+depth = 256
+spill_ram_base = 0
+
+[hash]
+function = "SHA-256"
+digest_width = 1
+rate = 0
+
+[extension_field]
+degree = 0
+
+[cost]
+tables = ["gas"]

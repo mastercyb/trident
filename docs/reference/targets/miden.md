@@ -18,9 +18,9 @@
 | Stack depth | 16 |
 | Output format | `.masm` |
 | Cost model | 4 tables: processor, hash, chiplets, stack |
-| Blockchain | Polygon Miden |
+| OS | Polygon Miden |
 
 Same field as Triton, different hash function and cost model. 4-table model
 with a chiplets table that combines hashing, bitwise, and memory operations.
-No extension field support — programs using `XField` or `ext.triton.*` cannot
+No extension field support — programs using `XField` or `ext.neptune.*` cannot
 target Miden.

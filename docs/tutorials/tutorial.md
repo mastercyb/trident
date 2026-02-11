@@ -557,7 +557,7 @@ let result: Field = helpers.double(x)
 | `use helpers` | `helpers.tri` in the project directory |
 | `use crypto.auth` | `crypto/auth.tri` in the project directory |
 | `use std.crypto.hash` | `crypto/hash.tri` in the standard library |
-| `use ext.triton.xfield` | `triton/xfield.tri` in the extensions directory |
+| `use ext.neptune.xfield` | `triton/xfield.tri` in the extensions directory |
 
 ### Standard Library Layers
 
@@ -568,9 +568,9 @@ The standard library is organized in three universal layers plus backend extensi
 | `std.core` | `field`, `convert`, `u32`, `assert`, `bool` | Arithmetic, conversions, assertions |
 | `std.io` | `io`, `mem`, `storage` | Public/secret I/O, RAM, persistent storage |
 | `std.crypto` | `hash`, `merkle`, `auth` | Tip5 hashing, Merkle proofs, authorization |
-| `ext.triton` | `xfield`, `kernel`, `utxo`, `storage` | Triton VM-specific operations |
+| `ext.neptune` | `xfield`, `kernel`, `utxo`, `storage` | Triton VM-specific operations |
 
-The `std.*` modules are target-agnostic and work across all backends. The `ext.triton.*` modules are available only when compiling with `--target triton` (the default). Importing an `ext.*` module while targeting a different backend is a compile error.
+The `std.*` modules are target-agnostic and work across all backends. The `ext.neptune.*` modules are available only when compiling with `--target triton` (the default). Importing an `ext.*` module while targeting a different backend is a compile error.
 
 See the [Reference](../reference/language.md) for a complete list of standard library functions, and the [Programming Model](../explanation/programming-model.md) for how I/O interacts with the prover and verifier.
 

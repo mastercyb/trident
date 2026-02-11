@@ -1,0 +1,28 @@
+# EVM target configuration
+# https://ethereum.org/en/developers/docs/evm/
+
+[target]
+name = "evm"
+display_name = "EVM"
+architecture = "stack"
+output_extension = ".evm"
+
+[field]
+prime = "none"
+bits = 256
+limbs = 4
+
+[stack]
+depth = 1024
+spill_ram_base = 0
+
+[hash]
+function = "Keccak-256"
+digest_width = 1
+rate = 0
+
+[extension_field]
+degree = 0
+
+[cost]
+tables = ["gas"]

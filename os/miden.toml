@@ -1,0 +1,16 @@
+# Polygon Miden — provable rollup with client-side proving
+# https://polygon.technology/polygon-miden
+
+[os]
+name = "miden"
+display_name = "Polygon Miden"
+vm = "miden"
+
+[runtime]
+binding_prefix = "ext.miden"
+account_model = "account"
+storage_model = "merkle-authenticated"
+transaction_model = "proof-based"
+
+[cross_chain]
+protocols = []

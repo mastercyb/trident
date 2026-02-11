@@ -1,6 +1,6 @@
-module ext.triton.recursive
+module ext.neptune.recursive
 
-use ext.triton.xfield
+use ext.neptune.xfield
 
 use std.io.io
 

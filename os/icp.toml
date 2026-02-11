@@ -1,0 +1,16 @@
+# Internet Computer — canister-based smart contract platform on Wasm
+# https://internetcomputer.org
+
+[os]
+name = "icp"
+display_name = "Internet Computer"
+vm = "wasm"
+
+[runtime]
+binding_prefix = "ext.icp"
+account_model = "canister"
+storage_model = "stable-memory"
+transaction_model = "signed"
+
+[cross_chain]
+protocols = []

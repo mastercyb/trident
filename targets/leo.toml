@@ -1,0 +1,28 @@
+# AVM (Aleo VM) / Leo target configuration
+# https://www.leo-lang.org/
+
+[target]
+name = "leo"
+display_name = "AVM (Leo)"
+architecture = "register"
+output_extension = ".aleo"
+
+[field]
+prime = "2^251 + ..."
+bits = 251
+limbs = 4
+
+[stack]
+depth = 0
+spill_ram_base = 0
+
+[hash]
+function = "Poseidon"
+digest_width = 1
+rate = 2
+
+[extension_field]
+degree = 0
+
+[cost]
+tables = ["constraints"]

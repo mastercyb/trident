@@ -17,7 +17,8 @@
 | Stack depth | 32 GP registers |
 | Output format | Machine code (ELF) |
 | Cost model | Wall-clock time (no proof cost) |
-| Blockchain | None |
+| OS | Linux |
 
 Same `RiscVLowering` as SP1/OpenVM but targeting bare-metal RISC-V, not a
-zkVM. Useful for embedded execution or cross-compilation testing.
+zkVM. Useful for embedded execution, Linux servers, or cross-compilation
+testing.

@@ -1,0 +1,16 @@
+# macOS — Apple operating system
+# Targets: arm64, x86-64
+
+[os]
+name = "macos"
+display_name = "macOS"
+vm = "arm64"         # default; also x86-64
+
+[runtime]
+binding_prefix = "ext.macos"
+account_model = "process"
+storage_model = "filesystem"
+transaction_model = "syscall"
+
+[cross_chain]
+protocols = []

@@ -18,7 +18,7 @@
 | Stack depth | 16 |
 | Output format | `.tasm` |
 | Cost model | 6 tables: processor, hash, u32, op_stack, ram, jump_stack |
-| Blockchain | Neptune |
+| OS | Neptune |
 
 The primary target. Tip5 is the native hash: 5 rounds per permutation,
 6 hash table rows per hash operation.

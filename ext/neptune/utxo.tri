@@ -1,4 +1,4 @@
-module ext.triton.utxo
+module ext.neptune.utxo
 
 use std.io.io
 

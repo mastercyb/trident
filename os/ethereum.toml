@@ -1,0 +1,16 @@
+# Ethereum — decentralized smart contract platform
+# https://ethereum.org
+
+[os]
+name = "ethereum"
+display_name = "Ethereum"
+vm = "evm"
+
+[runtime]
+binding_prefix = "ext.ethereum"
+account_model = "account"
+storage_model = "key-value"
+transaction_model = "signed"
+
+[cross_chain]
+protocols = []

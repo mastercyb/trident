@@ -238,10 +238,10 @@ arithmetic.
 
 | Module | Purpose |
 |--------|---------|
-| `ext.triton.xfield` | Extension field operations |
-| `ext.triton.storage` | Persistent storage |
-| `ext.triton.kernel` | Neptune kernel interface |
-| `ext.triton.utxo` | UTXO verification |
+| `ext.neptune.xfield` | Extension field operations |
+| `ext.neptune.storage` | Persistent storage |
+| `ext.neptune.kernel` | Neptune kernel interface |
+| `ext.neptune.utxo` | UTXO verification |
 
 ---
 

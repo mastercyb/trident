@@ -130,7 +130,7 @@ error: builtin 'xfield' is not available on target 'miden'
 ### Cross-target import **(planned)**
 
 ```
-error: cannot import 'ext.triton.xfield' when compiling for target 'miden'
+error: cannot import 'ext.neptune.xfield' when compiling for target 'miden'
   help: ext.<target>.* modules bind to a specific target
 ```
 

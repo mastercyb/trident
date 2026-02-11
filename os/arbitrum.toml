@@ -1,0 +1,16 @@
+# Arbitrum (Stylus) — EVM-compatible L2 with Wasm smart contracts
+# https://arbitrum.io
+
+[os]
+name = "arbitrum"
+display_name = "Arbitrum (Stylus)"
+vm = "wasm"
+
+[runtime]
+binding_prefix = "ext.arbitrum"
+account_model = "account"
+storage_model = "key-value"
+transaction_model = "signed"
+
+[cross_chain]
+protocols = ["ethereum-l2"]

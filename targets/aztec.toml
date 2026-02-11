@@ -1,0 +1,28 @@
+# Aztec (Noir / ACIR) target configuration
+# https://aztec.network/
+
+[target]
+name = "aztec"
+display_name = "Aztec (Noir)"
+architecture = "circuit"
+output_extension = ".acir"
+
+[field]
+prime = "BN254 scalar"
+bits = 254
+limbs = 4
+
+[stack]
+depth = 0
+spill_ram_base = 0
+
+[hash]
+function = "Poseidon2"
+digest_width = 1
+rate = 8
+
+[extension_field]
+degree = 0
+
+[cost]
+tables = ["gates"]

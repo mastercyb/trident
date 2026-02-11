@@ -1,0 +1,28 @@
+# MoveVM target configuration
+# https://github.com/move-language/move
+
+[target]
+name = "movevm"
+display_name = "MoveVM"
+architecture = "register"
+output_extension = ".mv"
+
+[field]
+prime = "none"
+bits = 64
+limbs = 1
+
+[stack]
+depth = 0
+spill_ram_base = 0
+
+[hash]
+function = "SHA3-256"
+digest_width = 1
+rate = 0
+
+[extension_field]
+degree = 0
+
+[cost]
+tables = ["gas"]

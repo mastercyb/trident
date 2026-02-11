@@ -10,7 +10,7 @@
 |-----------|-------|
 | Architecture | Tree (combinator) |
 | VM | Nock (13 opcodes) |
-| Blockchain | Nockchain |
+| OS | Nockchain |
 | Field | Goldilocks 64-bit (p = 2^64 - 2^32 + 1) |
 | Extension field | Cubic ([Belt; 3] = Felt) |
 | Hash function | Tip5 |
@@ -95,7 +95,7 @@ of interpreting the Nock tree.
 | ExtMul | `[11 %xmul ...]` | EXTENSION_FIELD_JETS |
 | FoldExt | `[11 %fext ...]` | XTRA_JETS |
 
-## Blockchain — Nockchain
+## OS — Nockchain
 
 - **Consensus**: Bitcoin-style PoW with STARK proofs (2016-block epochs)
 - **Block model**: Pages (blocks) containing transactions

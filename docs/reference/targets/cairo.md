@@ -18,7 +18,7 @@
 | Stack depth | 0 (no operand stack — memory-addressed) |
 | Output format | `.sierra` |
 | Cost model | Steps + builtins |
-| Blockchain | Starknet |
+| OS | Starknet |
 
 The 251-bit field means a single field element can hold values that would
 require multiple elements on smaller-field targets. Pedersen hash has a narrow

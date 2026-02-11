@@ -1,0 +1,16 @@
+# Browser — web browser runtime (JS + WASM)
+# Target: wasm
+
+[os]
+name = "browser"
+display_name = "Browser"
+vm = "wasm"
+
+[runtime]
+binding_prefix = "ext.browser"
+account_model = "tab"
+storage_model = "indexeddb"
+transaction_model = "event-loop"
+
+[cross_chain]
+protocols = []

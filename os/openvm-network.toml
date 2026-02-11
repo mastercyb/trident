@@ -1,0 +1,16 @@
+# OpenVM Network — verifiable compute network powered by OpenVM
+# https://openvm.dev
+
+[os]
+name = "openvm-network"
+display_name = "OpenVM Network"
+vm = "openvm"
+
+[runtime]
+binding_prefix = "ext.openvm-network"
+account_model = "journal"
+storage_model = "none"
+transaction_model = "proof-based"
+
+[cross_chain]
+protocols = []
