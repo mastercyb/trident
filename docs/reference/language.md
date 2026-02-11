@@ -185,6 +185,14 @@ WRONG: recursive calls  ->  not allowed; call graph must be acyclic
 
 ---
 
+# Part I — Universal Language (Tier 0 + Tier 1)
+
+Everything here works on every target. A program that uses only Part I
+features compiles for Triton VM, Miden VM, SP1, OpenVM, Cairo, and any
+future target.
+
+---
+
 ## 1. Programs and Modules
 
 Every `.tri` file starts with exactly one of:
@@ -255,20 +263,12 @@ entry = "main.tri"
 
 ### Primitive Types
 
-**Universal — all targets:**
-
 | Type | Width | Description |
 |------|------:|-------------|
 | `Field` | 1 | Native field element of the target VM |
 | `Bool` | 1 | Field constrained to {0, 1} |
 | `U32` | 1 | Unsigned 32-bit integer, range-checked |
 | `Digest` | D | Hash digest `[Field; D]` — universal content identifier |
-
-**Tier 2 — extension field targets only:**
-
-| Type | Width | Description |
-|------|------:|-------------|
-| `XField` | E | Extension field element where E = extension degree |
 
 `Field` means "element of the target VM's native field." Programs reason about
 field arithmetic abstractly; the target implements it concretely.
@@ -277,11 +277,10 @@ field arithmetic abstractly; the target implements it concretely.
 It is a content identifier: the fixed-width fingerprint of arbitrary data. The
 width D varies by target (5 on Triton, 4 on Miden, 8 on SP1/OpenVM, 1 on Cairo).
 
-`XField` is only available on targets with extension field support (currently
-Triton VM, degree 3). See [targets.md](targets.md) for all target parameters.
-
 No implicit conversions. `Field` and `U32` do not auto-convert. Use `as_field()`
 and `as_u32()` (the latter inserts a range check).
+
+For extension field types, see [Part II: Provable Types](#11-provable-types).
 
 ### Composite Types
 
@@ -307,8 +306,7 @@ Widths marked with a variable are resolved from the target configuration.
 | `Field` | 1 | |
 | `Bool` | 1 | |
 | `U32` | 1 | |
-| `Digest` | D | D = `digest_width` from target config (universal) |
-| `XField` | E | E = `xfield_width` from target config (Tier 2, 0 = unavailable) |
+| `Digest` | D | D = `digest_width` from target config |
 | `[T; N]` | N * width(T) | |
 | `(T1, T2)` | width(T1) + width(T2) | |
 | `struct` | sum of field widths | |
@@ -370,8 +368,8 @@ event Transfer { from: Digest, to: Digest, amount: Field }
 ```
 
 Events are declared at module scope. Fields must be `Field`-width types.
-Events are emitted with `reveal` (public) or `seal` (committed). See
-[Section 6: Events](#6-events).
+Maximum 9 fields. Events are emitted with `reveal` (public) or `seal`
+(committed) — see [Part II: Events](#15-events).
 
 ### Constants
 
@@ -397,8 +395,6 @@ sec ram: { 17: Field, 42: Field }   // pre-initialized RAM slots
 
 ### Operator Table
 
-**Tier 1 — all targets:**
-
 | Operator | Operand types | Result type | Description |
 |----------|---------------|-------------|-------------|
 | `a + b` | Field, Field | Field | Field addition |
@@ -410,14 +406,10 @@ sec ram: { 17: Field, 42: Field }   // pre-initialized RAM slots
 | `a ^ b` | U32, U32 | U32 | Bitwise XOR |
 | `a /% b` | U32, U32 | (U32, U32) | Division + remainder |
 
-**Tier 2 — XField targets only:**
-
-| Operator | Operand types | Result type | Description |
-|----------|---------------|-------------|-------------|
-| `a *. s` | XField, Field | XField | Scalar multiplication |
-
 No subtraction operator (`-`). No division operator (`/`). No `!=`, `>`, `<=`,
 `>=`. No `&&`, `||`, `!`. Use builtins: `sub(a, b)`, `neg(a)`, `inv(a)`.
+
+For extension field operators, see [Part II: Provable Operators](#12-provable-operators).
 
 ### Other Expressions
 
@@ -509,34 +501,9 @@ fn foo(x: Field) -> Field {
 
 ---
 
-## 6. Events
+## 6. Builtin Functions
 
-Events provide structured data output during proof execution.
-
-### Reveal (Public Output)
-
-```
-reveal Transfer { from: sender, to: receiver, amount: value }
-```
-
-Each field is written to public output. The verifier sees all data.
-
-### Seal (Committed Secret)
-
-```
-seal Transfer { from: sender, to: receiver, amount: value }
-```
-
-Fields are hashed via the sponge construction. Only the commitment digest is
-written to public output. The verifier sees the commitment, not the data.
-
----
-
-## 7. Builtin Functions
-
-### Tier 1 — Universal (all targets)
-
-#### I/O and Non-Deterministic Input
+### I/O and Non-Deterministic Input
 
 | Signature | Description |
 |-----------|-------------|
@@ -548,7 +515,7 @@ written to public output. The verifier sees the commitment, not the data.
 | `divine3() -> (Field, Field, Field)` | Read 3 secret inputs |
 | `divine5() -> Digest` | Read D secret inputs as Digest |
 
-#### Field Arithmetic
+### Field Arithmetic
 
 | Signature | Description |
 |-----------|-------------|
@@ -556,7 +523,7 @@ written to public output. The verifier sees the commitment, not the data.
 | `neg(a: Field) -> Field` | Additive inverse: p - a |
 | `inv(a: Field) -> Field` | Multiplicative inverse |
 
-#### U32 Operations
+### U32 Operations
 
 | Signature | Description |
 |-----------|-------------|
@@ -567,7 +534,7 @@ written to public output. The verifier sees the commitment, not the data.
 | `pow(base: U32, exp: U32) -> U32` | Exponentiation |
 | `popcount(a: U32) -> U32` | Hamming weight (bit count) |
 
-#### Assertions
+### Assertions
 
 | Signature | Description |
 |-----------|-------------|
@@ -575,7 +542,7 @@ written to public output. The verifier sees the commitment, not the data.
 | `assert_eq(a: Field, b: Field)` | Assert equality |
 | `assert_digest(a: Digest, b: Digest)` | Assert digest equality |
 
-#### Memory
+### Memory
 
 | Signature | Description |
 |-----------|-------------|
@@ -584,41 +551,12 @@ written to public output. The verifier sees the commitment, not the data.
 | `ram_read_block(addr) -> [Field; D]` | Read D words (D = digest width) |
 | `ram_write_block(addr, vals)` | Write D words |
 
-### Tier 2 — Provable (hash-capable targets)
-
-These builtins require a target with native hash coprocessor support. The
-argument counts (rate R, digest width D) are target-dependent. On Triton VM:
-R = 10, D = 5. On Miden: R = 8, D = 4. See [targets.md](targets.md).
-
-#### Hash Operations
-
-| Signature | Description |
-|-----------|-------------|
-| `hash(fields: Field x R) -> Digest` | Hash R field elements into a Digest |
-| `sponge_init()` | Initialize sponge state |
-| `sponge_absorb(fields: Field x R)` | Absorb R fields |
-| `sponge_absorb_mem(ptr: Field)` | Absorb R fields from RAM |
-| `sponge_squeeze() -> [Field; R]` | Squeeze R fields |
-
-#### Merkle Operations
-
-| Signature | Description |
-|-----------|-------------|
-| `merkle_step(idx: U32, d: Digest) -> (U32, Digest)` | One tree level up |
-| `merkle_step_mem(ptr, idx, d) -> (Field, U32, Digest)` | Tree level from RAM |
-
-#### Extension Field (XField targets only)
-
-| Signature | Description |
-|-----------|-------------|
-| `xfield(x0, ..., xE) -> XField` | Construct XField (E = extension degree) |
-| `xinvert(a: XField) -> XField` | XField inverse |
-| `xx_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)` | XField dot product step |
-| `xb_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)` | Mixed dot product step |
+For hash, sponge, Merkle, and extension field builtins, see
+[Part II: Provable Extensions](#part-ii--provable-extensions-tier-2).
 
 ---
 
-## 8. Attributes
+## 7. Attributes
 
 | Attribute | Meaning |
 |-----------|---------|
@@ -647,7 +585,7 @@ fn test_withdraw() {
 
 ---
 
-## 9. Memory Model
+## 8. Memory Model
 
 ### Stack
 
@@ -677,7 +615,7 @@ usage and predictable trace length.
 
 ---
 
-## 10. Inline Assembly
+## 9. Inline Assembly
 
 ```
 asm { dup 0 add }                   // zero net stack effect (default)
@@ -697,7 +635,7 @@ the compiler's stack model.
 
 ---
 
-## 11. Type Checking Rules
+## 10. Type Checking Rules
 
 - No implicit conversions between any types
 - No recursion — the compiler rejects call cycles across all modules
@@ -706,13 +644,194 @@ the compiler's stack model.
   `sponge_init`, etc.)
 - `#[intrinsic]` only allowed in std modules
 - `asm` blocks tagged for a different target are rejected
-- `reveal`/`seal` must reference a declared event with matching field types
 - Dead code after unconditional halt/assert is rejected
 - Unused imports produce warnings
 
 ---
 
-## 12. Standard Library
+# Part II — Provable Extensions (Tier 2)
+
+Hash, Merkle, sponge, events, and extension field operations. These require
+a provable target with native coprocessor support: **Triton VM** or **Miden VM**.
+
+Programs using any Part II feature cannot compile for Tier 1-only targets
+(SP1, OpenVM, Cairo). See [targets.md](targets.md) for tier compatibility.
+
+---
+
+## 11. Provable Types
+
+### XField — Extension Field Element
+
+| Type | Width | Description |
+|------|------:|-------------|
+| `XField` | E | Extension field element, E = extension degree |
+
+`XField` is only available on targets with extension field support (currently
+Triton VM, degree 3). On all other targets, `xfield_width = 0` and using
+`XField` is a compile error.
+
+| Type | Width | Notes |
+|------|-------|-------|
+| `XField` | E | E = `xfield_width` from target config (0 = unavailable) |
+
+See [targets.md](targets.md) for per-target XField availability.
+
+---
+
+## 12. Provable Operators
+
+### Scalar Multiplication
+
+| Operator | Operand types | Result type | Description |
+|----------|---------------|-------------|-------------|
+| `a *. s` | XField, Field | XField | Scalar multiplication |
+
+Only available on XField-capable targets (currently Triton VM).
+
+---
+
+## 13. Hash and Sponge Builtins
+
+These builtins require a target with native hash coprocessor support. The
+argument counts (rate R, digest width D) are target-dependent. On Triton VM:
+R = 10, D = 5. On Miden: R = 8, D = 4. See [targets.md](targets.md).
+
+### Hash
+
+| Signature | Description |
+|-----------|-------------|
+| `hash(fields: Field x R) -> Digest` | Hash R field elements into a Digest |
+
+### Sponge Construction
+
+| Signature | Description |
+|-----------|-------------|
+| `sponge_init()` | Initialize sponge state |
+| `sponge_absorb(fields: Field x R)` | Absorb R fields |
+| `sponge_absorb_mem(ptr: Field)` | Absorb R fields from RAM |
+| `sponge_squeeze() -> [Field; R]` | Squeeze R fields |
+
+The sponge API enables incremental hashing of data larger than R fields.
+Initialize, absorb in chunks, squeeze the result.
+
+---
+
+## 14. Merkle Builtins
+
+| Signature | Description |
+|-----------|-------------|
+| `merkle_step(idx: U32, d: Digest) -> (U32, Digest)` | One tree level up |
+| `merkle_step_mem(ptr, idx, d) -> (Field, U32, Digest)` | Tree level from RAM |
+
+`merkle_step` authenticates one level of a Merkle tree. Call it in a loop
+to verify a full Merkle path:
+
+```
+pub fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
+    let mut idx = index
+    let mut current = leaf
+    for _ in 0..depth bounded 64 {
+        (idx, current) = merkle_step(idx, current)
+    }
+    assert_digest(current, root)
+}
+```
+
+---
+
+## 15. Events
+
+Events provide structured data output during proof execution.
+
+### Declaration
+
+Events are declared at module scope (see [Section 3](#3-declarations)):
+
+```
+event Transfer { from: Digest, to: Digest, amount: Field }
+```
+
+Fields must be `Field`-width types. Maximum 9 fields.
+
+### Reveal (Public Output)
+
+```
+reveal Transfer { from: sender, to: receiver, amount: value }
+```
+
+Each field is written to public output. The verifier sees all data.
+
+### Seal (Committed Secret)
+
+```
+seal Transfer { from: sender, to: receiver, amount: value }
+```
+
+Fields are hashed via the sponge construction. Only the commitment digest is
+written to public output. The verifier sees the commitment, not the data.
+
+`seal` requires sponge support (Tier 2). `reveal` writes to public I/O and
+is conceptually Tier 1, but is grouped here because events are the provable
+communication mechanism.
+
+---
+
+## 16. Extension Field Builtins
+
+Available only on XField-capable targets (currently Triton VM).
+
+| Signature | Description |
+|-----------|-------------|
+| `xfield(x0, ..., xE) -> XField` | Construct XField (E = extension degree) |
+| `xinvert(a: XField) -> XField` | XField inverse |
+| `xx_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)` | XField dot product step |
+| `xb_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)` | Mixed dot product step |
+
+These are the building blocks for inner product arguments and FRI
+verification — the core of recursive proof composition.
+
+---
+
+# Part III — Recursive Verification (Tier 3)
+
+Proofs that verify other proofs. **Triton VM only.**
+
+---
+
+## 17. Proof Composition
+
+Tier 3 enables a program to verify another program's proof inside its own
+execution. This is STARK-in-STARK recursion: the verifier circuit runs as
+part of the prover's trace.
+
+```
+// Verify a proof of program_hash and use its public output
+proof_block(program_hash) {
+    // verification circuit runs here
+    // public outputs of the inner proof become available
+}
+```
+
+Tier 3 uses the extension field builtins from [Section 16](#16-extension-field-builtins)
+plus dedicated IR operations:
+
+- **ProofBlock** — Wraps a recursive verification circuit
+- **FoldExt / FoldBase** — FRI folding over extension / base field
+- **ExtMul / ExtInvert** — Extension field arithmetic for the verifier
+
+See [ir.md Part I, Tier 3](ir.md) for the full list of 5 recursive operations.
+
+Only Triton VM supports Tier 3. Programs using proof composition cannot
+compile for any other target.
+
+---
+
+# Part IV — Reference
+
+---
+
+## 18. Standard Library
 
 ### Universal Modules (`std.*`)
 
@@ -742,7 +861,7 @@ rejects cross-target imports.
 
 ---
 
-## 13. CLI Reference
+## 19. CLI Reference
 
 ```bash
 # Build
@@ -784,7 +903,7 @@ trident lsp                             # Start LSP server
 
 ---
 
-## 14. Grammar (EBNF)
+## 20. Grammar (EBNF)
 
 ```ebnf
 (* Top-level *)
@@ -877,7 +996,7 @@ comment       = "//" .* NEWLINE ;
 
 ---
 
-## 15. Permanent Exclusions
+## 21. Permanent Exclusions
 
 These are design decisions, not roadmap items.
 
@@ -900,9 +1019,9 @@ These are design decisions, not roadmap items.
 
 ---
 
-## 16. Common Patterns
+## 22. Common Patterns
 
-### Read-Compute-Write
+### Read-Compute-Write (Universal)
 
 ```
 fn main() {
@@ -912,7 +1031,7 @@ fn main() {
 }
 ```
 
-### Accumulator
+### Accumulator (Universal)
 
 ```
 fn sum<N>(arr: [Field; N]) -> Field {
@@ -922,7 +1041,7 @@ fn sum<N>(arr: [Field; N]) -> Field {
 }
 ```
 
-### Non-Deterministic Verification
+### Non-Deterministic Verification (Universal)
 
 ```
 fn prove_sqrt(x: Field) {
@@ -931,7 +1050,7 @@ fn prove_sqrt(x: Field) {
 }
 ```
 
-### Merkle Proof Verification
+### Merkle Proof Verification (Tier 2)
 
 ```
 module merkle
@@ -946,7 +1065,7 @@ pub fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
 }
 ```
 
-### Event Emission
+### Event Emission (Tier 2)
 
 ```
 event Transfer { from: Digest, to: Digest, amount: Field }

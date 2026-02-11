@@ -34,7 +34,7 @@ error: non-ASCII byte 0xNN at position N
 
 Trident source is ASCII-only. Unicode identifiers are not supported.
 
-**Spec:** language.md Section 14 (IDENT production).
+**Spec:** language.md Section 20 (IDENT production).
 
 ---
 
@@ -182,7 +182,7 @@ error: unexpected '"'; Trident has no string type
   help: strings are a permanent exclusion — no target VM supports string operations
 ```
 
-**Spec:** language.md Section 2, Section 15 (permanent exclusion).
+**Spec:** language.md Section 2, Section 21 (permanent exclusion).
 
 ---
 
@@ -380,7 +380,7 @@ error: 'while' is not supported
   help: use `for i in 0..n bounded N { }` with a declared bound
 ```
 
-**Spec:** language.md Section 5, Section 15 (permanent exclusion).
+**Spec:** language.md Section 5, Section 21 (permanent exclusion).
 
 ---
 
@@ -391,7 +391,7 @@ error: 'loop' is not supported
   help: use `for` with a bounded range
 ```
 
-**Spec:** language.md Section 5, Section 15 (permanent exclusion).
+**Spec:** language.md Section 5, Section 21 (permanent exclusion).
 
 ---
 
@@ -402,7 +402,7 @@ error: 'break' is not supported in Trident
   help: all loops run for their full declared bound
 ```
 
-**Spec:** language.md Section 5, Section 15 (permanent exclusion).
+**Spec:** language.md Section 5, Section 21 (permanent exclusion).
 
 ---
 
@@ -412,7 +412,7 @@ error: 'break' is not supported in Trident
 error: 'continue' is not supported in Trident
 ```
 
-**Spec:** language.md Section 5, Section 15 (permanent exclusion).
+**Spec:** language.md Section 5, Section 21 (permanent exclusion).
 
 ---
 
@@ -423,7 +423,7 @@ error: 'enum' is not supported; Trident has no sum types
   help: use struct + integer tag for variant patterns
 ```
 
-**Spec:** language.md Section 2, Section 15 (no enums, no sum types).
+**Spec:** language.md Section 2, Section 21 (no enums, no sum types).
 
 ---
 
@@ -433,7 +433,7 @@ error: 'enum' is not supported; Trident has no sum types
 error: 'trait' is not supported in Trident
 ```
 
-**Spec:** language.md Section 15 (permanent exclusion).
+**Spec:** language.md Section 21 (permanent exclusion).
 
 ---
 
@@ -443,7 +443,7 @@ error: 'trait' is not supported in Trident
 error: 'impl' is not supported; use free functions
 ```
 
-**Spec:** language.md Section 15 (permanent exclusion).
+**Spec:** language.md Section 21 (permanent exclusion).
 
 ---
 
@@ -453,7 +453,7 @@ error: 'impl' is not supported; use free functions
 error: macros are not supported in Trident
 ```
 
-**Spec:** language.md Section 15 (permanent exclusion).
+**Spec:** language.md Section 21 (permanent exclusion).
 
 ---
 
@@ -464,7 +464,7 @@ error: closures are not supported in Trident
   help: use named functions instead
 ```
 
-**Spec:** language.md Section 3, Section 15 (no closures).
+**Spec:** language.md Section 3, Section 21 (no closures).
 
 ---
 
@@ -488,7 +488,7 @@ error: let binding requires a type annotation
   help: write `let x: Field = ...` not `let x = ...`
 ```
 
-**Spec:** language.md Section 5, Section 14 (let_stmt grammar includes type).
+**Spec:** language.md Section 5, Section 20 (let_stmt grammar includes type).
 
 ---
 
@@ -521,7 +521,7 @@ error: 'try'/'catch'/'throw' are not supported
   help: use `assert` for failure — proof generation becomes impossible on assert failure
 ```
 
-**Spec:** language.md Section 15 (permanent exclusion).
+**Spec:** language.md Section 21 (permanent exclusion).
 
 ---
 
@@ -532,7 +532,7 @@ error: 'async'/'await'/'spawn' are not supported
   help: Trident execution is sequential; concurrency is handled at the runtime level
 ```
 
-**Spec:** language.md Section 15 (permanent exclusion).
+**Spec:** language.md Section 21 (permanent exclusion).
 
 ---
 
@@ -543,7 +543,7 @@ error: pointers and references ('&', '*') are not supported
   help: all values are passed by copy on the stack
 ```
 
-**Spec:** language.md Section 2, Section 9, Section 15 (no heap, no pointers).
+**Spec:** language.md Section 2, Section 8, Section 21 (no heap, no pointers).
 
 ---
 
@@ -661,7 +661,7 @@ error: cannot implicitly convert U32 to Field
 
 No automatic coercion between types. All conversions must be explicit.
 
-**Spec:** language.md Section 2, Section 11 (no implicit conversions).
+**Spec:** language.md Section 2, Section 10 (no implicit conversions).
 
 ---
 
@@ -885,7 +885,7 @@ error: unreachable code after unconditional halt
   help: code after `assert(false)` or `halt` can never execute
 ```
 
-**Spec:** language.md Section 11 (dead code after halt/assert rejected).
+**Spec:** language.md Section 10 (dead code after halt/assert rejected).
 
 ---
 
@@ -907,7 +907,7 @@ error: type-level generics are not supported
   help: only size parameters (integers) are allowed: `fn foo<N>(...)`
 ```
 
-**Spec:** language.md Section 3, Section 15 (only integer size parameters).
+**Spec:** language.md Section 3, Section 21 (only integer size parameters).
 
 ---
 
@@ -953,7 +953,7 @@ error: floating-point types are not supported
   help: use Field for arithmetic — all computation is over finite fields
 ```
 
-**Spec:** language.md Section 2, Section 15 (permanent exclusion).
+**Spec:** language.md Section 2, Section 21 (permanent exclusion).
 
 ---
 
@@ -1174,7 +1174,7 @@ error: reveal field 'amount': expected Field but got Bool
 
 The expression type does not match the event field's declared type.
 
-**Spec:** language.md Section 6, Section 11 (reveal/seal must match event
+**Spec:** language.md Section 15, Section 10 (reveal/seal must match event
 with matching field types).
 
 ---
@@ -1185,7 +1185,7 @@ with matching field types).
 error: event 'Transfer' is already defined
 ```
 
-**Spec:** language.md Section 14 (items are unique within a module).
+**Spec:** language.md Section 20 (items are unique within a module).
 
 ---
 
@@ -1232,7 +1232,7 @@ error: unknown attribute '#[foo]'
   help: valid attributes are: cfg, test, pure, intrinsic, requires, ensures
 ```
 
-**Spec:** language.md Section 8 (closed set of attributes).
+**Spec:** language.md Section 7 (closed set of attributes).
 
 ---
 
@@ -1242,7 +1242,7 @@ error: unknown attribute '#[foo]'
 error: duplicate attribute '#[pure]' on function 'foo'
 ```
 
-**Spec:** language.md Section 8.
+**Spec:** language.md Section 7.
 
 ---
 
@@ -1253,7 +1253,7 @@ error: unknown cfg flag 'unknown_flag'
   help: valid cfg flags are target-specific and project-defined
 ```
 
-**Spec:** language.md Section 8 (cfg conditional compilation).
+**Spec:** language.md Section 7 (cfg conditional compilation).
 
 ---
 
@@ -1322,7 +1322,7 @@ error: module 'my_module' must not define `fn main()`
 error: duplicate struct definition 'Point'
 ```
 
-**Spec:** language.md Section 14 (items are unique within a module).
+**Spec:** language.md Section 20 (items are unique within a module).
 
 ---
 
@@ -1332,7 +1332,7 @@ error: duplicate struct definition 'Point'
 error: duplicate constant definition 'MAX'
 ```
 
-**Spec:** language.md Section 14 (items are unique within a module).
+**Spec:** language.md Section 20 (items are unique within a module).
 
 ---
 
@@ -1406,7 +1406,7 @@ error: type 'XField' is not available on target 'miden' (xfield_width = 0)
   help: XField requires a target with extension field support (currently: triton)
 ```
 
-**Spec:** language.md Section 2, targets.md (XField = Tier 2, extension field
+**Spec:** language.md Section 11, targets.md (XField = Tier 2, extension field
 targets only).
 
 ---
@@ -1418,7 +1418,7 @@ error: operator '*.' (scalar multiply) is not available on target 'miden'
   help: '*.' requires XField support (currently: triton only)
 ```
 
-**Spec:** language.md Section 4 (Tier 2 operator), targets.md.
+**Spec:** language.md Section 12 (Tier 2 operator), targets.md.
 
 ---
 
@@ -1429,7 +1429,7 @@ error: builtin 'hash' is not available on target 'sp1' (Tier 2 required)
   help: hash/sponge operations require a target with native hash coprocessor (triton, miden)
 ```
 
-**Spec:** language.md Section 7, targets.md (hash = Tier 2).
+**Spec:** language.md Section 13, targets.md (hash = Tier 2).
 
 ---
 
@@ -1440,7 +1440,7 @@ error: builtin 'sponge_init' is not available on target 'sp1'
   help: sponge operations require a Tier 2 target (triton, miden)
 ```
 
-**Spec:** language.md Section 7, targets.md (sponge = Tier 2).
+**Spec:** language.md Section 13, targets.md (sponge = Tier 2).
 
 ---
 
@@ -1451,7 +1451,7 @@ error: builtin 'merkle_step' is not available on target 'sp1'
   help: Merkle operations require a Tier 2 target (triton, miden)
 ```
 
-**Spec:** language.md Section 7, targets.md (merkle = Tier 2).
+**Spec:** language.md Section 14, targets.md (merkle = Tier 2).
 
 ---
 
@@ -1462,7 +1462,7 @@ error: builtin 'xfield' is not available on target 'miden'
   help: extension field builtins require XField support (currently: triton only)
 ```
 
-**Spec:** language.md Section 7, targets.md (XField builtins = Triton only).
+**Spec:** language.md Section 16, targets.md (XField builtins = Triton only).
 
 ---
 
@@ -1476,7 +1476,7 @@ error: cannot import 'ext.triton.xfield' when compiling for target 'miden'
 Importing `ext.<target>.*` binds the program to that target. Compiling
 for a different target is a hard error.
 
-**Spec:** language.md Section 12, targets.md (cross-target imports rejected).
+**Spec:** language.md Section 18, targets.md (cross-target imports rejected).
 
 ---
 
@@ -1500,7 +1500,7 @@ error: hash() requires 10 field arguments on target 'triton', got 8
 
 The number of arguments to `hash()` must match the target's hash rate R.
 
-**Spec:** language.md Section 7 (hash takes R elements, R is target-dependent).
+**Spec:** language.md Section 13 (hash takes R elements, R is target-dependent).
 
 ---
 
@@ -1511,7 +1511,7 @@ error: sponge_absorb() requires 10 field arguments on target 'triton', got 5
   help: sponge rate R = 10 for Triton VM; see targets.md for per-target rates
 ```
 
-**Spec:** language.md Section 7 (sponge_absorb takes R elements).
+**Spec:** language.md Section 13 (sponge_absorb takes R elements).
 
 ---
 
@@ -1528,7 +1528,7 @@ error: builtin 'sub' expects (Field, Field), got (U32, U32)
   help: sub() operates on Field values; convert with as_field() first
 ```
 
-**Spec:** language.md Section 7 (each builtin has specific argument types).
+**Spec:** language.md Section 6 (each builtin has specific argument types).
 
 ---
 
@@ -1538,7 +1538,7 @@ error: builtin 'sub' expects (Field, Field), got (U32, U32)
 error: builtin 'split' expects 1 argument, got 2
 ```
 
-**Spec:** language.md Section 7.
+**Spec:** language.md Section 6.
 
 ---
 
@@ -1548,7 +1548,7 @@ error: builtin 'split' expects 1 argument, got 2
 error: assert() requires Bool argument, got Digest
 ```
 
-**Spec:** language.md Section 7 (assert(cond: Bool)).
+**Spec:** language.md Section 6 (assert(cond: Bool)).
 
 ---
 
@@ -1559,7 +1559,7 @@ error: assert_eq() requires (Field, Field), got (Bool, Bool)
   help: use `assert(a == b)` for Bool equality
 ```
 
-**Spec:** language.md Section 7 (assert_eq takes Field, Field).
+**Spec:** language.md Section 6 (assert_eq takes Field, Field).
 
 ---
 
@@ -1569,7 +1569,7 @@ error: assert_eq() requires (Field, Field), got (Bool, Bool)
 error: assert_digest() requires (Digest, Digest), got (Field, Field)
 ```
 
-**Spec:** language.md Section 7.
+**Spec:** language.md Section 6.
 
 ---
 
@@ -1579,7 +1579,7 @@ error: assert_digest() requires (Digest, Digest), got (Field, Field)
 error: ram_read() address must be Field, got Bool
 ```
 
-**Spec:** language.md Section 7, Section 9 (RAM: word-addressed by Field).
+**Spec:** language.md Section 6, Section 8 (RAM: word-addressed by Field).
 
 ---
 
@@ -1595,7 +1595,7 @@ error: asm block declared effect '+1' but actual stack effect differs
 The compiler trusts the declared effect but may detect mismatches when the
 surrounding code's stack doesn't balance.
 
-**Spec:** language.md Section 10 (effect annotation is the contract).
+**Spec:** language.md Section 9 (effect annotation is the contract).
 
 ---
 
@@ -1609,7 +1609,7 @@ error: asm block not allowed in #[pure] function
 Since the compiler cannot verify what inline assembly does, it's incompatible
 with the `#[pure]` guarantee.
 
-**Spec:** language.md Section 8 (pure = no I/O), Section 10.
+**Spec:** language.md Section 7 (pure = no I/O), Section 9.
 
 ---
 
@@ -1755,7 +1755,7 @@ The compiler's LRU spill policy pushed a variable to RAM unnecessarily.
 
 **Action:** Reorder variable declarations or split large blocks into functions.
 
-**Spec:** language.md Section 9 (stack: 16 elements, LRU spill to RAM).
+**Spec:** language.md Section 8 (stack: 16 elements, LRU spill to RAM).
 
 ---
 
