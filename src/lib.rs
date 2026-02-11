@@ -5,7 +5,7 @@ pub mod cost;
 pub mod frontend;
 pub mod pkgmgmt;
 pub mod tools;
-pub mod typeck;
+pub mod typecheck;
 pub mod verify;
 
 // Re-exports — preserves all `crate::X` paths
@@ -51,7 +51,7 @@ use linker::{link, ModuleTasm};
 use parser::Parser;
 use resolve::{resolve_modules, resolve_modules_with_deps};
 use target::TargetConfig;
-use typeck::{ModuleExports, TypeChecker};
+use typecheck::{ModuleExports, TypeChecker};
 
 /// Options controlling compilation: VM target + conditional compilation flags.
 #[derive(Clone, Debug)]
@@ -371,7 +371,7 @@ pub fn run_tests(
     }
 
     // Type-check all modules in order, collecting exports
-    let mut all_exports: Vec<typeck::ModuleExports> = Vec::new();
+    let mut all_exports: Vec<typecheck::ModuleExports> = Vec::new();
     for (_module_name, file_path, source, file) in &parsed_modules {
         let mut tc = TypeChecker::with_target(options.target_config.clone())
             .with_cfg_flags(options.cfg_flags.clone());

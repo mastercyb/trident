@@ -9,7 +9,7 @@ source.tri
  frontend/     lexer -> parser -> AST
     |
     v
- typeck/       type checking, borrow checking, generics
+ typecheck/    type checking, borrow checking, generics
     |
     v
  codegen/      AST -> target assembly (via StackBackend trait)
@@ -33,7 +33,7 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 |--------|----:|--------------|
 | `common/` | 314 | Shared infrastructure: source spans, diagnostics, type definitions |
 | `frontend/` | 4,392 | Lexer, parser, token definitions, pretty-printer/formatter |
-| `typeck/` | 3,004 | Type checker with borrow analysis, generics, and builtin registration |
+| `typecheck/` | 3,004 | Type checker with borrow analysis, generics, and builtin registration |
 | `codegen/` | 4,189 | AST-to-assembly emitter, stack manager, linker, backend trait |
 | `codegen/backend/` | 802 | `StackBackend` trait + five target implementations (Triton, Miden, OpenVM, SP1, Cairo) |
 | `cost/` | 2,335 | Static cost analyzer, per-function cost breakdown, optimization hints |
@@ -55,7 +55,7 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 
 **Frontend** (`frontend/`). The lexer (`lexer.rs`) tokenizes source into the token types defined in `lexeme.rs`. The parser (`parser.rs`) produces a typed AST (`ast.rs`). The formatter (`format.rs`) can pretty-print any AST back to canonical source.
 
-**Type Checking** (`typeck/`). The type checker validates types, resolves generics via monomorphization, performs borrow/move analysis, and registers builtin function signatures (`builtins.rs`). Diagnostics are emitted for type mismatches, undefined variables, unused bindings, and borrow violations.
+**Type Checking** (`typecheck/`). The type checker validates types, resolves generics via monomorphization, performs borrow/move analysis, and registers builtin function signatures (`builtins.rs`). Diagnostics are emitted for type mismatches, undefined variables, unused bindings, and borrow violations.
 
 **Code Generation** (`codegen/`). The emitter (`emitter.rs`) walks the typed AST and produces target assembly by calling methods on a `StackBackend` trait (`backend/mod.rs`). Each target (Triton, Miden, OpenVM, SP1, Cairo) implements this trait in its own file. The stack manager (`stack.rs`) tracks operand positions with automatic RAM spill/reload. The linker (`linker.rs`) resolves cross-module calls.
 

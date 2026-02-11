@@ -4,7 +4,7 @@ use super::stack::StackManager;
 use crate::ast::*;
 use crate::span::Spanned;
 use crate::target::TargetConfig;
-use crate::typeck::MonoInstance;
+use crate::typecheck::MonoInstance;
 
 pub(crate) use super::backend::create_backend;
 #[allow(unused_imports)] // backends used in tests

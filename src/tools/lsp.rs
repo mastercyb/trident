@@ -8,7 +8,7 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use crate::ast::{self, Item};
 use crate::resolve::resolve_modules;
-use crate::typeck::{ModuleExports, TypeChecker};
+use crate::typecheck::{ModuleExports, TypeChecker};
 use crate::types::Ty;
 
 pub struct TridentLsp {

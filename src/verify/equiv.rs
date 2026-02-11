@@ -501,7 +501,7 @@ fn check_differential(file: &File, fn_a: &str, fn_b: &str) -> EquivalenceResult 
     };
 
     // Type-check the synthetic program.
-    if let Err(_) = crate::typeck::TypeChecker::new().check_file(&parsed) {
+    if let Err(_) = crate::typecheck::TypeChecker::new().check_file(&parsed) {
         return EquivalenceResult {
             fn_a: fn_a.to_string(),
             fn_b: fn_b.to_string(),
