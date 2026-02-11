@@ -62,7 +62,7 @@ impl TritonLowering {
             IROp::Pow => out.push("    pow".to_string()),
             IROp::PopCount => out.push("    pop_count".to_string()),
 
-            // ── Extension field ──
+            // ── Extension field (Triton-native) ──
             IROp::XbMul => out.push("    xb_mul".to_string()),
             IROp::XInvert => out.push("    x_invert".to_string()),
             IROp::XxDotStep => out.push("    xx_dot_step".to_string()),

@@ -67,11 +67,11 @@ impl MidenLowering {
             IROp::Pow => self.emit(out, "exp"),
             IROp::PopCount => self.emit(out, "u32popcnt"),
 
-            // ── Extension field ──
-            IROp::XbMul => self.emit(out, "# xb_mul (unsupported on miden)"),
-            IROp::XInvert => self.emit(out, "# x_invert (unsupported on miden)"),
-            IROp::XxDotStep => self.emit(out, "# xx_dot_step (unsupported on miden)"),
-            IROp::XbDotStep => self.emit(out, "# xb_dot_step (unsupported on miden)"),
+            // ── Extension field (Triton-native; no Miden equivalent) ──
+            IROp::XbMul => self.emit(out, "# xb_mul (Triton-only, no Miden equivalent)"),
+            IROp::XInvert => self.emit(out, "# x_invert (Triton-only, no Miden equivalent)"),
+            IROp::XxDotStep => self.emit(out, "# xx_dot_step (Triton-only, no Miden equivalent)"),
+            IROp::XbDotStep => self.emit(out, "# xb_dot_step (Triton-only, no Miden equivalent)"),
 
             // ── I/O ──
             IROp::ReadIo(n) => {

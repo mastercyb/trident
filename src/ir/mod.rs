@@ -37,7 +37,7 @@ pub enum IROp {
     Pow,
     PopCount,
 
-    // ── Extension field ──
+    // ── Extension field (target-specific; native on Triton, unsupported elsewhere) ──
     XbMul,
     XInvert,
     XxDotStep,

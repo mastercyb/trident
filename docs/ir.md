@@ -74,11 +74,13 @@ src/codegen/ir/                    ← backward-compatible re-exports only
 
 ## IROp: The Operation Set
 
-`IROp` is an enum with ~50 variants in 9 groups. Every variant is
-target-independent — no `skiz`, `recurse`, `if.true`, or `proc` in the IR.
+`IROp` is an enum with ~50 variants. The core ops are target-independent — no
+`skiz`, `recurse`, `if.true`, or `proc` in the IR. A small number of
+target-specific ops exist but are clearly separated.
 
-### Stack
+### Core operations (universal across all backends)
 
+**Stack:**
 ```
 Push(u64)       PushNegOne       Pop(u32)       Dup(u32)       Swap(u32)
 ```
@@ -86,8 +88,7 @@ Push(u64)       PushNegOne       Pop(u32)       Dup(u32)       Swap(u32)
 Stack indices count from top (0 = TOS). Depth must stay within
 [`TargetConfig.stack_depth`](../src/tools/target.rs:20) (16 for Triton).
 
-### Arithmetic
-
+**Arithmetic:**
 ```
 Add   Mul   Eq   Lt   And   Xor   DivMod   Invert   Split   Log2   Pow   PopCount
 ```
@@ -95,16 +96,7 @@ Add   Mul   Eq   Lt   And   Xor   DivMod   Invert   Split   Log2   Pow   PopCoun
 All operate over the target's native field. `DivMod` produces 2 values;
 `Split` produces 2 u32 limbs.
 
-### Extension field
-
-```
-XbMul   XInvert   XxDotStep   XbDotStep
-```
-
-Cubic extension (width=3) on Triton. Miden emits comments (unsupported).
-
-### I/O
-
+**I/O:**
 ```
 ReadIo(u32)     WriteIo(u32)     Divine(u32)
 ```
@@ -112,20 +104,39 @@ ReadIo(u32)     WriteIo(u32)     Divine(u32)
 Public input/output and non-deterministic witness. Backend-specific semantics
 (Triton: native I/O; EVM: calldata/returndata; WASM: host calls).
 
-### Memory
-
+**Memory:**
 ```
 ReadMem(u32)     WriteMem(u32)
 ```
 
 Address on stack, popped after access.
 
-### Cryptographic
-
+**Cryptographic:**
 ```
 Hash   SpongeInit   SpongeAbsorb   SpongeSqueeze   SpongeAbsorbMem
 MerkleStep   MerkleStepMem   Assert   AssertVector
 ```
+
+### Target-specific operations (not part of the universal core)
+
+**Extension field** — Triton VM cubic extension (width=3). These are native
+Triton instructions with no equivalent on other backends. Miden lowering emits
+them as comments. Future backends would need emulation or should reject
+programs that use them.
+
+```
+XbMul   XInvert   XxDotStep   XbDotStep
+```
+
+These ops exist in the IR because Trident's type system exposes `XField` as a
+first-class type and the `*x` operator lowers to `XbMul`. Programs using
+extension field arithmetic are inherently Triton-specific unless a backend
+provides its own emulation.
+
+> **Design note:** A cleaner future design would lower these through the
+> abstract op mechanism (like `EmitEvent`) or gate them behind target
+> capability checks at the type-checker level, so non-Triton backends reject
+> `XField` programs at compile time rather than emitting dead comments.
 
 ### Abstract operations
 

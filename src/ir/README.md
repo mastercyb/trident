@@ -6,7 +6,7 @@ The compiler pipeline is: **parse -> typecheck -> IRBuilder -> Lowering -> assem
 
 ## Structure
 
-- [`mod.rs`](mod.rs) — [`IROp`](mod.rs:18) enum (~50 variants): stack ops, arithmetic, control flow, abstract events/storage. [`Display`](mod.rs:143) impl for debug printing.
+- [`mod.rs`](mod.rs) — [`IROp`](mod.rs:18) enum (~50 variants): core universal ops (stack, arithmetic, I/O, memory, crypto, control flow, abstract events/storage) plus a small set of target-specific ops (extension field). [`Display`](mod.rs:143) impl for debug printing.
 - [`builder/`](builder/) — AST-to-IR translation (target-independent). See [builder/README.md](builder/README.md).
 - [`lower/`](lower/) — IR-to-assembly backends (target-specific). See [lower/README.md](lower/README.md).
 
