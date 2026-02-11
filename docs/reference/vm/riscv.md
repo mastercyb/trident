@@ -22,3 +22,10 @@
 Same `RiscVLowering` as SP1/OpenVM but targeting bare-metal RISC-V, not a
 zkVM. Useful for embedded execution, Linux servers, or cross-compilation
 testing.
+
+---
+
+## Cost Model (Wall-clock)
+
+No proof cost — direct native execution. Same as x86-64/ARM64: software
+modular reduction, no metering or gas.

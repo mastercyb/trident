@@ -33,3 +33,20 @@ OpenVM, RISC Zero, CKB-VM, PolkaVM, and RISC-V native.
 
 No dedicated OS. Jolt is a general-purpose proving backend. Proofs
 can verify on Ethereum or any chain with a suitable verifier contract.
+
+---
+
+## Cost Model (Cycles)
+
+Single metric: cycle count. Sumcheck-based proof system means cost
+characteristics differ from STARK-based VMs.
+
+| Operation class | Cycles | Notes |
+|---|---:|---|
+| Arithmetic / logic | 1 | Standard RISC-V RV32I |
+| Memory access | 1 | Twist and Shout checking |
+| Branch | 1 | Conditional and unconditional |
+| Inlines (custom ops) | 1 | Extensible via lookup tables |
+
+No dedicated hash coprocessor — all computation is uniform cost.
+Detailed cost model planned.

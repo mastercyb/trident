@@ -257,31 +257,28 @@ per-function annotations, `--costs` flag — works identically across all VMs.
 
 | VM | Cost unit | What determines cost |
 |----|-----------|---------------------|
-| Triton VM | Table rows | Tallest of 6 tables, padded to next power of 2 |
-| Miden VM | Table rows | Tallest of 4 tables |
-| Nock | Nock reductions | Formula evaluation steps (jet calls count as 1) |
-| SP1 | Cycles | Total cycle count |
-| OpenVM | Cycles | Total cycle count |
-| RISC Zero | Cycles (segments) | Cycle count, split into segments for parallel proving |
-| Jolt | Cycles | Total cycle count (sumcheck-based) |
-| Cairo VM | Steps + builtins | Step count plus builtin usage |
-| AVM (Leo) | Constraints | Constraint count (off-chain); microcredits (on-chain finalize) |
-| Aztec (Noir) | Gates / Gas | Private: gate count (client-side); Public: gas (sequencer) |
-| EVM | Gas | Per-opcode cost (arithmetic 3-8, storage 5K-20K) |
-| WASM | Gas / Cycles | Per-instruction cost (varies by OS runtime) |
-| eBPF (SVM) | Compute units | Per-instruction cost (budget 200K default, 1.4M max) |
-| MoveVM | Gas | Per-bytecode-instruction + storage operations |
-| TVM | Gas | Per-opcode + cell creation/storage charges |
-| CKB-VM | Cycles | Flat per-instruction (1 cycle), higher for branches/mul |
-| PolkaVM | Weight | ref_time (computation) + proof_size (state proof overhead) |
-| x86-64 / ARM64 / RISC-V | Wall-clock | No proof cost — direct execution |
+| [Triton VM](vm/triton.md) | Table rows | Tallest of 6 tables, padded to next power of 2 |
+| [Miden VM](vm/miden.md) | Table rows | Tallest of 4 tables |
+| [Nock](vm/nock.md) | Nock reductions | Formula evaluation steps (jet calls count as 1) |
+| [SP1](vm/sp1.md) | Cycles | Total cycle count |
+| [OpenVM](vm/openvm.md) | Cycles | Total cycle count |
+| [RISC Zero](vm/risczero.md) | Cycles (segments) | Cycle count, split into segments for parallel proving |
+| [Jolt](vm/jolt.md) | Cycles | Total cycle count (sumcheck-based) |
+| [Cairo VM](vm/cairo.md) | Steps + builtins | Step count plus builtin usage |
+| [AVM (Leo)](vm/leo.md) | Constraints | Constraint count (off-chain); microcredits (on-chain finalize) |
+| [Aztec (Noir)](vm/aztec.md) | Gates / Gas | Private: gate count (client-side); Public: gas (sequencer) |
+| [EVM](vm/evm.md) | Gas | Per-opcode cost (arithmetic 3-8, storage 5K-20K) |
+| [WASM](vm/wasm.md) | Gas / Cycles | Per-instruction cost (varies by OS runtime) |
+| [eBPF (SVM)](vm/svm.md) | Compute units | Per-instruction cost (budget 200K default, 1.4M max) |
+| [MoveVM](vm/movevm.md) | Gas | Per-bytecode-instruction + storage operations |
+| [TVM](vm/tvm.md) | Gas | Per-opcode + cell creation/storage charges |
+| [CKB-VM](vm/ckb.md) | Cycles | Flat per-instruction (1 cycle), higher for branches/mul |
+| [PolkaVM](vm/polkavm.md) | Weight | ref_time (computation) + proof_size (state proof overhead) |
+| [x86-64](vm/x86-64.md) / [ARM64](vm/arm64.md) / [RISC-V](vm/riscv.md) | Wall-clock | No proof cost — direct execution |
 
 The cost model is a property of the VM, not the OS. Provable VMs report
 proving cost. Non-provable VMs report execution metering. Native targets
-report wall-clock time.
-
-See [vm/triton.md](vm/triton.md) for the full per-instruction
-cost matrix and optimization hints.
+report wall-clock time. Each VM doc has per-instruction cost tables.
 
 ---
 

@@ -20,3 +20,10 @@
 | OS | macOS, Linux, Android |
 
 Same as x86-64 but for ARM-based machines (Apple Silicon, AWS Graviton).
+
+---
+
+## Cost Model (Wall-clock)
+
+No proof cost — direct native execution. Same as x86-64: software modular
+reduction, no metering or gas.

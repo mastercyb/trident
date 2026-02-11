@@ -29,3 +29,20 @@ contract lifecycle management. Shares `RiscVLowering` with SP1, OpenVM,
 RISC Zero, Jolt, CKB-VM, and RISC-V native.
 
 See [os/polkadot.md](../os/polkadot.md) for the Polkadot OS runtime.
+
+---
+
+## Cost Model (Weight)
+
+Two-dimensional metering: **ref_time** (computation) and **proof_size**
+(state proof overhead).
+
+| Operation class | ref_time | proof_size | Notes |
+|---|---:|---:|---|
+| Arithmetic / logic | 1 | 0 | Basic RISC-V ops |
+| Memory access | 1 | 0 | Load/store |
+| Host call | 200-5,000 | varies | Depends on host function |
+| Storage read | 5,000 | 80 bytes | Per key |
+| Storage write | 10,000 | 80 bytes | Per key |
+
+Both dimensions must stay within block limits. Detailed cost model planned.

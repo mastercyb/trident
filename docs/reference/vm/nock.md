@@ -122,4 +122,25 @@ hashes match the registered jets for all cryptographic operations.
 
 ---
 
+## Cost Model (Nock reductions)
+
+Single metric: formula evaluation steps (Nock reductions). Jet calls
+count as 1 reduction regardless of internal complexity.
+
+| Operation | Cost | Notes |
+|---|---|---|
+| Arithmetic (`+`, `*`, `<`) | 1 | Jetted |
+| Bitwise (`&`, `^`, `/%`) | 1 | Jetted |
+| `hash(...)` | 1 | Tip5 jet |
+| `sponge_*()` | 1 | Tip5 jet |
+| `merkle_step(...)` | 1 | Tip5 jet |
+| Tree edit (RAM) | 1 | Subject mutation |
+| Nock 6 (branch) | 2 | Condition + branch |
+| Nock 9 (call) | 3 | Core invoke + return |
+
+Detailed per-instruction cost model not yet implemented — jet performance
+varies by runtime (Ares, Vere, Sword).
+
+---
+
 *See [TreeLowering](../../src/tree/lower/mod.rs) for the implementation.*

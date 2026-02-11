@@ -50,3 +50,20 @@ The WASM bytecode is identical. What differs is:
 The runtime binding (`ext.<os>.*`) handles these differences. The compiler
 produces one WASM module; the linker injects the correct host function
 imports for the target OS.
+
+---
+
+## Cost Model (OS-dependent)
+
+WASM itself has no built-in metering — cost is imposed by the OS runtime.
+
+| OS | Cost unit | Notes |
+|---|---|---|
+| Near | Gas | Per-instruction (1 gas ≈ 1 opcode) |
+| Cosmos | Gas | Per-instruction + storage |
+| Arbitrum (Stylus) | Gas | EVM-compatible gas metering |
+| ICP | Cycles | Deterministic time slicing |
+| WASI | Wall-clock | No metering (direct execution) |
+| Browser | Wall-clock | No metering (direct execution) |
+
+Detailed per-instruction cost model planned per OS.

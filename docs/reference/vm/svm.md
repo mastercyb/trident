@@ -26,3 +26,22 @@ eBPF register conventions (10 registers, different calling convention from
 standard RISC-V).
 
 See [os/solana.md](../os/solana.md) for the Solana OS runtime.
+
+---
+
+## Cost Model (Compute Units)
+
+Per-instruction compute unit cost. Budget: 200K default, 1.4M max per
+transaction.
+
+| Operation class | CU | Notes |
+|---|---:|---|
+| Arithmetic / logic | 1 | Most ALU instructions |
+| Memory access | 1 | Load/store within 32 KB |
+| SHA-256 | 85 per 64 bytes | Syscall (accelerated) |
+| Keccak-256 | 36 per 64 bytes | Syscall |
+| Logging | 100 per call | sol_log_ syscalls |
+| CPI (cross-program) | 1,000 base | Per invocation |
+| Syscall overhead | 100 | Per syscall |
+
+Detailed per-instruction cost model planned.

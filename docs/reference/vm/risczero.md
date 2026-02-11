@@ -31,3 +31,22 @@ native. The 31-bit BabyBear field means field elements hold less data than
 on Goldilocks targets — similar constraint to SP1's Mersenne31.
 
 See [os/boundless.md](../os/boundless.md) for the Boundless OS runtime.
+
+---
+
+## Cost Model (Cycles / Segments)
+
+Cycle count, split into segments for parallel proving. Each segment is
+proved independently and composed.
+
+| Operation class | Cycles | Notes |
+|---|---:|---|
+| Arithmetic / logic | 1 | Standard RISC-V RV32IM |
+| Multiply / divide | 1 | Hardware-accelerated |
+| SHA-256 | 68 per block | Accelerated coprocessor (30x vs SP1) |
+| Memory access | 1 | Load/store |
+| Branch | 1 | Conditional and unconditional |
+| Syscall | varies | Host function calls |
+
+Segment size is configurable (default 2^20 cycles). Crossing segment
+boundaries adds composition overhead. Detailed cost model planned.

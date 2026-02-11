@@ -30,3 +30,24 @@ Requires dedicated `AcirLowering` for private execution. Public execution
 uses a register-based AVM.
 
 See [os/aztec.md](../os/aztec.md) for the Aztec OS runtime.
+
+---
+
+## Cost Model (Gates / Gas)
+
+Dual cost model matching the dual execution model:
+
+| Context | Cost unit | What determines cost |
+|---|---|---|
+| Private (ACIR) | Gates | Number of arithmetic gates in the circuit |
+| Public (AVM) | Gas | Per-instruction gas on sequencer |
+
+| Operation class | Gates (private) | Notes |
+|---|---:|---|
+| Arithmetic | 1 | Field add/mul |
+| Comparison | ~254 | Bit decomposition on BN254 |
+| Hash (Poseidon2) | ~400 | Per permutation |
+| Hash (Pedersen) | ~1,000 | Commitment hash |
+| ECDSA verify | ~15,000 | secp256k1 |
+
+Detailed cost model planned.

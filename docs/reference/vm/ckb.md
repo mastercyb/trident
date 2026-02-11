@@ -25,3 +25,20 @@ compressed. Shares `RiscVLowering` with SP1, OpenVM, RISC Zero, Jolt,
 PolkaVM, and RISC-V native.
 
 See [os/nervos.md](../os/nervos.md) for the Nervos CKB OS runtime.
+
+---
+
+## Cost Model (Cycles)
+
+Flat per-instruction cycle cost with higher costs for branches and
+multiply.
+
+| Operation class | Cycles | Notes |
+|---|---:|---|
+| Arithmetic / logic | 1 | ADD, SUB, AND, OR, XOR |
+| Multiply / divide | 5 | MUL, DIV, REM |
+| Branch | 3 | Conditional and unconditional |
+| Load / store | 2 | Memory access (4 MB limit) |
+| Syscall | 500+ | Blake2b, secp256k1, etc. |
+
+Detailed per-instruction cost model planned.

@@ -29,3 +29,21 @@ Gas costs are per-opcode with additional charges for cell creation, storage,
 and message sending.
 
 See [os/ton.md](../os/ton.md) for the Ton OS runtime.
+
+---
+
+## Cost Model (Gas)
+
+Per-opcode gas plus cell creation and storage charges.
+
+| Operation class | Gas | Notes |
+|---|---:|---|
+| Arithmetic / logic | 18-26 | Stack operations on 257-bit ints |
+| Comparison | 18 | Integer comparisons |
+| Cell load | 100 | CTOS (cell to slice) |
+| Cell store | 500 | STREF, ENDC |
+| Dict ops | 50-100 | Tree lookup/insert |
+| Hash | 26 | HASHCU, HASHSU |
+| Send message | 1,000+ | SENDRAWMSG (plus forwarding fees) |
+
+Cell creation dominates in data-heavy programs. Detailed cost model planned.

@@ -31,3 +31,23 @@ architecture and opcode set.
 See [os/ethereum.md](../os/ethereum.md) and other EVM-compatible OS docs for
 OS-specific runtime bindings. Same `.evm` bytecode deploys to all
 EVM-compatible targets.
+
+---
+
+## Cost Model (Gas)
+
+Per-opcode gas cost. Representative values:
+
+| Operation class | Gas | Examples |
+|---|---:|---|
+| Arithmetic | 3-5 | ADD, MUL, SUB, DIV |
+| Comparison | 3 | LT, GT, EQ |
+| Bitwise | 3 | AND, OR, XOR |
+| Keccak-256 | 30 + 6/word | KECCAK256 |
+| Memory | 3 | MLOAD, MSTORE |
+| Storage read | 2,100 | SLOAD (cold) |
+| Storage write | 5,000-20,000 | SSTORE (cold, set/change) |
+| Call | 2,600 | CALL (cold account) |
+| Log | 375 + 375/topic + 8/byte | LOG0-LOG4 |
+
+Storage dominates. Detailed cost model planned.
