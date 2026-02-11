@@ -49,7 +49,7 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 | `ast.rs` | 371 | AST node definitions shared by every stage |
 | `lib.rs` | 2,698 | Public API, re-exports, and orchestration functions (`compile`, `analyze_costs`, `check_file`) |
 | `main.rs` | 2,374 | CLI entry point: argument parsing and command dispatch |
-| `bin/trident-lsp.rs` | 4 | LSP binary wrapper |
+| `trident_lsp.rs` | 4 | LSP binary entry point |
 
 ## Compilation Pipeline in Detail
 
