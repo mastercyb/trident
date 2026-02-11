@@ -78,21 +78,22 @@ src/codegen/ir/                    ← backward-compatible re-exports only
 
 ## TIROp: The Operation Set
 
-`TIROp` is an enum with **55 variants** in four tiers. Higher tier = narrower
+`TIROp` is an enum with **52 variants** in four tiers. Higher tier = narrower
 target set. No target instructions (`skiz`, `recurse`, `if.true`, `proc`)
 appear in the TIR. All names follow **verb-first** convention — ops are
 imperative commands: Read, Write, Open, Assert.
 
-### Tier 0 — Structure (13 variants)
+### Tier 0 — Structure (10 variants)
 
 The scaffolding. Present in every program, on every target. Not
-blockchain-specific — just computation.
+blockchain-specific — just computation. The IR expresses intent, not
+formatting — lowering handles labels, entry boilerplate, and blank lines.
 
 | Group | Variants | Notes |
 |-------|----------|-------|
-| **Control flow — flat** (3) | `Call(String)` `Return` `Halt` | |
-| **Control flow — structural** (3) | `IfElse { then_body, else_body }` `IfOnly { then_body }` `Loop { label, body }` | Bodies are nested `Vec<TIROp>`, not flat jumps |
-| **Program structure** (5) | `Label` `FnStart` `FnEnd` `Preamble` `BlankLine` | |
+| **Functions** (4) | `FnStart(String)` `FnEnd` `Call(String)` `Return` | |
+| **Control flow** (3) | `IfElse { then_body, else_body }` `IfOnly { then_body }` `Loop { label, body }` | Bodies are nested `Vec<TIROp>`, not flat jumps |
+| **Termination** (1) | `Halt` | |
 | **Passthrough** (2) | `Comment(String)` `Asm { lines, effect }` | `Asm` passes inline assembly verbatim |
 
 Each backend lowers structural ops differently:
