@@ -751,14 +751,20 @@ impl IRBuilder {
 
                 // Emit the counter expression.
                 self.build_expr(&end.node);
-                self.stack.pop(); // counter consumed by the loop
+                // counter is on top as a temp
 
-                // Build the loop body.
+                // Call the loop subroutine and pop the counter afterwards.
+                self.ops.push(IROp::Call(loop_label.clone()));
+                self.ops.push(IROp::Pop(1));
+                self.stack.pop(); // counter consumed
+
+                // Build the loop body as a nested IR block.
                 let saved = self.stack.save_state();
                 self.stack.clear();
                 let body_ir = self.build_block_as_ir(&body.node);
                 self.stack.restore_state(saved);
 
+                // Emit the loop subroutine inline (matches Emitter's deferred flush).
                 self.ops.push(IROp::Loop {
                     label: loop_label,
                     body: body_ir,
