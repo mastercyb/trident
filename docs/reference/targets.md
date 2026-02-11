@@ -8,22 +8,49 @@ Write once. Prove anywhere.
 
 A blockchain is an operating system. Not metaphorically — structurally.
 
-| OS Concept | Trident Equivalent |
-|---|---|
-| CPU | VM (Triton, Miden, Cairo, SP1, OpenVM) |
-| Word size | Field (64-bit, 31-bit, 251-bit) |
-| Instruction set | Hash function, sponge, Merkle |
-| Register file | Stack depth (16, 32, 0) |
-| RAM | Spill memory, storage |
-| System calls | I/O, events, storage |
-| Process model | Sequential execution, no threads |
-| Billing | Cost tables (rows, cycles, steps) |
+The VM is the CPU — the instruction set architecture. The blockchain is the
+OS — the runtime that loads programs, manages I/O, enforces billing, and
+provides storage. One VM can power multiple blockchains, just as one CPU
+architecture runs multiple operating systems.
 
-The compiler doesn't "target multiple chains." It targets multiple operating
-systems with different CPU architectures, word sizes, and instruction sets.
+| Concept | Traditional | Trident |
+|---------|-------------|---------|
+| CPU / ISA | x86-64, ARM64, RISC-V | Triton VM, Miden VM, Cairo VM, RISC-V |
+| OS / Runtime | Linux, macOS, Windows | Neptune, Polygon Miden, Starknet |
+| Word size | 32-bit, 64-bit | Field (31-bit, 64-bit, 251-bit) |
+| Instruction set extensions | SSE, AVX, NEON | Hash coprocessor, Merkle, sponge |
+| Register file | 16 GP registers | Stack depth (16, 32, 0) |
+| RAM | Byte-addressed | Word-addressed (field elements) |
+| System calls | read, write, mmap | pub_read, pub_write, divine |
+| Process model | Multi-threaded | Sequential, deterministic |
+| Billing | None (or quotas) | Cost tables (rows, cycles, steps) |
+
+The compiler doesn't "target multiple chains." It targets multiple CPUs.
+Each CPU may run under one or more operating systems, but the compiler's job
+is instruction selection and code generation — the same job gcc does for
+x86-64 regardless of whether the binary runs on Linux or macOS.
+
+### VMs and Their Blockchains
+
+| VM (CPU) | Blockchain (OS) | Notes |
+|----------|-----------------|-------|
+| Triton VM | Neptune | Native STARK recursion |
+| Miden VM | Polygon Miden | Account-based execution |
+| Cairo VM | Starknet | Sierra intermediate format |
+| RISC-V (SP1) | Succinct | General-purpose zkVM |
+| RISC-V (OpenVM) | OpenVM network | Goldilocks field RISC-V |
+| x86-64 | (conventional) | Testing, debugging, local execution |
+| ARM64 | (conventional) | Testing, debugging, local execution |
+| RISC-V native | (conventional) | Testing, debugging, local execution |
+| CUDA / Metal / Vulkan | (GPU compute) | Batch parallel execution |
+
+Conventional targets have no blockchain, no proofs, no billing. They run the
+same Trident programs with the same field arithmetic — for testing, debugging,
+benchmarking, and local execution. If you want to verify your program logic
+before generating a proof, compile to x86-64 and run it.
 
 Each target is defined by a `.toml` configuration file that specifies the
-OS parameters. The compiler reads this configuration and adapts code generation
+CPU parameters. The compiler reads this configuration and adapts code generation
 accordingly. `TargetConfig` is the compiler's hardware abstraction layer.
 
 ---
@@ -44,15 +71,20 @@ TIR → StackLowering → assembly text → Linker → output
 
 ### Register Machines
 
-The VM uses registers or memory-addressed slots. TIR is first converted
-to LIR (register-addressed IR), then lowered to native instructions via
-`RegisterLowering`.
+The VM (or CPU) uses registers or memory-addressed slots. TIR is first
+converted to LIR (register-addressed IR), then lowered to native instructions
+via `RegisterLowering`.
 
-**Targets:** SP1, OpenVM, Cairo
+**Provable:** SP1 (RISC-V), OpenVM (RISC-V), Cairo
+**Conventional:** x86-64, ARM64, RISC-V native
 
 ```
 TIR → LIR → RegisterLowering → machine code → Linker → output
 ```
+
+The same `RegisterLowering` path serves both provable and conventional
+register targets. SP1 and native RISC-V share the same `RiscVLowering` —
+one produces code for the zkVM, the other for bare metal.
 
 ### GPU Targets (planned)
 
@@ -85,7 +117,8 @@ See [ir.md](ir.md) for the full IR architecture and lowering paths.
 | Extension field | Cubic (degree 3) |
 | Stack depth | 16 |
 | Output format | `.tasm` |
-| Cost tables | processor, hash, u32, op_stack, ram, jump_stack |
+| Cost model | 6 tables: processor, hash, u32, op_stack, ram, jump_stack |
+| Blockchain | Neptune |
 
 The primary target. 6-table cost model — proving cost is determined by the
 tallest table, padded to the next power of 2. Tip5 is the native hash: 5 rounds
@@ -109,7 +142,8 @@ coprocessor (`lt`, `and`, `xor`, `div_mod`, `split`, `pow`, `log_2_floor`,
 | Extension field | None |
 | Stack depth | 16 |
 | Output format | `.masm` |
-| Cost tables | processor, hash, chiplets, stack |
+| Cost model | 4 tables: processor, hash, chiplets, stack |
+| Blockchain | Polygon Miden |
 
 Same field as Triton, different hash function and cost model. 4-table model
 with a chiplets table that combines hashing, bitwise, and memory operations.
@@ -120,7 +154,7 @@ target Miden.
 
 | Parameter | Value |
 |---|---|
-| Architecture | Register |
+| Architecture | Register (RISC-V) |
 | Field | Mersenne31 (p = 2^31 - 1) |
 | Field bits | 31 |
 | Hash function | Poseidon2 |
@@ -129,7 +163,8 @@ target Miden.
 | Extension field | None |
 | Stack depth | 32 (register file) |
 | Output format | `.S` (RISC-V assembly) |
-| Cost tables | cycles |
+| Cost model | Cycles |
+| Blockchain | Succinct |
 
 RISC-V zkVM. Single cost metric: cycle count. The 31-bit field means
 field elements hold less data than on Goldilocks targets — programs may need
@@ -139,7 +174,7 @@ more elements to represent the same values. Requires `RegisterLowering`.
 
 | Parameter | Value |
 |---|---|
-| Architecture | Register |
+| Architecture | Register (RISC-V) |
 | Field | Goldilocks (p = 2^64 - 2^32 + 1) |
 | Field bits | 64 |
 | Hash function | Poseidon2 |
@@ -148,7 +183,8 @@ more elements to represent the same values. Requires `RegisterLowering`.
 | Extension field | None |
 | Stack depth | 32 (register file) |
 | Output format | `.S` (RISC-V assembly) |
-| Cost tables | cycles |
+| Cost model | Cycles |
+| Blockchain | OpenVM network |
 
 Same field as Triton/Miden, different hash and architecture. RISC-V backend
 with cycle-based cost model.
@@ -166,12 +202,67 @@ with cycle-based cost model.
 | Extension field | None |
 | Stack depth | 0 (no operand stack — memory-addressed) |
 | Output format | `.sierra` |
-| Cost tables | steps, builtins |
+| Cost model | Steps + builtins |
+| Blockchain | Starknet |
 
 The 251-bit field means a single field element can hold values that would
 require multiple elements on smaller-field targets. Pedersen hash has a narrow
 rate (2 elements) and produces a single-element digest. Stack depth 0 means
 all data lives in memory — the compiler manages allocation automatically.
+
+### x86-64 (conventional)
+
+| Parameter | Value |
+|---|---|
+| Architecture | Register |
+| Field | Goldilocks (p = 2^64 - 2^32 + 1) |
+| Field bits | 64 |
+| Hash function | Software (Tip5 or Poseidon2) |
+| Digest width | Configurable |
+| Extension field | None |
+| Stack depth | 16 GP registers |
+| Output format | Machine code (ELF) |
+| Cost model | Wall-clock time (no proof cost) |
+| Blockchain | None |
+
+For testing and local execution. Field arithmetic is modular reduction on
+native 64-bit integers. No proof generation — the program runs directly.
+Useful for debugging program logic before deploying to a provable target.
+
+### ARM64 (conventional)
+
+| Parameter | Value |
+|---|---|
+| Architecture | Register |
+| Field | Goldilocks (p = 2^64 - 2^32 + 1) |
+| Field bits | 64 |
+| Hash function | Software (Tip5 or Poseidon2) |
+| Digest width | Configurable |
+| Extension field | None |
+| Stack depth | 31 GP registers |
+| Output format | Machine code (ELF / Mach-O) |
+| Cost model | Wall-clock time (no proof cost) |
+| Blockchain | None |
+
+Same as x86-64 but for ARM-based machines (Apple Silicon, AWS Graviton).
+
+### RISC-V native (conventional)
+
+| Parameter | Value |
+|---|---|
+| Architecture | Register |
+| Field | Goldilocks (p = 2^64 - 2^32 + 1) |
+| Field bits | 64 |
+| Hash function | Software (Tip5 or Poseidon2) |
+| Digest width | Configurable |
+| Extension field | None |
+| Stack depth | 32 GP registers |
+| Output format | Machine code (ELF) |
+| Cost model | Wall-clock time (no proof cost) |
+| Blockchain | None |
+
+Same `RiscVLowering` as SP1/OpenVM but targeting bare-metal RISC-V, not a
+zkVM. Useful for embedded execution or cross-compilation testing.
 
 ---
 
@@ -190,6 +281,11 @@ annotations, `--costs` flag — works identically across all targets.
 | SP1 | Cycles | Total cycle count |
 | OpenVM | Cycles | Total cycle count |
 | Cairo | Steps + builtins | Step count plus builtin usage |
+| x86-64 / ARM64 / RISC-V | Wall-clock | No proof cost — direct execution |
+
+Conventional targets have no proving overhead. Their "cost" is wall-clock
+execution time. The `--costs` flag still works — it reports estimated
+instruction counts for comparison with provable targets.
 
 ### Triton VM Cost Model (6 tables)
 
@@ -272,7 +368,7 @@ trident build --compare costs.json      # Diff with previous build
 
 ## Adding a Target
 
-1. Write a `targets/name.toml` with all OS parameters
+1. Write a `targets/name.toml` with all CPU parameters
 2. Implement `StackLowering` (stack machines) or `RegisterLowering` (register machines)
 3. Implement `CostModel` for the target's billing model
 4. Add the target name to CLI dispatch
@@ -292,14 +388,17 @@ Which targets support which [IR tiers](ir.md):
 | SP1 | yes | yes | no | no |
 | OpenVM | yes | yes | no | no |
 | Cairo | yes | yes | no | no |
+| x86-64 | yes | yes | no | no |
+| ARM64 | yes | yes | no | no |
+| RISC-V native | yes | yes | no | no |
 
 **Tier 0** — Program structure (Entry, Call, Return, etc.). All targets.
 
 **Tier 1** — Universal computation (arithmetic, control flow, memory, I/O).
-All targets.
+All targets — provable and conventional.
 
 **Tier 2** — Provable computation (Hash, MerkleStep, Sponge, Reveal, Seal).
-Stack machines only — these map to native coprocessor instructions.
+Stack-machine VMs with native coprocessors.
 
 **Tier 3** — Recursive proof composition (ProofBlock, FriVerify, etc.).
 Triton VM only — requires native STARK verification support.
@@ -313,13 +412,13 @@ features cannot target lower-tier backends.
 
 ### Types per Target
 
-| Type | Tier | Triton VM | Miden VM | SP1 | OpenVM | Cairo |
-|---|---|---|---|---|---|---|
-| `Field` | 0 | 64-bit | 64-bit | 31-bit | 64-bit | 251-bit |
-| `Bool` | 0 | yes | yes | yes | yes | yes |
-| `U32` | 0 | yes | yes | yes | yes | yes |
-| `Digest` | 0 | [Field; 5] | [Field; 4] | [Field; 8] | [Field; 8] | [Field; 1] |
-| `XField` | 2 | [Field; 3] | -- | -- | -- | -- |
+| Type | Tier | Triton VM | Miden VM | SP1 | OpenVM | Cairo | x86-64 / ARM64 / RISC-V |
+|---|---|---|---|---|---|---|---|
+| `Field` | 0 | 64-bit | 64-bit | 31-bit | 64-bit | 251-bit | 64-bit |
+| `Bool` | 0 | yes | yes | yes | yes | yes | yes |
+| `U32` | 0 | yes | yes | yes | yes | yes | yes |
+| `Digest` | 0 | [Field; 5] | [Field; 4] | [Field; 8] | [Field; 8] | [Field; 1] | configurable |
+| `XField` | 2 | [Field; 3] | -- | -- | -- | -- | -- |
 
 `Digest` is universal — every target has a hash function and produces digests.
 It is a content identifier: the fixed-width fingerprint of arbitrary data.
@@ -330,43 +429,49 @@ where `xfield_width > 0`.
 
 ### Operators per Target
 
-| Operator | Tier | Triton VM | Miden VM | SP1 | OpenVM | Cairo |
-|---|---|---|---|---|---|---|
-| `+` `*` `==` | 1 | yes | yes | yes | yes | yes |
-| `<` `&` `^` `/%` | 1 | yes | yes | yes | yes | yes |
-| `*.` | 2 | yes | -- | -- | -- | -- |
+| Operator | Tier | Triton VM | Miden VM | SP1 | OpenVM | Cairo | Conventional |
+|---|---|---|---|---|---|---|---|
+| `+` `*` `==` | 1 | yes | yes | yes | yes | yes | yes |
+| `<` `&` `^` `/%` | 1 | yes | yes | yes | yes | yes | yes |
+| `*.` | 2 | yes | -- | -- | -- | -- | -- |
 
 ### Builtins per Target
 
-| Builtin group | Tier | Triton VM | Miden VM | SP1 | OpenVM | Cairo |
-|---|---|---|---|---|---|---|
-| I/O (`pub_read`, `divine`, etc.) | 1 | yes | yes | yes | yes | yes |
-| Field (`sub`, `neg`, `inv`) | 1 | yes | yes | yes | yes | yes |
-| U32 (`split`, `log2`, `pow`, etc.) | 1 | yes | yes | yes | yes | yes |
-| Assert (`assert`, `assert_eq`) | 1 | yes | yes | yes | yes | yes |
-| RAM (`ram_read`, `ram_write`) | 1 | yes | yes | yes | yes | yes |
-| Hash (`hash`, `sponge_*`) | 2 | R=10, D=5 | R=8, D=4 | -- | -- | -- |
-| Merkle (`merkle_step`) | 2 | native | emulated | -- | -- | -- |
-| XField (`xfield`, `xinvert`, dot) | 2 | yes | -- | -- | -- | -- |
+| Builtin group | Tier | Triton VM | Miden VM | SP1 | OpenVM | Cairo | Conventional |
+|---|---|---|---|---|---|---|---|
+| I/O (`pub_read`, `divine`, etc.) | 1 | yes | yes | yes | yes | yes | yes (stdio) |
+| Field (`sub`, `neg`, `inv`) | 1 | yes | yes | yes | yes | yes | yes |
+| U32 (`split`, `log2`, `pow`, etc.) | 1 | yes | yes | yes | yes | yes | yes |
+| Assert (`assert`, `assert_eq`) | 1 | yes | yes | yes | yes | yes | yes (abort) |
+| RAM (`ram_read`, `ram_write`) | 1 | yes | yes | yes | yes | yes | yes (memory) |
+| Hash (`hash`, `sponge_*`) | 2 | R=10, D=5 | R=8, D=4 | -- | -- | -- | -- |
+| Merkle (`merkle_step`) | 2 | native | emulated | -- | -- | -- | -- |
+| XField (`xfield`, `xinvert`, dot) | 2 | yes | -- | -- | -- | -- | -- |
 
 R = hash rate (fields per absorption). D = digest width (fields per digest).
+
+On conventional targets, Tier 1 builtins map to standard operations: I/O
+becomes stdio, assertions become abort, RAM becomes heap memory. Field
+arithmetic uses software modular reduction.
 
 ---
 
 ## Target Comparison
 
-| | Triton VM | Miden VM | SP1 | OpenVM | Cairo |
-|---|---|---|---|---|---|
-| Field bits | 64 | 64 | 31 | 64 | 251 |
-| Hash | Tip5 | Rescue-Prime | Poseidon2 | Poseidon2 | Pedersen |
-| Architecture | Stack | Stack | Register | Register | Register |
-| Cost model | 6 tables | 4 tables | Cycles | Cycles | Steps+builtins |
-| Extension field | Cubic | None | None | None | None |
-| Native Merkle | Yes | No | No | No | No |
-| Digest width (D) | 5 | 4 | 8 | 8 | 1 |
-| Hash rate (R) | 10 | 8 | 8 | 8 | 2 |
-| XField width (E) | 3 | 0 | 0 | 0 | 0 |
-| Output | .tasm | .masm | .S | .S | .sierra |
+| | Triton VM | Miden VM | SP1 | OpenVM | Cairo | x86-64 | ARM64 |
+|---|---|---|---|---|---|---|---|
+| Field bits | 64 | 64 | 31 | 64 | 251 | 64 | 64 |
+| Hash | Tip5 | Rescue-Prime | Poseidon2 | Poseidon2 | Pedersen | Software | Software |
+| Architecture | Stack | Stack | Register | Register | Register | Register | Register |
+| Cost model | 6 tables | 4 tables | Cycles | Cycles | Steps+builtins | Wall-clock | Wall-clock |
+| Provable | yes | yes | yes | yes | yes | no | no |
+| Extension field | Cubic | None | None | None | None | None | None |
+| Native Merkle | Yes | No | No | No | No | No | No |
+| Digest width (D) | 5 | 4 | 8 | 8 | 1 | config | config |
+| Hash rate (R) | 10 | 8 | 8 | 8 | 2 | config | config |
+| XField width (E) | 3 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Output | .tasm | .masm | .S | .S | .sierra | ELF | ELF |
+| Blockchain | Neptune | Polygon Miden | Succinct | OpenVM | Starknet | -- | -- |
 
 ---
 
