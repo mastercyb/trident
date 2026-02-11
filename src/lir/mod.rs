@@ -56,23 +56,23 @@ impl fmt::Display for Label {
 /// 51 LIR operations. Higher tier = narrower target set.
 ///
 /// **Tier 0 — Structure** (every program, every target)
-///   Control flow (5), Program structure (5), Passthrough (2) = 12
+///   Control flow (5), Program structure (4), Passthrough (2) = 11
 ///
 /// **Tier 1 — Universal** (compiles to every target)
-///   Register (2), Arithmetic (12), I/O (3), Memory (4),
-///   Assertions (2), Hash (2), Events (2), Storage (2) = 29
+///   Register (2), Arithmetic (15), I/O (3), Memory (4),
+///   Assertions (1), Hash (1), Events (2), Storage (2) = 30
 ///
 /// **Tier 2 — Provable** (requires a proof-capable target)
 ///   Sponge (4), Merkle (2) = 6
 ///
 /// **Tier 3 — Recursion** (requires recursive verification capability)
-///   Extension field (2), FRI folding (2) = 4
+///   Extension field (2), Folding (2) = 4
 ///
-/// Total: 12 + 29 + 6 + 4 = 51 variants
+/// Total: 11 + 30 + 6 + 4 = 51 variants
 #[derive(Debug, Clone)]
 pub enum LIROp {
     // ═══════════════════════════════════════════════════════════════
-    // Tier 0 — Structure
+    // Tier 0 — Structure (11)
     // The scaffolding. Present in every program, on every target.
     // ═══════════════════════════════════════════════════════════════
 
@@ -109,7 +109,7 @@ pub enum LIROp {
     Asm { lines: Vec<String> },
 
     // ═══════════════════════════════════════════════════════════════
-    // Tier 1 — Universal
+    // Tier 1 — Universal (30)
     // Compiles to every target. Register primitives, arithmetic,
     // I/O, memory, hashing, events, storage.
     // ═══════════════════════════════════════════════════════════════
@@ -120,7 +120,7 @@ pub enum LIROp {
     /// Register-to-register move.
     Move(Reg, Reg),
 
-    // ── Arithmetic (12) ──
+    // ── Arithmetic (15) ──
     /// dst = src1 + src2 (mod p)
     Add(Reg, Reg, Reg),
     /// dst = src1 * src2 (mod p)
@@ -206,7 +206,7 @@ pub enum LIROp {
     WriteStorage { key: Reg, src: Reg, width: u32 },
 
     // ═══════════════════════════════════════════════════════════════
-    // Tier 2 — Provable
+    // Tier 2 — Provable (6)
     // Requires a proof-capable target. Sponge construction and Merkle
     // authentication have no meaningful equivalent on conventional VMs.
     // ═══════════════════════════════════════════════════════════════
@@ -228,7 +228,7 @@ pub enum LIROp {
     MerkleLoad { dst: Reg, node: Reg, addr: Reg },
 
     // ═══════════════════════════════════════════════════════════════
-    // Tier 3 — Recursion
+    // Tier 3 — Recursion (4)
     // STARK-in-STARK verification primitives. Extension field
     // arithmetic and FRI folding steps.
     // ═══════════════════════════════════════════════════════════════

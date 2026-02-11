@@ -11,26 +11,27 @@ use std::fmt;
 
 // ─── IR Operations ────────────────────────────────────────────────
 
-/// 53 TIR operations. Higher tier = narrower target set.
+/// 53 TIR operations across 4 tiers. Higher tier = narrower target set.
 ///
 /// **Tier 0 — Structure** (every program, every target)
-///   Control flow (6), Program structure (5), Passthrough (2) = 13
+///   Control flow (6), Program structure (3), Passthrough (2) = 11
 ///
-/// **Tier 1 — Universal** (compiles to every blockchain target)
-///   Stack (5), Arithmetic (12), I/O (3), Memory (2),
-///   Assertions (2), Hash (2), Events (2), Storage (2) = 30
+/// **Tier 1 — Universal** (compiles to every target including conventional)
+///   Stack (4), Modular arithmetic (5), Comparison (2), Bitwise (5),
+///   Unsigned arithmetic (5), I/O (2), Witness (1), Memory (2),
+///   Assertions (1), Hash (1), Events (2), Storage (2) = 32
 ///
 /// **Tier 2 — Provable** (requires a proof-capable target)
 ///   Sponge (4), Merkle (2) = 6
 ///
 /// **Tier 3 — Recursion** (requires recursive verification capability)
-///   Extension field (2), FRI folding (2) = 4
+///   Extension field (2), Folding (2) = 4
 ///
-/// Total: 13 + 30 + 6 + 4 = 53 variants
+/// Total: 11 + 32 + 6 + 4 = 53 variants
 #[derive(Debug, Clone)]
 pub enum TIROp {
     // ═══════════════════════════════════════════════════════════════
-    // Tier 0 — Structure
+    // Tier 0 — Structure (11)
     // The scaffolding. Present in every program, on every target.
     // Not blockchain-specific — just computation.
     // ═══════════════════════════════════════════════════════════════
@@ -75,9 +76,9 @@ pub enum TIROp {
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // Tier 1 — Universal
-    // Compiles to every blockchain target. Stack primitives, arithmetic,
-    // I/O, memory, hashing, events, storage.
+    // Tier 1 — Universal (32)
+    // Compiles to every target. Stack primitives, arithmetic,
+    // I/O, witness, memory, hashing, events, storage.
     // ═══════════════════════════════════════════════════════════════
 
     // ── Stack (4) ──
@@ -86,24 +87,30 @@ pub enum TIROp {
     Dup(u32),
     Swap(u32),
 
-    // ── Arithmetic (17) ──
+    // ── Modular arithmetic (5) ──
     Add,
     Sub,
     Mul,
     Neg,
+    Invert,
+
+    // ── Comparison (2) ──
     Eq,
     Lt,
+
+    // ── Bitwise (5) ──
     And,
     Or,
     Xor,
+    PopCount,
+    Split,
+
+    // ── Unsigned arithmetic (5) ──
     DivMod,
     Shl,
     Shr,
-    Invert,
-    Split,
     Log2,
     Pow,
-    PopCount,
 
     // ── I/O (2) ──
     ReadIo(u32),
@@ -157,7 +164,7 @@ pub enum TIROp {
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // Tier 2 — Provable
+    // Tier 2 — Provable (6)
     // Requires a proof-capable target. Sponge construction and Merkle
     // authentication have no meaningful equivalent on conventional VMs.
     // ═══════════════════════════════════════════════════════════════
@@ -173,7 +180,7 @@ pub enum TIROp {
     MerkleLoad,
 
     // ═══════════════════════════════════════════════════════════════
-    // Tier 3 — Recursion
+    // Tier 3 — Recursion (4)
     // STARK-in-STARK verification primitives. Extension field
     // arithmetic and FRI folding steps. Currently Triton-only;
     // any backend with recursive verification will need equivalents.
