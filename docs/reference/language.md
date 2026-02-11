@@ -59,22 +59,27 @@ fn main() {
 ### Types (complete)
 
 ```
-Field       1 elem   Field element (target-dependent modulus)
-Bool        1 elem   Constrained to {0, 1}
-U32         1 elem   Range-checked 0..2^32
-XField      3 elems  Extension field (target-dependent)
-Digest      5 elems  Hash digest [Field; 5]
-[T; N]      N*w      Fixed array, N compile-time (supports: [Field; M+N], [Field; N*2])
-(T1, T2)    w1+w2    Tuple (max 16 elements)
-struct S    sum      Named product type
+                        Tier 0 — all targets
+Field       1 elem      Field element (target-dependent modulus)
+Bool        1 elem      Constrained to {0, 1}
+U32         1 elem      Range-checked 0..2^32
+[T; N]      N*w         Fixed array, N compile-time (supports: [Field; M+N], [Field; N*2])
+(T1, T2)    w1+w2       Tuple (max 16 elements)
+struct S    sum          Named product type
+
+                        Tier 2 — provable targets only (see targets.md)
+Digest      D elems     Hash digest [Field; D], D = target digest width (5 on Triton, 4 on Miden, ...)
+XField      E elems     Extension field, E = extension degree (3 on Triton, 0 = unavailable on most)
 ```
 
 NO: enums, sum types, references, pointers, strings, floats, Option, Result.
 NO: implicit conversions between types.
+Digest and XField widths are target-dependent. See [targets.md](targets.md).
 
 ### Operators (complete)
 
 ```
+                                                 Tier 1 — all targets
 a + b       Field,Field -> Field     Addition mod p
 a * b       Field,Field -> Field     Multiplication mod p
 a == b      Field,Field -> Bool      Equality
@@ -82,6 +87,8 @@ a < b       U32,U32 -> Bool          Less-than (U32 only)
 a & b       U32,U32 -> U32           Bitwise AND
 a ^ b       U32,U32 -> U32           Bitwise XOR
 a /% b      U32,U32 -> (U32,U32)    Divmod (quotient, remainder)
+
+                                                 Tier 2 — XField targets only
 a *. s      XField,Field -> XField   Scalar multiply
 ```
 
@@ -126,40 +133,36 @@ default parameters, variadic arguments, method syntax.
 ### Builtins (complete)
 
 ```
+// Tier 1 — all targets
 // I/O
 pub_read() -> Field                    pub_write(v: Field)
 pub_read{2,3,4,5}()                    pub_write{2,3,4,5}(...)
 divine() -> Field                      divine3() -> (Field,Field,Field)
 divine5() -> Digest
-
 // Field arithmetic
 sub(a: Field, b: Field) -> Field       neg(a: Field) -> Field
 inv(a: Field) -> Field
-
 // U32
 split(a: Field) -> (U32, U32)          as_u32(a: Field) -> U32
 as_field(a: U32) -> Field              log2(a: U32) -> U32
 pow(base: U32, exp: U32) -> U32        popcount(a: U32) -> U32
-
-// Hash
-hash(a..j: Field x10) -> Digest        sponge_init()
-sponge_absorb(a..j: Field x10)         sponge_absorb_mem(ptr: Field)
-sponge_squeeze() -> [Field; 10]
-
-// Merkle
-merkle_step(idx: U32, d: Digest) -> (U32, Digest)
-merkle_step_mem(ptr, idx, d) -> (Field, U32, Digest)
-
 // Assert
 assert(cond: Bool)                      assert_eq(a: Field, b: Field)
 assert_digest(a: Digest, b: Digest)
-
 // RAM
 ram_read(addr) -> Field                 ram_write(addr, val)
-ram_read_block(addr) -> [Field; 5]      ram_write_block(addr, vals)
+ram_read_block(addr) -> [Field; D]      ram_write_block(addr, vals)
 
-// Extension field
-xfield(x0, x1, x2) -> XField           xinvert(a: XField) -> XField
+// Tier 2 — provable targets (R = hash rate, D = digest width; see targets.md)
+// Hash
+hash(fields: Field x R) -> Digest      sponge_init()
+sponge_absorb(fields: Field x R)       sponge_absorb_mem(ptr: Field)
+sponge_squeeze() -> [Field; R]
+// Merkle
+merkle_step(idx: U32, d: Digest) -> (U32, Digest)
+merkle_step_mem(ptr, idx, d) -> (Field, U32, Digest)
+// Extension field (XField targets only)
+xfield(x0, ..., xE) -> XField          xinvert(a: XField) -> XField
 xx_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)
 xb_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)
 ```
@@ -249,17 +252,27 @@ entry = "main.tri"
 
 ### Primitive Types
 
-| Type | Width (field elements) | Description |
-|------|----------------------:|-------------|
+**Tier 0/1 — all targets:**
+
+| Type | Width | Description |
+|------|------:|-------------|
 | `Field` | 1 | Native field element of the target VM |
 | `Bool` | 1 | Field constrained to {0, 1} |
 | `U32` | 1 | Unsigned 32-bit integer, range-checked |
-| `XField` | 3 | Extension field element (target-dependent degree) |
-| `Digest` | 5 | Hash digest `[Field; 5]` |
+
+**Tier 2 — provable targets only:**
+
+| Type | Width | Description |
+|------|------:|-------------|
+| `Digest` | D | Hash digest `[Field; D]` where D = target digest width |
+| `XField` | E | Extension field element where E = extension degree |
 
 `Field` means "element of the target VM's native field." Programs reason about
-field arithmetic abstractly; the target implements it concretely. See
-[targets.md](targets.md) for field moduli per target.
+field arithmetic abstractly; the target implements it concretely.
+
+`Digest` width and `XField` degree are target-dependent. On Triton VM:
+Digest = 5 (Tip5), XField = 3 (cubic). On Miden: Digest = 4, XField = none.
+See [targets.md](targets.md) for all target parameters.
 
 No implicit conversions. `Field` and `U32` do not auto-convert. Use `as_field()`
 and `as_u32()` (the latter inserts a range check).
@@ -280,18 +293,19 @@ copy on the stack. Structs are flattened to sequential stack/RAM elements.
 
 ### Type Widths
 
-All types have a compile-time-known width measured in field elements:
+All types have a compile-time-known width measured in field elements.
+Widths marked with a variable are resolved from the target configuration.
 
-| Type | Width |
-|------|-------|
-| `Field` | 1 |
-| `XField` | 3 |
-| `Bool` | 1 |
-| `U32` | 1 |
-| `Digest` | 5 |
-| `[T; N]` | N * width(T) |
-| `(T1, T2)` | width(T1) + width(T2) |
-| `struct` | sum of field widths |
+| Type | Width | Notes |
+|------|-------|-------|
+| `Field` | 1 | |
+| `Bool` | 1 | |
+| `U32` | 1 | |
+| `Digest` | D | D = `digest_width` from target config |
+| `XField` | E | E = `xfield_width` from target config (0 = unavailable) |
+| `[T; N]` | N * width(T) | |
+| `(T1, T2)` | width(T1) + width(T2) | |
+| `struct` | sum of field widths | |
 
 ---
 
@@ -377,6 +391,8 @@ sec ram: { 17: Field, 42: Field }   // pre-initialized RAM slots
 
 ### Operator Table
 
+**Tier 1 — all targets:**
+
 | Operator | Operand types | Result type | Description |
 |----------|---------------|-------------|-------------|
 | `a + b` | Field, Field | Field | Field addition |
@@ -387,6 +403,11 @@ sec ram: { 17: Field, 42: Field }   // pre-initialized RAM slots
 | `a & b` | U32, U32 | U32 | Bitwise AND |
 | `a ^ b` | U32, U32 | U32 | Bitwise XOR |
 | `a /% b` | U32, U32 | (U32, U32) | Division + remainder |
+
+**Tier 2 — XField targets only:**
+
+| Operator | Operand types | Result type | Description |
+|----------|---------------|-------------|-------------|
 | `a *. s` | XField, Field | XField | Scalar multiplication |
 
 No subtraction operator (`-`). No division operator (`/`). No `!=`, `>`, `<=`,
@@ -507,7 +528,9 @@ written to public output. The verifier sees the commitment, not the data.
 
 ## 7. Builtin Functions
 
-### I/O and Non-Deterministic Input
+### Tier 1 — Universal (all targets)
+
+#### I/O and Non-Deterministic Input
 
 | Signature | Description |
 |-----------|-------------|
@@ -517,9 +540,9 @@ written to public output. The verifier sees the commitment, not the data.
 | `pub_write2(...)` ... `pub_write5(...)` | Write N public outputs |
 | `divine() -> Field` | Read 1 secret input (prover only) |
 | `divine3() -> (Field, Field, Field)` | Read 3 secret inputs |
-| `divine5() -> Digest` | Read 5 secret inputs as Digest |
+| `divine5() -> Digest` | Read D secret inputs as Digest |
 
-### Field Arithmetic
+#### Field Arithmetic
 
 | Signature | Description |
 |-----------|-------------|
@@ -527,7 +550,7 @@ written to public output. The verifier sees the commitment, not the data.
 | `neg(a: Field) -> Field` | Additive inverse: p - a |
 | `inv(a: Field) -> Field` | Multiplicative inverse |
 
-### U32 Operations
+#### U32 Operations
 
 | Signature | Description |
 |-----------|-------------|
@@ -538,24 +561,7 @@ written to public output. The verifier sees the commitment, not the data.
 | `pow(base: U32, exp: U32) -> U32` | Exponentiation |
 | `popcount(a: U32) -> U32` | Hamming weight (bit count) |
 
-### Hash Operations
-
-| Signature | Description |
-|-----------|-------------|
-| `hash(a..j: Field x10) -> Digest` | Hash 10 field elements |
-| `sponge_init()` | Initialize sponge state |
-| `sponge_absorb(a..j: Field x10)` | Absorb 10 fields |
-| `sponge_absorb_mem(ptr: Field)` | Absorb 10 fields from RAM |
-| `sponge_squeeze() -> [Field; 10]` | Squeeze 10 fields |
-
-### Merkle Operations
-
-| Signature | Description |
-|-----------|-------------|
-| `merkle_step(idx: U32, d: Digest) -> (U32, Digest)` | One tree level up |
-| `merkle_step_mem(ptr, idx, d) -> (Field, U32, Digest)` | Tree level from RAM |
-
-### Assertions
+#### Assertions
 
 | Signature | Description |
 |-----------|-------------|
@@ -563,20 +569,43 @@ written to public output. The verifier sees the commitment, not the data.
 | `assert_eq(a: Field, b: Field)` | Assert equality |
 | `assert_digest(a: Digest, b: Digest)` | Assert digest equality |
 
-### RAM
+#### Memory
 
 | Signature | Description |
 |-----------|-------------|
 | `ram_read(addr) -> Field` | Read 1 word |
 | `ram_write(addr, val)` | Write 1 word |
-| `ram_read_block(addr) -> [Field; 5]` | Read 5 words |
-| `ram_write_block(addr, vals)` | Write 5 words |
+| `ram_read_block(addr) -> [Field; D]` | Read D words (D = digest width) |
+| `ram_write_block(addr, vals)` | Write D words |
 
-### Extension Field
+### Tier 2 — Provable (hash-capable targets)
+
+These builtins require a target with native hash coprocessor support. The
+argument counts (rate R, digest width D) are target-dependent. On Triton VM:
+R = 10, D = 5. On Miden: R = 8, D = 4. See [targets.md](targets.md).
+
+#### Hash Operations
 
 | Signature | Description |
 |-----------|-------------|
-| `xfield(x0, x1, x2) -> XField` | Construct XField |
+| `hash(fields: Field x R) -> Digest` | Hash R field elements into a Digest |
+| `sponge_init()` | Initialize sponge state |
+| `sponge_absorb(fields: Field x R)` | Absorb R fields |
+| `sponge_absorb_mem(ptr: Field)` | Absorb R fields from RAM |
+| `sponge_squeeze() -> [Field; R]` | Squeeze R fields |
+
+#### Merkle Operations
+
+| Signature | Description |
+|-----------|-------------|
+| `merkle_step(idx: U32, d: Digest) -> (U32, Digest)` | One tree level up |
+| `merkle_step_mem(ptr, idx, d) -> (Field, U32, Digest)` | Tree level from RAM |
+
+#### Extension Field (XField targets only)
+
+| Signature | Description |
+|-----------|-------------|
+| `xfield(x0, ..., xE) -> XField` | Construct XField (E = extension degree) |
 | `xinvert(a: XField) -> XField` | XField inverse |
 | `xx_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)` | XField dot product step |
 | `xb_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)` | Mixed dot product step |

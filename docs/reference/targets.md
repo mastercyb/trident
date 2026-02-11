@@ -306,6 +306,49 @@ Triton VM only — requires native STARK verification support.
 
 ---
 
+## Type and Builtin Availability
+
+Types, operators, and builtins are tier-gated. Programs using higher-tier
+features cannot target lower-tier backends.
+
+### Types per Target
+
+| Type | Triton VM | Miden VM | SP1 | OpenVM | Cairo |
+|---|---|---|---|---|---|
+| `Field` | 64-bit | 64-bit | 31-bit | 64-bit | 251-bit |
+| `Bool` | yes | yes | yes | yes | yes |
+| `U32` | yes | yes | yes | yes | yes |
+| `Digest` | [Field; 5] | [Field; 4] | [Field; 8] | [Field; 8] | [Field; 1] |
+| `XField` | [Field; 3] | -- | -- | -- | -- |
+
+`Digest` and `XField` widths come from the target configuration. Programs
+using `XField` can only compile for targets where `xfield_width > 0`.
+
+### Operators per Target
+
+| Operator | Tier | Triton VM | Miden VM | SP1 | OpenVM | Cairo |
+|---|---|---|---|---|---|---|
+| `+` `*` `==` | 1 | yes | yes | yes | yes | yes |
+| `<` `&` `^` `/%` | 1 | yes | yes | yes | yes | yes |
+| `*.` | 2 | yes | -- | -- | -- | -- |
+
+### Builtins per Target
+
+| Builtin group | Tier | Triton VM | Miden VM | SP1 | OpenVM | Cairo |
+|---|---|---|---|---|---|---|
+| I/O (`pub_read`, `divine`, etc.) | 1 | yes | yes | yes | yes | yes |
+| Field (`sub`, `neg`, `inv`) | 1 | yes | yes | yes | yes | yes |
+| U32 (`split`, `log2`, `pow`, etc.) | 1 | yes | yes | yes | yes | yes |
+| Assert (`assert`, `assert_eq`) | 1 | yes | yes | yes | yes | yes |
+| RAM (`ram_read`, `ram_write`) | 1 | yes | yes | yes | yes | yes |
+| Hash (`hash`, `sponge_*`) | 2 | R=10, D=5 | R=8, D=4 | -- | -- | -- |
+| Merkle (`merkle_step`) | 2 | native | emulated | -- | -- | -- |
+| XField (`xfield`, `xinvert`, dot) | 2 | yes | -- | -- | -- | -- |
+
+R = hash rate (fields per absorption). D = digest width (fields per digest).
+
+---
+
 ## Target Comparison
 
 | | Triton VM | Miden VM | SP1 | OpenVM | Cairo |
@@ -316,7 +359,9 @@ Triton VM only — requires native STARK verification support.
 | Cost model | 6 tables | 4 tables | Cycles | Cycles | Steps+builtins |
 | Extension field | Cubic | None | None | None | None |
 | Native Merkle | Yes | No | No | No | No |
-| Digest width | 5 | 4 | 8 | 8 | 1 |
+| Digest width (D) | 5 | 4 | 8 | 8 | 1 |
+| Hash rate (R) | 10 | 8 | 8 | 8 | 2 |
+| XField width (E) | 3 | 0 | 0 | 0 | 0 |
 | Output | .tasm | .masm | .S | .S | .sierra |
 
 ---
