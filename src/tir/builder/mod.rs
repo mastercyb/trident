@@ -256,9 +256,9 @@ impl TIRBuilder {
             }
         }
 
-        // ── Program preamble ──
+        // ── Program entry point ──
         if file.kind == FileKind::Program {
-            self.ops.push(TIROp::Preamble("main".to_string()));
+            self.ops.push(TIROp::Entry("main".to_string()));
         }
 
         // ── Emit non-generic, non-test functions ──

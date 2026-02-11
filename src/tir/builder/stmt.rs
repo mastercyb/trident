@@ -202,7 +202,7 @@ impl TIRBuilder {
                     }
                 }
 
-                self.ops.push(TIROp::Open {
+                self.ops.push(TIROp::Reveal {
                     name: event_name.node.clone(),
                     tag,
                     field_count: decl_order.len() as u32,

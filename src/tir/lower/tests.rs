@@ -15,7 +15,7 @@ fn test_lower_flat_ops() {
 #[test]
 fn test_lower_fn_structure() {
     let ops = vec![
-        TIROp::Preamble("main".into()),
+        TIROp::Entry("main".into()),
         TIROp::FnStart("main".into()),
         TIROp::Push(0),
         TIROp::Return,
@@ -369,7 +369,7 @@ fn test_miden_flat_ops() {
 #[test]
 fn test_miden_fn_structure() {
     let ops = vec![
-        TIROp::Preamble("main".into()),
+        TIROp::Entry("main".into()),
         TIROp::FnStart("main".into()),
         TIROp::Push(0),
         TIROp::Return,

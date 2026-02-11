@@ -28,7 +28,7 @@ fn make_builder() -> TIRBuilder {
     TIRBuilder::new(TargetConfig::triton())
 }
 
-// ── Test: minimal program produces Preamble + FnStart + FnEnd ──
+// ── Test: minimal program produces Entry + FnStart + FnEnd ──
 
 #[test]
 fn test_minimal_program() {
@@ -53,8 +53,8 @@ fn test_minimal_program() {
     let ops = make_builder().build_file(&file);
 
     assert!(
-        ops.iter().any(|op| matches!(op, TIROp::Preamble(_))),
-        "expected Preamble op"
+        ops.iter().any(|op| matches!(op, TIROp::Entry(_))),
+        "expected Entry op"
     );
     assert!(
         ops.iter()
@@ -268,8 +268,8 @@ fn test_module_no_preamble() {
     let ops = make_builder().build_file(&file);
 
     assert!(
-        !ops.iter().any(|op| matches!(op, TIROp::Preamble(_))),
-        "module should not produce Preamble"
+        !ops.iter().any(|op| matches!(op, TIROp::Entry(_))),
+        "module should not produce Entry"
     );
     assert!(
         ops.iter()

@@ -63,8 +63,8 @@ pub enum TIROp {
     FnStart(String),
     /// Function end.
     FnEnd,
-    /// Program entry preamble (main function label).
-    Preamble(String),
+    /// Program entry point (main function label).
+    Entry(String),
 
     // ── Passthrough (2) ──
     /// Comment text (without prefix — lowering adds target-specific prefix).
@@ -137,9 +137,9 @@ pub enum TIROp {
     },
 
     // ── Events (2) ──
-    /// Open an observable event. Fields are on the stack (topmost = first field).
+    /// Reveal an observable event. Fields are on the stack (topmost = first field).
     /// Lowering maps to target-native events (Triton: write_io, EVM: LOG, etc.).
-    Open {
+    Reveal {
         name: String,
         tag: u64,
         field_count: u32,
@@ -238,9 +238,9 @@ impl fmt::Display for TIROp {
             TIROp::MerkleStep => write!(f, "merkle_step"),
             TIROp::MerkleLoad => write!(f, "merkle_load"),
             TIROp::Assert(n) => write!(f, "assert {}", n),
-            TIROp::Open {
+            TIROp::Reveal {
                 name, field_count, ..
-            } => write!(f, "open {}({})", name, field_count),
+            } => write!(f, "reveal {}({})", name, field_count),
             TIROp::Seal {
                 name, field_count, ..
             } => write!(f, "seal {}({})", name, field_count),
@@ -268,7 +268,7 @@ impl fmt::Display for TIROp {
             }
             TIROp::FnStart(name) => write!(f, "fn_start {}", name),
             TIROp::FnEnd => write!(f, "fn_end"),
-            TIROp::Preamble(main) => write!(f, "preamble {}", main),
+            TIROp::Entry(main) => write!(f, "entry {}", main),
             TIROp::Comment(text) => write!(f, "// {}", text),
             TIROp::Asm { lines, effect } => {
                 write!(f, "asm({} lines, effect={})", lines.len(), effect)
@@ -366,7 +366,7 @@ mod tests {
             TIROp::MerkleLoad,
             TIROp::Assert(1),
             TIROp::Assert(5),
-            TIROp::Open {
+            TIROp::Reveal {
                 name: "Transfer".into(),
                 tag: 0,
                 field_count: 2,
@@ -392,7 +392,7 @@ mod tests {
             },
             TIROp::FnStart("main".into()),
             TIROp::FnEnd,
-            TIROp::Preamble("main".into()),
+            TIROp::Entry("main".into()),
             TIROp::Comment("test".into()),
             TIROp::Asm {
                 lines: vec!["nop".into()],

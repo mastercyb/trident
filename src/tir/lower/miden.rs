@@ -119,10 +119,10 @@ impl MidenLowering {
             TIROp::Assert(n) => self.emit(out, &format!("assert  # assert {} words", n)),
 
             // ── Abstract operations (Miden lowering) ──
-            TIROp::Open {
+            TIROp::Reveal {
                 name, field_count, ..
             } => {
-                self.emit(out, &format!("# open {} ({} fields)", name, field_count));
+                self.emit(out, &format!("# reveal {} ({} fields)", name, field_count));
                 for _ in 0..*field_count {
                     self.emit(out, "drop  # event field");
                 }
@@ -209,7 +209,7 @@ impl MidenLowering {
                 out.push("end".to_string());
                 out.push(String::new());
             }
-            TIROp::Preamble(main_label) => {
+            TIROp::Entry(main_label) => {
                 out.push("begin".to_string());
                 out.push(format!("    exec.{}", main_label));
                 out.push("end".to_string());

@@ -99,8 +99,8 @@ pub enum LIROp {
     FnStart(String),
     /// Function end marker.
     FnEnd,
-    /// Program entry preamble.
-    Preamble(String),
+    /// Program entry point.
+    Entry(String),
 
     // ── Passthrough (2) ──
     /// Comment text (lowering adds target-specific prefix).
@@ -184,8 +184,8 @@ pub enum LIROp {
     Hash { dst: Reg, src: Reg, count: u32 },
 
     // ── Events (2) ──
-    /// Open an observable event. Fields in consecutive regs starting at `src`.
-    Open {
+    /// Reveal an observable event. Fields in consecutive regs starting at `src`.
+    Reveal {
         name: String,
         tag: u64,
         src: Reg,
@@ -266,7 +266,7 @@ impl fmt::Display for LIROp {
             LIROp::LabelDef(label) => write!(f, "{}:", label),
             LIROp::FnStart(name) => write!(f, "fn {}:", name),
             LIROp::FnEnd => write!(f, "fn_end"),
-            LIROp::Preamble(main) => write!(f, "preamble {}", main),
+            LIROp::Entry(main) => write!(f, "entry {}", main),
             LIROp::Comment(text) => write!(f, "// {}", text),
             LIROp::Asm { lines } => write!(f, "asm({} lines)", lines.len()),
 
@@ -322,13 +322,13 @@ impl fmt::Display for LIROp {
             LIROp::Hash { dst, src, count } => {
                 write!(f, "hash {}, {}, {}", dst, src, count)
             }
-            LIROp::Open {
+            LIROp::Reveal {
                 name,
                 src,
                 field_count,
                 ..
             } => {
-                write!(f, "open {}({}, {})", name, src, field_count)
+                write!(f, "reveal {}({}, {})", name, src, field_count)
             }
             LIROp::Seal {
                 name,
@@ -474,7 +474,7 @@ mod tests {
             LIROp::LabelDef(Label::new("x")),
             LIROp::FnStart("main".into()),
             LIROp::FnEnd,
-            LIROp::Preamble("main".into()),
+            LIROp::Entry("main".into()),
             LIROp::Comment("test".into()),
             LIROp::Asm {
                 lines: vec!["nop".into()],
@@ -536,7 +536,7 @@ mod tests {
                 src: r1,
                 count: 1,
             },
-            LIROp::Open {
+            LIROp::Reveal {
                 name: "Transfer".into(),
                 tag: 0,
                 src: r0,

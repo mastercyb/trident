@@ -114,7 +114,7 @@ impl TritonLowering {
             TIROp::Assert(_) => out.push("    assert_vector".to_string()),
 
             // ── Abstract operations (Triton lowering) ──
-            TIROp::Open {
+            TIROp::Reveal {
                 tag, field_count, ..
             } => {
                 // Triton: write tag then each field to public output.
@@ -232,7 +232,7 @@ impl TritonLowering {
                 out.push("    ".to_string());
                 self.flush_deferred(out);
             }
-            TIROp::Preamble(main_label) => {
+            TIROp::Entry(main_label) => {
                 let formatted = if main_label.starts_with("__") {
                     main_label.clone()
                 } else {
