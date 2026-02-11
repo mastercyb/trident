@@ -171,12 +171,12 @@ match op_code {
 event Transfer { from: Digest, to: Digest, amount: Field }
 
 fn pay() {
-    emit Transfer { from: sender, to: receiver, amount: value }
+    reveal Transfer { from: sender, to: receiver, amount: value }
     seal Transfer { from: sender, to: receiver, amount: value }
 }
 ```
 
-`emit` reveals event fields to the verifier. `seal` hashes them — only the
+`reveal` reveals event fields to the verifier. `seal` hashes them — only the
 digest is visible. Same event type, different trust models.
 
 ### Formal Verification
