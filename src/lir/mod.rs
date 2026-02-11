@@ -131,6 +131,8 @@ pub enum LIROp {
     Lt(Reg, Reg, Reg),
     /// dst = src1 & src2 (bitwise)
     And(Reg, Reg, Reg),
+    /// dst = src1 | src2 (bitwise)
+    Or(Reg, Reg, Reg),
     /// dst = src1 ^ src2 (bitwise)
     Xor(Reg, Reg, Reg),
     /// (dst_quot, dst_rem) = divmod(src1, src2)
@@ -140,6 +142,10 @@ pub enum LIROp {
         src1: Reg,
         src2: Reg,
     },
+    /// dst = src1 << src2
+    Shl(Reg, Reg, Reg),
+    /// dst = src1 >> src2
+    Shr(Reg, Reg, Reg),
     /// dst = multiplicative inverse of src (in the field)
     Invert(Reg, Reg),
     /// (dst_hi, dst_lo) = split(src) — decompose into two limbs
@@ -272,6 +278,7 @@ impl fmt::Display for LIROp {
             LIROp::Eq(d, a, b) => write!(f, "eq {}, {}, {}", d, a, b),
             LIROp::Lt(d, a, b) => write!(f, "lt {}, {}, {}", d, a, b),
             LIROp::And(d, a, b) => write!(f, "and {}, {}, {}", d, a, b),
+            LIROp::Or(d, a, b) => write!(f, "or {}, {}, {}", d, a, b),
             LIROp::Xor(d, a, b) => write!(f, "xor {}, {}, {}", d, a, b),
             LIROp::DivMod {
                 dst_quot,
@@ -281,6 +288,8 @@ impl fmt::Display for LIROp {
             } => {
                 write!(f, "divmod {}, {}, {}, {}", dst_quot, dst_rem, src1, src2)
             }
+            LIROp::Shl(d, a, b) => write!(f, "shl {}, {}, {}", d, a, b),
+            LIROp::Shr(d, a, b) => write!(f, "shr {}, {}, {}", d, a, b),
             LIROp::Invert(d, s) => write!(f, "inv {}, {}", d, s),
             LIROp::Split {
                 dst_hi,
@@ -478,6 +487,7 @@ mod tests {
             LIROp::Eq(r0, r1, r2),
             LIROp::Lt(r0, r1, r2),
             LIROp::And(r0, r1, r2),
+            LIROp::Or(r0, r1, r2),
             LIROp::Xor(r0, r1, r2),
             LIROp::DivMod {
                 dst_quot: r0,
@@ -485,6 +495,8 @@ mod tests {
                 src1: r2,
                 src2: r3,
             },
+            LIROp::Shl(r0, r1, r2),
+            LIROp::Shr(r0, r1, r2),
             LIROp::Invert(r0, r1),
             LIROp::Split {
                 dst_hi: r0,

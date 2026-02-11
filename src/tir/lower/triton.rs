@@ -62,8 +62,23 @@ impl TritonLowering {
             TIROp::Eq => out.push("    eq".to_string()),
             TIROp::Lt => out.push("    lt".to_string()),
             TIROp::And => out.push("    and".to_string()),
+            TIROp::Or => out.push("    or".to_string()),
             TIROp::Xor => out.push("    xor".to_string()),
             TIROp::DivMod => out.push("    div_mod".to_string()),
+            TIROp::Shl => {
+                // multiply by 2^n: push 2; pow; mul
+                out.push("    push 2".to_string());
+                out.push("    pow".to_string());
+                out.push("    mul".to_string());
+            }
+            TIROp::Shr => {
+                // divide by 2^n: push 2; pow; div_mod; swap 1; pop 1
+                out.push("    push 2".to_string());
+                out.push("    pow".to_string());
+                out.push("    div_mod".to_string());
+                out.push("    swap 1".to_string());
+                out.push("    pop 1".to_string());
+            }
             TIROp::Invert => out.push("    invert".to_string()),
             TIROp::Split => out.push("    split".to_string()),
             TIROp::Log2 => out.push("    log_2_floor".to_string()),
