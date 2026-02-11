@@ -103,7 +103,7 @@ impl MidenLowering {
             TIROp::WriteMem(n) => self.emit(out, &format!("mem_store  # write {}", n)),
 
             // ── Crypto ──
-            TIROp::Hash => self.emit(out, "hperm"),
+            TIROp::Hash { .. } => self.emit(out, "hperm"),
             TIROp::SpongeInit => self.emit(out, "# sponge_init (use hperm sequence)"),
             TIROp::SpongeAbsorb => self.emit(out, "hperm  # absorb"),
             TIROp::SpongeSqueeze => self.emit(out, "hperm  # squeeze"),
@@ -143,10 +143,6 @@ impl MidenLowering {
             TIROp::WriteStorage { width } => {
                 self.emit(out, &format!("mem_store  # write {}", width));
             }
-            TIROp::HashDigest => {
-                self.emit(out, "hperm");
-            }
-
             // ── Control flow (flat) ──
             TIROp::Call(label) => self.emit(out, &format!("exec.{}", label)),
             TIROp::Return => { /* Miden uses end, handled by FnEnd */ }

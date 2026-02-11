@@ -173,11 +173,9 @@ pub enum LIROp {
     /// Assert `count` consecutive regs starting at `src` are all nonzero.
     Assert { src: Reg, count: u32 },
 
-    // ── Hash (2) ──
-    /// dst = hash(src..src+count)
+    // ── Hash (1) ──
+    /// dst = hash(src..src+count). Width is metadata for optimization.
     Hash { dst: Reg, src: Reg, count: u32 },
-    /// dst = hash_digest(src..src+count)
-    HashDigest { dst: Reg, src: Reg, count: u32 },
 
     // ── Events (2) ──
     /// Open an observable event. Fields in consecutive regs starting at `src`.
@@ -314,9 +312,6 @@ impl fmt::Display for LIROp {
             }
             LIROp::Hash { dst, src, count } => {
                 write!(f, "hash {}, {}, {}", dst, src, count)
-            }
-            LIROp::HashDigest { dst, src, count } => {
-                write!(f, "hash_digest {}, {}, {}", dst, src, count)
             }
             LIROp::Open {
                 name,
@@ -525,11 +520,6 @@ mod tests {
             LIROp::Assert { src: r0, count: 1 },
             LIROp::Assert { src: r0, count: 4 },
             LIROp::Hash {
-                dst: r0,
-                src: r1,
-                count: 1,
-            },
-            LIROp::HashDigest {
                 dst: r0,
                 src: r1,
                 count: 1,

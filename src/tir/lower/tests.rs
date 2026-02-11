@@ -119,7 +119,7 @@ fn test_lower_comment_and_raw() {
 #[test]
 fn test_lower_crypto_ops() {
     let ops = vec![
-        TIROp::Hash,
+        TIROp::Hash { width: 0 },
         TIROp::SpongeInit,
         TIROp::SpongeAbsorb,
         TIROp::SpongeSqueeze,

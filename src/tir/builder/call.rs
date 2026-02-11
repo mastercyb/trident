@@ -141,7 +141,9 @@ impl TIRBuilder {
 
             // ── Hash operations ──
             "hash" => {
-                self.ops.push(TIROp::HashDigest);
+                self.ops.push(TIROp::Hash {
+                    width: self.target_config.digest_width,
+                });
                 self.push_temp(self.target_config.digest_width);
             }
             "sponge_init" => {

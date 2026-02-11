@@ -86,7 +86,7 @@ impl TritonLowering {
             TIROp::WriteMem(n) => out.push(format!("    write_mem {}", n)),
 
             // ── Crypto ──
-            TIROp::Hash => out.push("    hash".to_string()),
+            TIROp::Hash { .. } => out.push("    hash".to_string()),
             TIROp::SpongeInit => out.push("    sponge_init".to_string()),
             TIROp::SpongeAbsorb => out.push("    sponge_absorb".to_string()),
             TIROp::SpongeSqueeze => out.push("    sponge_squeeze".to_string()),
@@ -131,11 +131,6 @@ impl TritonLowering {
                 out.push(format!("    write_mem {}", width));
                 out.push("    pop 1".to_string());
             }
-            TIROp::HashDigest => {
-                // Triton: hash instruction (consumes 10, produces 5).
-                out.push("    hash".to_string());
-            }
-
             // ── Control flow (flat) ──
             TIROp::Call(label) => {
                 let formatted = if label.starts_with("__") {

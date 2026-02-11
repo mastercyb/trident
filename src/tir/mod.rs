@@ -119,11 +119,12 @@ pub enum TIROp {
     /// Assert `n` elements. Assert(1) = single, Assert(5) = vector.
     Assert(u32),
 
-    // ── Hash (2) ──
-    /// Cryptographic hash. Every target has some hash primitive.
-    Hash,
-    /// Compute a hash digest. Inputs on stack per target config.
-    HashDigest,
+    // ── Hash (1) ──
+    /// Cryptographic hash. Width is metadata for optimization;
+    /// both targets emit the same instruction regardless.
+    Hash {
+        width: u32,
+    },
 
     // ── Events (2) ──
     /// Open an observable event. Fields are on the stack (topmost = first field).
@@ -216,7 +217,7 @@ impl fmt::Display for TIROp {
             TIROp::Hint(n) => write!(f, "hint {}", n),
             TIROp::ReadMem(n) => write!(f, "read_mem {}", n),
             TIROp::WriteMem(n) => write!(f, "write_mem {}", n),
-            TIROp::Hash => write!(f, "hash"),
+            TIROp::Hash { width } => write!(f, "hash {}", width),
             TIROp::SpongeInit => write!(f, "sponge_init"),
             TIROp::SpongeAbsorb => write!(f, "sponge_absorb"),
             TIROp::SpongeSqueeze => write!(f, "sponge_squeeze"),
@@ -232,7 +233,6 @@ impl fmt::Display for TIROp {
             } => write!(f, "seal {}({})", name, field_count),
             TIROp::ReadStorage { width } => write!(f, "read_storage {}", width),
             TIROp::WriteStorage { width } => write!(f, "write_storage {}", width),
-            TIROp::HashDigest => write!(f, "hash_digest"),
             TIROp::Call(label) => write!(f, "call {}", label),
             TIROp::Return => write!(f, "return"),
             TIROp::Halt => write!(f, "halt"),
@@ -341,7 +341,7 @@ mod tests {
             TIROp::Hint(1),
             TIROp::ReadMem(1),
             TIROp::WriteMem(1),
-            TIROp::Hash,
+            TIROp::Hash { width: 0 },
             TIROp::SpongeInit,
             TIROp::SpongeAbsorb,
             TIROp::SpongeSqueeze,
@@ -362,7 +362,6 @@ mod tests {
             },
             TIROp::ReadStorage { width: 1 },
             TIROp::WriteStorage { width: 1 },
-            TIROp::HashDigest,
             TIROp::Call("f".into()),
             TIROp::Return,
             TIROp::Halt,
