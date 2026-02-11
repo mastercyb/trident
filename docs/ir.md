@@ -17,11 +17,15 @@ TypeChecker  →  Exports { mono_instances, call_resolutions }
   ▼
 TIRBuilder    →  Vec<TIROp>          ← target-independent
   │
-  ▼
-Lowering     →  Vec<String>        ← target-specific assembly
+  ├─→ Lowering          → Vec<String>  ← stack targets (Triton, Miden, EVM)
+  │     │
+  │     ▼
+  │   Linker → final .tasm/.masm
   │
-  ▼
-Linker       →  final .tasm/.masm
+  └─→ tir_to_lir()      → Vec<LIROp>  ← register targets (x86-64, ARM64, RISC-V)
+        │
+        ▼
+      RegisterLowering → Vec<u8>       ← native machine code
 ```
 
 ---
@@ -454,6 +458,71 @@ backend implement events in its native way — or ignore them entirely.
 
 ---
 
+## LIR: Register-Based IR for Native Targets
+
+The TIR is a stack-based representation — ideal for stack machines (Triton,
+Miden, EVM, WASM). Register machines (x86-64, ARM64, RISC-V) need a different
+form: explicit virtual registers, three-address instructions, and flat control
+flow.
+
+The **LIR** (Low-level IR) provides this as a parallel lowering path:
+
+```
+AST → TIR ─→ Lowering ──────────→ Vec<String>   (stack targets)
+          └→ LIR → RegisterLowering → Vec<u8>   (register targets)
+```
+
+### LIR design
+
+| Property | TIR | LIR |
+|----------|-----|-----|
+| Operands | Implicit stack | Explicit virtual registers `Reg(u32)` |
+| Form | Stack ops (`Push`, `Dup`, `Swap`) | Three-address (`Add(dst, src1, src2)`) |
+| Control flow | Nested bodies (`IfElse { then_body, else_body }`) | Flat labels (`Branch`, `Jump`, `LabelDef`) |
+| Memory | `ReadMem(n)` / `WriteMem(n)` | `Load { dst, base, offset }` / `Store { src, base, offset }` |
+| Output | Assembly text `Vec<String>` | Machine code `Vec<u8>` |
+
+LIR has **51 variants** (TIR has 53) in the same four-tier structure:
+
+- **Tier 0 — Structure (12)**: `Branch`/`Jump`/`LabelDef` replace nested
+  `IfElse`/`IfOnly`/`Loop` bodies. No `Push`/`Pop`/`Dup`/`Swap` stack ops.
+- **Tier 1 — Universal (29)**: `LoadImm`/`Move` replace stack manipulation.
+  Base+offset `Load`/`Store` replace `ReadMem`/`WriteMem`.
+- **Tier 2 — Provable (6)**: Same sponge/merkle ops, register-addressed.
+- **Tier 3 — Recursion (4)**: Same ops, three-address form.
+
+### File layout
+
+```
+src/lir/
+├── mod.rs          ← LIROp enum (51 variants) + Reg + Label + Display + tests
+├── convert.rs      ← tir_to_lir() stub + ConvertCtx helper
+└── lower/
+    ├── mod.rs      ← RegisterLowering trait + create_register_lowering() factory
+    ├── x86_64.rs   ← X86_64Lowering stub
+    ├── arm64.rs    ← Arm64Lowering stub
+    └── riscv.rs    ← RiscVLowering stub
+```
+
+### RegisterLowering trait
+
+```rust
+pub trait RegisterLowering {
+    fn target_name(&self) -> &str;
+    fn lower(&self, ops: &[LIROp]) -> Vec<u8>;          // machine code
+    fn lower_text(&self, ops: &[LIROp]) -> Vec<String>;  // debug text
+}
+```
+
+### Current status
+
+The LIR module is a **scaffold** — all types, traits, and tests compile
+and pass, but `tir_to_lir()` and the three backend `lower()` methods are
+`todo!()` stubs. The architecture is established for future implementation
+of register allocation and instruction selection.
+
+---
+
 ## Cross-references
 
 - [Universal design](universal-design.md) — multi-target architecture overview
@@ -463,3 +532,5 @@ backend implement events in its native way — or ignore them entirely.
 - [`src/tir/lower/README.md`](../src/tir/lower/README.md) — backend file map + strategy table
 - [`src/tools/target.rs`](../src/tools/target.rs) — TargetConfig definition
 - [`src/codegen/stack.rs`](../src/codegen/stack.rs) — StackManager implementation
+- [`src/lir/mod.rs`](../src/lir/mod.rs) — LIROp enum + register-based IR
+- [`src/lir/lower/mod.rs`](../src/lir/lower/mod.rs) — RegisterLowering trait + native backends

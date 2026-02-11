@@ -3,6 +3,7 @@ pub mod codegen;
 pub mod common;
 pub mod cost;
 pub mod frontend;
+pub mod lir;
 pub mod pkgmgmt;
 pub mod tir;
 pub mod tools;
