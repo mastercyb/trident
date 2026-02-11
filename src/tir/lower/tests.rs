@@ -153,7 +153,7 @@ fn test_lower_already_prefixed_labels() {
 
 // ─── Comparison Tests: TIRBuilder + TritonLowering == Emitter ─────
 
-use crate::codegen::emitter::Emitter;
+use crate::legacy::emitter::Emitter;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::target::TargetConfig;

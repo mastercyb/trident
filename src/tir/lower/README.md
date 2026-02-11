@@ -9,7 +9,7 @@ Consumes `Vec<TIROp>` and produces target-specific assembly text.
 | [`mod.rs`](mod.rs) | Trait and factory | [`Lowering`](mod.rs:17) trait, [`create_lowering`](mod.rs:23) factory |
 | [`triton.rs`](triton.rs) | Triton VM backend (TASM) | [`TritonLowering`](triton.rs:19), [`lower_op`](triton.rs:42), [`flush_deferred`](triton.rs:255) |
 | [`miden.rs`](miden.rs) | Miden VM backend (MASM) | [`MidenLowering`](miden.rs:10), [`lower_op`](miden.rs:37) |
-| [`tests.rs`](tests.rs) | Unit + comparison tests | per-backend tests, TIRBuilder+Lowering vs [`Emitter`](../../codegen/emitter/mod.rs:30) comparison |
+| [`tests.rs`](tests.rs) | Unit + comparison tests | per-backend tests, TIRBuilder+Lowering vs [`Emitter`](../../legacy/emitter/mod.rs:30) comparison |
 
 ## Backend strategies
 
@@ -34,4 +34,4 @@ Consumes `Vec<TIROp>` and produces target-specific assembly text.
 
 - [`TIROp`](../mod.rs:18) — the IR operations consumed by lowering
 - [`TIRBuilder`](../builder/mod.rs:37) — used in comparison tests
-- [`Emitter`](../../codegen/emitter/mod.rs:30) — old backend, used as reference in comparison tests
+- [`Emitter`](../../legacy/emitter/mod.rs:30) — old backend, used as reference in comparison tests

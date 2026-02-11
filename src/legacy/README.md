@@ -1,6 +1,9 @@
-# Code Generation
+# Legacy Code Generation
 
-The codegen module translates a type-checked AST into target assembly for stack-machine VMs. The [emitter/](emitter/) directory drives the entire process, delegating instruction selection to a pluggable [backend/](backend/) trait. This design means all control flow, variable management, and optimization logic is written once and shared across all five compilation targets.
+> **Deprecated.** This module contains the old AST-to-assembly emitter, kept
+> only for comparison tests against the new TIR pipeline (`tir/`).
+
+The legacy module translates a type-checked AST into target assembly for stack-machine VMs. The [emitter/](emitter/) directory drives the entire process, delegating instruction selection to a pluggable [backend/](backend/) trait. This design means all control flow, variable management, and optimization logic is written once and shared across all five compilation targets.
 
 ```
          AST (from typecheck/)

@@ -59,7 +59,7 @@ The same Trident operation produces different assembly depending on the target:
 
 ## Adding a New Backend
 
-1. Create `src/codegen/backend/yourvm.rs`
+1. Create `src/legacy/backend/yourvm.rs`
 2. Define a unit struct implementing `StackBackend` — fill in all ~40 methods
 3. Add `pub mod yourvm;` to [mod.rs](mod.rs) and a `pub(crate) use` re-export
 4. Add a match arm in `create_backend()`

@@ -301,9 +301,9 @@ src/kir/                           ← GPU kernel lowering
     ├── metal.rs                   ← Metal stub
     └── vulkan.rs                  ← Vulkan stub
 
-src/codegen/ir/                    ← backward-compatible re-exports
-├── mod.rs                         ← pub use crate::tir::*
-└── builder.rs                     ← pub use crate::tir::builder::*
+src/legacy/                        ← old emitter (deprecated, comparison tests only)
+├── emitter/                       ← AST-to-assembly walker
+└── backend/                       ← StackBackend trait + targets
 ```
 
 ---

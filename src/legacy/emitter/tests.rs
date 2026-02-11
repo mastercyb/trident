@@ -1,5 +1,5 @@
 use super::*;
-use crate::codegen::backend::create_backend;
+use crate::legacy::backend::create_backend;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 

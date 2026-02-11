@@ -12,7 +12,7 @@ source.tri
  typecheck/    type checking, borrow checking, generics
     |
     v
- codegen/      AST -> target assembly (via StackBackend trait)
+ legacy/       old AST-to-assembly emitter (deprecated, comparison tests only)
     |
     v
  output.tasm
@@ -34,10 +34,10 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 | [`common/`](common/) | 314 | Shared infrastructure: [source spans](common/span.rs), [diagnostics](common/diagnostic.rs), [type definitions](common/types.rs) |
 | [`frontend/`](frontend/) | 4,392 | [Lexer](frontend/lexer.rs), [parser](frontend/parser.rs), [token definitions](frontend/lexeme.rs), [pretty-printer/formatter](frontend/format.rs) |
 | [`typecheck/`](typecheck/) | 3,004 | [Type checker](typecheck/mod.rs) with borrow analysis, generics, and [builtin registration](typecheck/builtins.rs) |
-| [`codegen/`](codegen/) | 4,189 | AST-to-assembly [emitter](codegen/emitter.rs), [backend trait](codegen/backend/) |
+| [`legacy/`](legacy/) | 4,189 | Old AST-to-assembly [emitter](legacy/emitter.rs), [backend trait](legacy/backend/) (deprecated) |
 | [`stack.rs`](stack.rs) | — | LRU [stack manager](stack.rs) with automatic RAM spill/reload |
 | [`linker.rs`](linker.rs) | — | Multi-module [linker](linker.rs) for cross-module calls |
-| [`codegen/backend/`](codegen/backend/) | 802 | [`StackBackend`](codegen/backend/mod.rs) trait + five targets: [Triton](codegen/backend/triton.rs), [Miden](codegen/backend/miden.rs), [OpenVM](codegen/backend/openvm.rs), [SP1](codegen/backend/sp1.rs), [Cairo](codegen/backend/cairo.rs) |
+| [`legacy/backend/`](legacy/backend/) | 802 | [`StackBackend`](legacy/backend/mod.rs) trait + five targets: [Triton](legacy/backend/triton.rs), [Miden](legacy/backend/miden.rs), [OpenVM](legacy/backend/openvm.rs), [SP1](legacy/backend/sp1.rs), [Cairo](legacy/backend/cairo.rs) |
 | [`cost/`](cost/) | 2,335 | Static cost [analyzer](cost/analyzer.rs), per-function breakdown, [optimization hints and reports](cost/report.rs) |
 | [`cost/model/`](cost/model/) | 771 | [`CostModel`](cost/model/mod.rs) trait + four targets: [Triton](cost/model/triton.rs), [Miden](cost/model/miden.rs), [Cycle](cost/model/cycle.rs), [Cairo](cost/model/cairo.rs) |
 | [`verify/`](verify/) | 5,570 | [Symbolic execution](verify/sym.rs), [constraint solving](verify/solve.rs), [SMT encoding](verify/smt.rs), [equivalence checking](verify/equiv.rs), [invariant synthesis](verify/synthesize.rs), [JSON reports](verify/report.rs) |
@@ -59,7 +59,7 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 
 **Type Checking** ([`typecheck/`](typecheck/)). The [type checker](typecheck/mod.rs) validates types, resolves generics via monomorphization, performs borrow/move analysis, and registers builtin function signatures ([`builtins.rs`](typecheck/builtins.rs)). Diagnostics are emitted for type mismatches, undefined variables, unused bindings, and borrow violations.
 
-**Code Generation** ([`codegen/`](codegen/)). The [emitter](codegen/emitter.rs) walks the typed AST and produces target assembly by calling methods on a [`StackBackend`](codegen/backend/mod.rs) trait. Each target ([Triton](codegen/backend/triton.rs), [Miden](codegen/backend/miden.rs), [OpenVM](codegen/backend/openvm.rs), [SP1](codegen/backend/sp1.rs), [Cairo](codegen/backend/cairo.rs)) implements this trait in its own file. The [stack manager](stack.rs) tracks operand positions with automatic RAM spill/reload. The [linker](linker.rs) resolves cross-module calls.
+**Legacy Code Generation** ([`legacy/`](legacy/)). The old [emitter](legacy/emitter.rs) walks the typed AST and produces target assembly by calling methods on a [`StackBackend`](legacy/backend/mod.rs) trait. Each target ([Triton](legacy/backend/triton.rs), [Miden](legacy/backend/miden.rs), [OpenVM](legacy/backend/openvm.rs), [SP1](legacy/backend/sp1.rs), [Cairo](legacy/backend/cairo.rs)) implements this trait in its own file. Deprecated — kept only for comparison tests against the new TIR pipeline. The [stack manager](stack.rs) tracks operand positions with automatic RAM spill/reload. The [linker](linker.rs) resolves cross-module calls.
 
 **Cost Analysis** ([`cost/`](cost/)). The [analyzer](cost/analyzer.rs) walks the AST and sums per-instruction costs using a target-specific [`CostModel`](cost/model/mod.rs). The [report module](cost/report.rs) formats results, generates optimization hints, and provides JSON serialization for `--compare` workflows.
 
@@ -71,7 +71,7 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 
 **Direct mapping**. Every language construct maps to a known instruction pattern. The compiler is a thin translation layer, not an optimization engine. This makes proving costs predictable and the compiler auditable.
 
-**Target abstraction**. The [`StackBackend`](codegen/backend/mod.rs) trait and [`CostModel`](cost/model/mod.rs) trait isolate all target-specific knowledge. Adding a new backend means implementing these two traits -- the rest of the compiler is shared.
+**Target abstraction**. The [`Lowering`](tir/lower/mod.rs) trait and [`CostModel`](cost/model/mod.rs) trait isolate all target-specific knowledge. Adding a new backend means implementing these two traits -- the rest of the compiler is shared.
 
 **Re-exports for stability**. [`lib.rs`](lib.rs) re-exports every module at the crate root (`crate::parser`, `crate::emit`, etc.) so that internal reorganization does not break downstream code or the binary crate.
 
