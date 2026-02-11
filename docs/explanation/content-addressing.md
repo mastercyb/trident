@@ -575,8 +575,8 @@ itself.
 
 - [Tutorial](../tutorials/tutorial.md) -- Getting started with Trident, including first use of `trident hash` and `trident ucm`
 - [Formal Verification](formal-verification.md) -- How verification works, including how results are cached by content hash
-- [Language Reference](../reference/reference.md) -- Complete language syntax, types, and built-in functions
+- [Language Reference](../reference/language.md) -- Complete language syntax, types, and built-in functions
 - [Deploying a Program](../guides/deploying-a-program.md) -- Deployment by content hash, on-chain registry
 - [Universal Design](universal-design.md) -- Multi-target architecture and how hashes relate to backends
-- [Language Specification](../reference/spec.md) -- Formal hash computation rules
+- [Target Reference](../reference/targets.md) -- Target profiles, cost models, and OS model
 - [Vision](vision.md) -- The broader vision for content-addressed provable computation

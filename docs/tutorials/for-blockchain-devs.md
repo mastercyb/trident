@@ -916,8 +916,8 @@ types, functions, modules, I/O, hashing, events, testing, and cost analysis.
 ### Trident documentation
 
 - [Tutorial](tutorial.md) -- Step-by-step Trident developer guide
-- [Language Reference](../reference/reference.md) -- Quick lookup: types, operators, builtins, grammar
-- [Language Specification](../reference/spec.md) -- Complete language reference
+- [Language Reference](../reference/language.md) -- Quick lookup: types, operators, builtins, grammar
+- [Target Reference](../reference/targets.md) -- Target profiles, cost models, and OS model
 - [Deploying a Program](../guides/deploying-a-program.md) -- Neptune UTXO scripts, lock/type scripts, multi-target deployment
 - [Gold Standard Libraries](../explanation/gold-standard.md) -- Token standards (TSP-1/TSP-2), bridge clients, crypto gadgets
 - [Programming Model](../explanation/programming-model.md) -- How programs run in Triton VM

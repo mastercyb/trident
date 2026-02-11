@@ -288,7 +288,7 @@ In this example, the Processor and Op Stack tables are both 3,847 rows, but
 the padded height is 4,096. If a small code change pushed any table past
 4,096, the padded height would jump to 8,192 -- doubling proving time.
 
-Cross-reference: [spec.md](../reference/spec.md) Section 12 for the full cost model,
+Cross-reference: [targets.md](../reference/targets.md) for the full cost model,
 [optimization.md](../guides/optimization.md) for strategies to reduce table heights.
 
 ---
@@ -787,7 +787,7 @@ The cost of a single hash operation varies dramatically across ZK systems:
 For hash-heavy workloads -- Merkle tree operations, sponge hashing, content
 addressing -- this difference dominates total proving cost.
 
-Cross-reference: [spec.md](../reference/spec.md) Section 12 for the complete cost model,
+Cross-reference: [targets.md](../reference/targets.md) for the complete cost model,
 [optimization.md](../guides/optimization.md) for cost reduction strategies.
 
 ---
@@ -869,7 +869,7 @@ a working recursive verifier running in production today.
   single proof growing larger.
 
 Cross-reference: [vision.md](vision.md) "Recursive STARK Verification",
-[spec.md](../reference/spec.md) Sections 8.4 and 13.4.
+[language.md](../reference/language.md).
 
 ---
 
@@ -909,10 +909,10 @@ Cross-reference: [vision.md](vision.md) "Recursive STARK Verification",
 - [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide from hello world to Merkle
   proofs, cost analysis, and inline assembly.
 
-- [Language Reference](../reference/reference.md) -- Quick lookup: cost-per-instruction
+- [Language Reference](../reference/language.md) -- Quick lookup: cost-per-instruction
   table (Section 7) maps every construct to its table impact.
 
-- [Language Specification](../reference/spec.md) -- Section 12 covers cost computation in
+- [Target Reference](../reference/targets.md) -- Cost models and target profiles
   full detail. Section 8.4 covers extension-field dot products. Section 13.4
   gives the recursive verifier sketch.
 

@@ -26,6 +26,16 @@ TIRBuilder → Vec<TIROp>              ← 54 ops, target-independent
 
 ---
 
+## The OS Model
+
+The IR is the compiler's universal instruction set. Each target is an operating
+system with its own CPU (VM), word size (field), and instruction set extensions
+(hash function, Merkle ops). Lowering translates the IR to each OS's native
+instruction set. See [targets.md](targets.md) for the full OS model and target
+profiles.
+
+---
+
 ## Part I: The 54 Operations
 
 ### Tier 0 — Structure (11)

@@ -272,7 +272,7 @@ The `.tasm` file is the definitive record of what will execute. If the program's
 - [Error Catalog](../reference/errors.md) -- All error messages explained with fixes
 - [How STARK Proofs Work](../explanation/stark-proofs.md) -- Execution traces and the six constraint tables
 - [For Developers](../tutorials/for-developers.md) -- Zero-knowledge concepts for general developers
-- [Language Reference](../reference/reference.md) -- Types, operators, builtins, grammar
+- [Language Reference](../reference/language.md) -- Types, operators, builtins, grammar
 
 ## Next Step
 

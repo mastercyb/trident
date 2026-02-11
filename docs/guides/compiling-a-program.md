@@ -431,7 +431,7 @@ trident test .
 - [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide: types, functions, modules, inline asm
 - [Error Catalog](../reference/errors.md) -- Every error message explained with fixes
 - [Optimization Guide](optimization.md) -- Cost reduction strategies for all six tables
-- [Language Reference](../reference/reference.md) -- Types, operators, builtins, grammar
+- [Language Reference](../reference/language.md) -- Types, operators, builtins, grammar
 - [Programming Model](../explanation/programming-model.md) -- How programs execute inside Triton VM
 - [Universal Design](../explanation/universal-design.md) -- Multi-target architecture and the `--target` flag
 - [How STARK Proofs Work](../explanation/stark-proofs.md) -- The six tables that determine proving cost

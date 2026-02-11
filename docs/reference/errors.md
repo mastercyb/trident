@@ -24,7 +24,7 @@ error: unexpected '-'; Trident has no subtraction operator
   help: use the `sub(a, b)` function instead of `a - b`
 ```
 
-**Cause:** Trident deliberately omits the `-` operator (see [design rationale](spec.md)). The `->` arrow for return types uses `-`, but standalone `-` is not allowed.
+**Cause:** Trident deliberately omits the `-` operator (see [language reference](language.md)). The `->` arrow for return types uses `-`, but standalone `-` is not allowed.
 
 **Fix:** Use `std.core.field.sub(a, b)` or `std.core.field.neg(a)`:
 
@@ -568,8 +568,8 @@ let p: Point = Point { x: 0, y: 0 }
 ## See Also
 
 - [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide with working examples
-- [Language Reference](reference.md) -- Quick lookup: types, operators, builtins, grammar
-- [Language Specification](spec.md) -- Complete language reference
+- [Language Reference](language.md) -- Quick lookup: types, operators, builtins, grammar
+- [Target Reference](targets.md) -- Target profiles, cost models, and OS model
 - [Compiling a Program](../guides/compiling-a-program.md) -- Build pipeline and compiler stages that produce these errors
 - [Programming Model](../explanation/programming-model.md) -- How programs run in Triton VM
 - [Optimization Guide](../guides/optimization.md) -- Cost reduction strategies

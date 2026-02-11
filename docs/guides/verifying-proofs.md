@@ -213,5 +213,5 @@ This is the final stage. Here is the complete journey of a Trident program, from
 - [How STARK Proofs Work](../explanation/stark-proofs.md) -- The full proof system: execution traces, arithmetization, FRI, Fiat-Shamir, recursive verification.
 - [Programming Model](../explanation/programming-model.md) -- The Claim/Proof structure, public vs. secret input, and the divine-and-authenticate pattern.
 - [Vision](../explanation/vision.md) -- Why Trident exists: quantum safety, no trusted setup, universal targets, provable programs for everyone.
-- [Language Reference](../reference/reference.md) -- Quick lookup for types, instructions, and costs.
+- [Language Reference](../reference/language.md) -- Quick lookup for types, instructions, and costs.
 - [Tutorial](../tutorials/tutorial.md) -- Step-by-step walkthrough from hello world to Merkle proofs.

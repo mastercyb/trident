@@ -620,9 +620,9 @@ target that supports the same feature set.
 
 - [Tutorial](tutorial.md) -- Step-by-step guide: types, functions, modules,
   I/O, hashing, events, testing, cost analysis
-- [Language Reference](../reference/reference.md) -- Quick lookup: types, operators,
+- [Language Reference](../reference/language.md) -- Quick lookup: types, operators,
   builtins, grammar, CLI flags
-- [Language Specification](../reference/spec.md) -- Complete reference for all language
+- [Target Reference](../reference/targets.md) -- Target profiles, cost models, and OS model
   constructs, the type system, module system, grammar, and cost model
 - [Programming Model](../explanation/programming-model.md) -- How programs run inside Triton
   VM, the Neptune blockchain model, script types, and data flow

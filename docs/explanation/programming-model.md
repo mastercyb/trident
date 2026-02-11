@@ -382,8 +382,8 @@ NonDeterminism {              |                    version,
 ## See Also
 
 - [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide to writing Trident programs
-- [Language Reference](../reference/reference.md) -- Quick lookup: types, operators, builtins, grammar
-- [Language Specification](../reference/spec.md) -- Complete language reference
+- [Language Reference](../reference/language.md) -- Quick lookup: types, operators, builtins, grammar
+- [Target Reference](../reference/targets.md) -- Target profiles, cost models, and OS model
 - [Optimization Guide](../guides/optimization.md) -- Cost reduction strategies for all six tables
 - [How STARK Proofs Work](stark-proofs.md) -- The proof system underlying Triton VM execution
 - [Error Catalog](../reference/errors.md) -- All compiler error messages explained

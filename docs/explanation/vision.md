@@ -717,7 +717,7 @@ The numbers are growing. The foundation is solid. The rest is building.
 ### Trident Documentation
 
 - [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide from hello world to Merkle proofs
-- [Language Reference](../reference/reference.md) -- Quick lookup: types, operators, builtins, grammar, CLI flags
+- [Language Reference](../reference/language.md) -- Quick lookup: types, operators, builtins, grammar, CLI flags
 - [Programming Model](programming-model.md) -- How Triton VM execution works
 - [Optimization Guide](../guides/optimization.md) -- Cost reduction strategies and table management
 - [Comparative Analysis](analysis.md) -- Triton VM vs. every other ZK system

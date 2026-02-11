@@ -255,8 +255,8 @@ The goal is not to minimize every table, but to bring the tallest table down. On
 ## See Also
 
 - [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide to writing Trident programs
-- [Language Reference](../reference/reference.md) -- Quick lookup: cost-per-instruction table (Section 7)
-- [Language Specification](../reference/spec.md) -- Complete reference including cost computation (Section 12)
+- [Language Reference](../reference/language.md) -- Quick lookup: cost-per-instruction table (Section 7)
+- [Target Reference](../reference/targets.md) -- Cost models and target profiles
 - [How STARK Proofs Work](../explanation/stark-proofs.md) -- Section 4 (six tables explained), Section 11 (proving cost formula)
 - [Programming Model](../explanation/programming-model.md) -- How Triton VM execution produces the trace
 - [Error Catalog](../reference/errors.md) -- All compiler error messages explained
