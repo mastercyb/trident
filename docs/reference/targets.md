@@ -13,17 +13,14 @@ The **VM is the CPU** — the instruction set architecture. The **OS is the
 runtime** — storage, accounts, syscalls, billing. One VM can power multiple
 OSes, just as one CPU architecture runs multiple operating systems.
 
-| Concept | Traditional | Provable | Virtual |
-|---------|-------------|----------|---------|
-| CPU / ISA | x86-64, ARM64, RISC-V | Triton VM, Miden VM, Cairo VM, RISC-V zkVMs, Jolt, Nock, AVM | EVM, WASM, eBPF, MoveVM, TVM, CKB-VM, PolkaVM |
-| OS / Runtime | Linux, macOS, Windows | Neptune, Polygon Miden, Starknet, Boundless, Aleo, Aztec | Ethereum, Solana, Near, Cosmos, WASI, Browser, Sui, Aptos, Ton, Nervos, Polkadot |
-| Word size | 32-bit, 64-bit | Field (31-bit, 64-bit, 251-bit, 254-bit) | 64-bit, 256-bit (EVM), 257-bit (TVM) |
-| ISA extensions | SSE, AVX, NEON | Hash coprocessor, Merkle, sponge | Precompiles, host functions |
-| Registers | 16 GP registers | Stack depth (16, 32, 0) | Varies (10 eBPF, 32 RISC-V, stack, Move locals) |
-| RAM | Byte-addressed | Word-addressed (field elements) | Byte-addressed, cell-based (TVM) |
-| System calls | read, write, mmap | pub_read, pub_write, hint | Storage, cross-contract calls, IBC, XCM |
-| Process model | Multi-threaded | Sequential, deterministic | Sequential, deterministic (parallel: Sui, Aptos) |
-| Billing | None (or quotas) | Cost tables (rows, cycles, steps, gates) | Gas, compute units, weight, cycles |
+| Concept | Range |
+|---------|-------|
+| CPU / ISA | x86-64, ARM64, RISC-V, Triton VM, Miden VM, Cairo VM, EVM, WASM, eBPF, MoveVM, TVM, CKB-VM, PolkaVM, Nock, SP1, OpenVM, RISC Zero, Jolt, AVM, Aztec |
+| OS / Runtime | Linux, macOS, Android, WASI, Browser, Neptune, Polygon Miden, Starknet, Ethereum, Solana, Near, Cosmos, Sui, Aptos, Ton, Nervos, Polkadot, Aleo, Aztec, Boundless |
+| Word size | 32-bit, 64-bit, 256-bit (EVM), 257-bit (TVM), field elements (31-bit to 254-bit) |
+| System calls | POSIX (read, write, mmap), WASI (fd_read, fd_write), browser (fetch, DOM), provable (pub_read, pub_write, hint), blockchain (storage, cross-contract, IBC, XCM) |
+| Process model | Multi-threaded, sequential deterministic, parallel (Sui, Aptos), event loop (Browser) |
+| Billing | Wall-clock, cost tables (rows, cycles, steps, gates), gas, compute units, weight |
 
 The compiler does two jobs, just like gcc:
 
@@ -47,19 +44,16 @@ by checking OS configs first, then VM configs:
 ```
 trident build --target neptune     # OS → derives vm="triton" → full compilation
 trident build --target ethereum    # OS → derives vm="evm" → EVM + Ethereum runtime
-trident build --target near        # OS → derives vm="wasm" → WASM + Near runtime
-trident build --target solana      # OS → derives vm="svm" → eBPF + Solana runtime
-trident build --target triton      # VM → bare Triton VM, no OS (Tier 0-1 only)
-trident build --target evm         # VM → bare EVM bytecode, no OS
-trident build --target wasm        # VM → generic WASM, no OS
+trident build --target linux       # OS → derives vm="x86-64" → native + Linux runtime
+trident build --target wasi        # OS → derives vm="wasm" → WASM + WASI runtime
+trident build --target triton      # bare VM → Triton VM, no OS
+trident build --target evm         # bare VM → EVM bytecode, no OS
+trident build --target wasm        # bare VM → generic WASM, no OS
 ```
 
 When targeting an OS, `ext.<os>.*` modules are automatically available.
 When targeting a bare VM, using `ext.*` modules is a compile error — there
 is no OS to bind against.
-
-One VM can power multiple OSes. The OS config (`os/<name>.toml`)
-declares which VM it runs on via the `vm` field.
 
 ---
 
@@ -71,13 +65,13 @@ in this section is about the CPU — field size, word width, hash function,
 register layout, cost model. OS-specific concerns (storage layout,
 transaction format, account model) belong in Part II.
 
-### Architecture Families
+### Lowering Paths
+
+Each VM family uses a specific lowering path from TIR to native output.
 
 #### Stack Machines
 
-The VM executes on a stack of field elements. Push, pop, dup, swap.
-The compiler's IR (TIR) maps nearly 1:1 to native instructions via
-`StackLowering`.
+Push, pop, dup, swap. TIR maps nearly 1:1 to native instructions.
 
 ```
 TIR → StackLowering → assembly text → Linker → output
@@ -85,22 +79,21 @@ TIR → StackLowering → assembly text → Linker → output
 
 #### Register Machines
 
-The VM (or CPU) uses registers or memory-addressed slots. TIR is first
-converted to LIR (register-addressed IR), then lowered to native instructions
-via `RegisterLowering`.
+Registers or memory-addressed slots. TIR is first converted to LIR
+(register-addressed IR), then lowered to native instructions.
 
 ```
 TIR → LIR → RegisterLowering → machine code → Linker → output
 ```
 
-The same `RegisterLowering` path serves both provable and native
-register targets. SP1 and native RISC-V share the same `RiscVLowering` —
-one produces code for the zkVM, the other for bare metal.
+The same `RegisterLowering` path serves both provable and native register
+targets. SP1 and native RISC-V share the same `RiscVLowering` — one
+produces code for the zkVM, the other for bare metal.
 
 #### Tree Machines
 
-The VM evaluates combinator expressions on binary trees (nouns).
-TIR is lowered directly to tree expressions via `TreeLowering`.
+Combinator expressions on binary trees (nouns). TIR lowers directly to
+tree expressions.
 
 ```
 TIR → TreeLowering → Noun → serialized output (.jam)
@@ -108,20 +101,20 @@ TIR → TreeLowering → Noun → serialized output (.jam)
 
 #### Circuit Machines
 
-The "VM" is a constraint system. Programs compile to arithmetic circuits
-(gates/constraints) proved client-side. No sequential instruction execution.
+Programs compile to arithmetic circuits (gates/constraints) proved
+client-side. No sequential instruction execution.
 
 ```
 TIR → AcirLowering → ACIR circuit → prover → proof
 ```
 
-#### Additional Lowering Paths
+#### Specialized Lowering
 
 | Lowering | VM(s) | Notes |
 |----------|-------|-------|
 | `EvmLowering` | EVM | 256-bit stack, unique opcode set |
-| `WasmLowering` | WASM | Standard WASM bytecode, multiple OS runtimes |
-| `BpfLowering` | eBPF (SVM) | 10-register eBPF, Solana-specific |
+| `WasmLowering` | WASM | Standard WASM bytecode |
+| `BpfLowering` | eBPF (SVM) | 10-register eBPF bytecode |
 | `MoveLowering` | MoveVM | Resource-oriented bytecode |
 | `KernelLowering` | CUDA, Metal, Vulkan | GPU data-parallel (planned) |
 
@@ -131,16 +124,14 @@ See [ir.md](ir.md) for the full IR architecture and lowering paths.
 
 ### VM Registry
 
-Each VM is defined by a `.toml` configuration file specifying the CPU
-parameters. `TargetConfig` is the compiler's hardware abstraction layer.
+Each VM is defined by a `.toml` configuration file in `targets/` specifying
+CPU parameters. `TargetConfig` is the compiler's hardware abstraction layer.
 
-#### Provable VMs
+20 VMs across three categories:
 
-VMs designed for zero-knowledge proof generation. Programs produce
-cryptographic proofs of correct execution.
-
-| VM | Arch | Field | Hash | Tier | Output | Details |
-|----|------|-------|------|------|--------|---------|
+| VM | Arch | Word | Hash | Tier | Output | Details |
+|----|------|------|------|------|--------|---------|
+| **Provable** | | | | | | |
 | Triton VM | Stack | Goldilocks 64-bit | Tip5 | 0-3 | `.tasm` | [triton.md](targets/triton.md) |
 | Miden VM | Stack | Goldilocks 64-bit | Rescue-Prime | 0-2 | `.masm` | [miden.md](targets/miden.md) |
 | Nock | Tree | Goldilocks 64-bit | Tip5 | 0-3 | `.jam` | [nock.md](targets/nock.md) |
@@ -151,13 +142,7 @@ cryptographic proofs of correct execution.
 | Cairo VM | Register | STARK-252 251-bit | Pedersen | 0-1 | `.sierra` | [cairo.md](targets/cairo.md) |
 | AVM (Leo) | Register | Aleo 251-bit | Poseidon | 0-1 | `.aleo` | [leo.md](targets/leo.md) |
 | Aztec (Noir) | Circuit (ACIR) | BN254 254-bit | Poseidon2 | 0-1 | `.acir` | [aztec.md](targets/aztec.md) |
-
-#### Virtual Machines
-
-Software VMs that execute programs directly. No proof generation.
-
-| VM | Arch | Word | Hash | Tier | Output | Details |
-|----|------|------|------|------|--------|---------|
+| **Non-provable** | | | | | | |
 | EVM | Stack | u256 | Keccak-256 | 0-1 | `.evm` | [evm.md](targets/evm.md) |
 | WASM | Stack | u64 | -- (runtime-dependent) | 0-1 | `.wasm` | [wasm.md](targets/wasm.md) |
 | eBPF (SVM) | Register | u64 | SHA-256 | 0-1 | `.so` | [svm.md](targets/svm.md) |
@@ -165,121 +150,88 @@ Software VMs that execute programs directly. No proof generation.
 | TVM | Stack | u257 | SHA-256 | 0-1 | `.boc` | [tvm.md](targets/tvm.md) |
 | CKB-VM | Register (RISC-V) | u64 | Blake2b | 0-1 | ELF | [ckb.md](targets/ckb.md) |
 | PolkaVM | Register (RISC-V) | u64 | Blake2b | 0-1 | PVM | [polkavm.md](targets/polkavm.md) |
+| **Native** | | | | | | |
+| x86-64 | Register | u64 | Software | 0-1 | ELF | [x86-64.md](targets/x86-64.md) |
+| ARM64 | Register | u64 | Software | 0-1 | ELF | [arm64.md](targets/arm64.md) |
+| RISC-V | Register | u64 | Software | 0-1 | ELF | [riscv.md](targets/riscv.md) |
 
-#### Native Targets
-
-No VM — native machine code. For testing and local execution.
-
-| Target | Arch | Field | Hash | Tier | Output | Details |
-|--------|------|-------|------|------|--------|---------|
-| x86-64 | Register | Goldilocks 64-bit | Software | 0-1 | ELF | [x86-64.md](targets/x86-64.md) |
-| ARM64 | Register | Goldilocks 64-bit | Software | 0-1 | ELF | [arm64.md](targets/arm64.md) |
-| RISC-V native | Register | Goldilocks 64-bit | Software | 0-1 | ELF | [riscv.md](targets/riscv.md) |
-
-#### GPU Targets (planned)
-
-| Target | Arch | Notes |
-|--------|------|-------|
-| CUDA | Data-parallel | `KernelLowering` |
-| Metal | Data-parallel | `KernelLowering` |
-| Vulkan | Data-parallel | `KernelLowering` |
+**Planned**: CUDA, Metal, Vulkan (GPU — `KernelLowering`).
 
 ---
 
 ### Tier Compatibility
 
-Which VMs support which [IR tiers](ir.md):
+All VMs support **Tier 0** (program structure) and **Tier 1** (universal
+computation). Higher tiers require specific VM capabilities:
 
-| VM | Tier 0 (Structure) | Tier 1 (Universal) | Tier 2 (Provable) | Tier 3 (Recursion) |
-|----|---|---|---|---|
-| Triton VM | yes | yes | yes | yes |
-| Miden VM | yes | yes | yes | no |
-| Nock | yes | yes | yes | yes |
-| SP1 | yes | yes | no | no |
-| OpenVM | yes | yes | no | no |
-| RISC Zero | yes | yes | no | no |
-| Jolt | yes | yes | no | no |
-| Cairo VM | yes | yes | no | no |
-| AVM (Leo) | yes | yes | no | no |
-| Aztec (Noir) | yes | yes | no | no |
-| EVM | yes | yes | no | no |
-| WASM | yes | yes | no | no |
-| eBPF (SVM) | yes | yes | no | no |
-| MoveVM | yes | yes | no | no |
-| TVM | yes | yes | no | no |
-| CKB-VM | yes | yes | no | no |
-| PolkaVM | yes | yes | no | no |
-| x86-64 | yes | yes | no | no |
-| ARM64 | yes | yes | no | no |
-| RISC-V native | yes | yes | no | no |
+| Tier | What it adds | VMs |
+|------|-------------|-----|
+| 0 — Structure | Entry, Call, Return, Const, Let | All 20 VMs |
+| 1 — Universal | Arithmetic, control flow, memory, I/O | All 20 VMs |
+| 2 — Provable | Hash, MerkleStep, Sponge, Reveal, Seal, Witness | Triton VM, Miden VM, Nock + partial: RISC Zero (SHA-256), AVM (Poseidon), Aztec (Poseidon2) |
+| 3 — Recursion | ProofBlock, FriVerify, recursive composition | Triton VM, Nock |
 
-**Tier 0** — Program structure (Entry, Call, Return, etc.). All VMs.
-
-**Tier 1** — Universal computation (arithmetic, control flow, memory, I/O).
-All VMs — provable, virtual, native, and GPU.
-
-**Tier 2** — Provable computation (Hash, MerkleStep, Sponge, Reveal, Seal).
-Provable VMs with native coprocessors.
-
-**Tier 3** — Recursive proof composition (ProofBlock, FriVerify, etc.).
-Triton VM and Nock — requires native STARK verification support.
+Programs using only Tier 0-1 compile to any VM. Programs using Tier 2+
+require a VM with native coprocessor support for the relevant operations.
 
 ---
 
 ### Type and Builtin Availability
 
 Types, operators, and builtins are tier-gated. Programs using higher-tier
-features cannot target lower-tier VMs.
+features cannot target lower-tier VMs. The tables below show only VMs where
+behavior differs. Unlisted VMs (all Tier 0-1 only) behave identically:
+`yes` for Tier 0-1 features, `--` for Tier 2+.
 
-#### Types per VM
+#### Types
 
-| Type | Tier | Triton VM | Miden VM | Nock | SP1 | OpenVM | Cairo VM | RISC Zero | Jolt | AVM | Aztec | Other VMs | Native |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `Field` | 0 | 64-bit | 64-bit | 64-bit (Belt) | 31-bit | 64-bit | 251-bit | 31-bit | 254-bit | 251-bit | 254-bit | native int | 64-bit |
-| `Bool` | 0 | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| `U32` | 0 | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| `Digest` | 0 | [Field; 5] | [Field; 4] | [Field; 5] | [Field; 8] | [Field; 8] | [Field; 1] | 32 bytes | [Field; 1] | [Field; 1] | [Field; 1] | 32 bytes | configurable |
-| `XField` | 2 | [Field; 3] | -- | [Field; 3] (Felt) | -- | -- | -- | quartic | -- | -- | -- | -- | -- |
+| Type | Tier | Triton VM | Miden VM | Nock | Cairo VM | AVM | Aztec | EVM | TVM | All Others |
+|------|------|-----------|----------|------|----------|-----|-------|-----|-----|------------|
+| `Field` | 0 | 64-bit | 64-bit | 64-bit | 251-bit | 251-bit | 254-bit | u256 | u257 | u64 |
+| `Bool` | 0 | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| `U32` | 0 | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| `Digest` | 0 | [Field; 5] | [Field; 4] | [Field; 5] | [Field; 1] | [Field; 1] | [Field; 1] | 32 bytes | 32 bytes | 32 bytes |
+| `XField` | 2 | [Field; 3] | -- | [Field; 3] | -- | -- | -- | -- | -- | -- |
 
-#### Operators per VM
+"All Others" = SP1, OpenVM, RISC Zero, Jolt, WASM, eBPF, MoveVM, CKB-VM,
+PolkaVM, x86-64, ARM64, RISC-V.
 
-| Operator | Tier | Triton VM | Miden VM | Nock | SP1 | OpenVM | Cairo VM | RISC Zero | Jolt | AVM | Aztec | Other VMs | Native |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `+` `*` `==` | 1 | yes | yes | yes (jets) | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| `<` `&` `^` `/%` | 1 | yes | yes | yes (jets) | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| `*.` | 2 | yes | -- | yes (jets) | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+#### Operators
 
-#### Builtins per VM
+| Operator | Tier | Notes |
+|----------|------|-------|
+| `+` `*` `==` | 1 | All VMs. Nock: jets. |
+| `<` `&` `^` `/%` | 1 | All VMs. Nock: jets. |
+| `*.` (extension field multiply) | 2 | Triton VM, Nock only. |
 
-| Builtin group | Tier | Triton VM | Miden VM | Nock | SP1 | OpenVM | Cairo VM | RISC Zero | Jolt | AVM | Aztec | Other VMs | Native |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I/O (`pub_read`, `pub_write`) | 1 | yes | yes | yes (scry) | yes | yes | yes | yes (journal) | yes | yes | yes | yes (host calls) | yes (stdio) |
-| Field (`sub`, `neg`, `inv`) | 1 | yes | yes | yes (jets) | yes | yes | yes | yes | yes | yes (native) | yes (native) | yes (software) | yes |
-| U32 (`split`, `log2`, `pow`, etc.) | 1 | yes | yes | yes (jets) | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| Assert (`assert`, `assert_eq`) | 1 | yes | yes | yes (crash) | yes | yes | yes | yes | yes | yes | yes | yes (revert) | yes (abort) |
-| RAM (`ram_read`, `ram_write`) | 1 | yes | yes | yes (tree edit) | yes | yes | yes | yes | yes | yes | yes | yes (memory) | yes (memory) |
-| Witness (`hint`) | 2 | yes | yes | yes (Nock 11) | yes | yes | yes | yes | yes | yes | yes | -- | -- |
-| Hash (`hash`, `sponge_*`) | 2 | R=10, D=5 | R=8, D=4 | R=10, D=5 (Tip5) | -- | -- | -- | SHA-256 accel | -- | Poseidon | Poseidon2 | -- | -- |
-| Merkle (`merkle_step`) | 2 | native | emulated | jets (ZTD) | -- | -- | -- | -- | -- | -- | -- | -- | -- |
-| XField (`xfield`, `xinvert`, dot) | 2 | yes | -- | yes (Felt jets) | -- | -- | -- | quartic | -- | -- | -- | -- | -- |
+#### Builtins
+
+| Builtin group | Tier | Triton VM | Miden VM | Nock | RISC Zero | AVM | Aztec | All Others |
+|---------------|------|-----------|----------|------|-----------|-----|-------|------------|
+| I/O (`pub_read`, `pub_write`) | 1 | yes | yes | scry | journal | yes | yes | yes |
+| Field (`sub`, `neg`, `inv`) | 1 | yes | yes | jets | yes | native | native | yes |
+| U32 (`split`, `log2`, `pow`) | 1 | yes | yes | jets | yes | yes | yes | yes |
+| Assert (`assert`, `assert_eq`) | 1 | yes | yes | crash | yes | yes | yes | yes |
+| RAM (`ram_read`, `ram_write`) | 1 | yes | yes | tree edit | yes | yes | yes | yes |
+| Witness (`hint`) | 2 | yes | yes | Nock 11 | yes | yes | yes | -- |
+| Hash (`hash`, `sponge_*`) | 2 | Tip5 R=10 D=5 | Rescue R=8 D=4 | Tip5 R=10 D=5 | SHA-256 | Poseidon | Poseidon2 | -- |
+| Merkle (`merkle_step`) | 2 | native | emulated | jets | -- | -- | -- | -- |
+| XField (`xfield`, `xinvert`, dot) | 2 | yes | -- | yes | quartic | -- | -- | -- |
 
 R = hash rate (fields per absorption). D = digest width (fields per digest).
 
-On virtual machines, Tier 1 builtins map to VM-native operations: I/O becomes
-host function calls, assertions become revert/abort, RAM becomes VM memory.
-
-On native targets, Tier 1 builtins map to standard operations: I/O becomes
-stdio, assertions become abort, RAM becomes heap memory.
-
-Field arithmetic uses software modular reduction on non-provable targets.
+Tier 1 builtins map to different primitives depending on the VM: I/O
+becomes host function calls on virtual machines, stdio on native targets.
+Assertions become revert on EVM, crash on Nock, abort on native. Field
+arithmetic uses software modular reduction on non-provable targets.
 
 ---
 
 ### Cost Model
 
 Each VM has its own cost model. The compiler reports costs in the VM's
-native units. The Trident cost infrastructure — static analysis, per-function
-annotations, `--costs` flag — works identically across all VMs.
+native units. The Trident cost infrastructure — static analysis,
+per-function annotations, `--costs` flag — works identically across all VMs.
 
 | VM | Cost unit | What determines cost |
 |----|-----------|---------------------|
@@ -302,9 +254,9 @@ annotations, `--costs` flag — works identically across all VMs.
 | PolkaVM | Weight | ref_time (computation) + proof_size (state proof overhead) |
 | x86-64 / ARM64 / RISC-V | Wall-clock | No proof cost — direct execution |
 
-Provable VMs report proving cost. Other VMs report on-chain metering
-or wall-clock cost. Native targets report wall-clock time. The cost model
-is a property of the VM, not the OS.
+The cost model is a property of the VM, not the OS. Provable VMs report
+proving cost. Non-provable VMs report execution metering. Native targets
+report wall-clock time.
 
 See [targets/triton.md](targets/triton.md) for the full per-instruction
 cost matrix and optimization hints.
@@ -313,57 +265,54 @@ cost matrix and optimization hints.
 
 ## Part II — Operating Systems
 
-An OS defines the runtime environment. The compiler's job is runtime
-binding: link against OS-specific modules (`ext.<os>.*`) that provide
-storage, accounts, syscalls, and I/O conventions. Everything in this
-section is about the OS — not the instruction set.
-
-Multiple OSes can share the same VM, just as Linux and macOS share x86-64.
-The same compiled WASM bytecode deploys to Near, Cosmos, WASI, and a
-browser — only the runtime bindings differ.
+An OS defines the runtime environment: storage, accounts, syscalls, and
+I/O conventions. The compiler's job is runtime binding — link against
+OS-specific modules (`ext.<os>.*`). Everything in this section is about
+the OS, not the instruction set.
 
 ### OS Registry
 
-| OS | VM | Runtime binding | Account/process model | Interop | Details |
-|----|-----|----------------|----------------------|---------|---------|
-| Neptune | Triton VM | `ext.neptune.*` | UTXO | -- | [neptune.md](os/neptune.md) |
-| Polygon Miden | Miden VM | `ext.miden.*` | Account | -- | [miden.md](os/miden.md) |
-| Nockchain | Nock | `ext.nockchain.*` | UTXO (Notes) | -- | [nockchain.md](os/nockchain.md) |
-| Succinct | SP1 | `ext.succinct.*` | -- | Ethereum verification | [succinct.md](os/succinct.md) |
-| OpenVM network | OpenVM | `ext.openvm.*` | -- | -- | [openvm-network.md](os/openvm-network.md) |
-| Starknet | Cairo VM | `ext.starknet.*` | Account | Ethereum L2 | [starknet.md](os/starknet.md) |
-| Boundless | RISC Zero | `ext.boundless.*` | -- | Ethereum verification | [boundless.md](os/boundless.md) |
-| Aleo | AVM (Leo) | `ext.aleo.*` | Record (UTXO) | -- | [aleo.md](os/aleo.md) |
-| Aztec | Aztec (Noir) | `ext.aztec.*` | Note (UTXO) + public | Ethereum L2 | [aztec.md](os/aztec.md) |
-| Ethereum | EVM | `ext.ethereum.*` | Account | -- | [ethereum.md](os/ethereum.md) |
-| Solana | eBPF (SVM) | `ext.solana.*` | Account (stateless programs) | -- | [solana.md](os/solana.md) |
-| Near Protocol | WASM | `ext.near.*` | Account (1 contract each) | -- | [near.md](os/near.md) |
-| Cosmos (100+ chains) | WASM | `ext.cosmwasm.*` | Account | IBC | [cosmwasm.md](os/cosmwasm.md) |
-| Arbitrum | WASM + EVM | `ext.arbitrum.*` | Account (EVM-compatible) | Ethereum L2 | [arbitrum.md](os/arbitrum.md) |
-| Internet Computer | WASM | `ext.icp.*` | Canister | -- | [icp.md](os/icp.md) |
-| Sui | MoveVM | `ext.sui.*` | Object-centric | -- | [sui.md](os/sui.md) |
-| Aptos | MoveVM | `ext.aptos.*` | Account (resources) | -- | [aptos.md](os/aptos.md) |
-| Ton | TVM | `ext.ton.*` | Account (cells) | -- | [ton.md](os/ton.md) |
-| Nervos CKB | CKB-VM | `ext.nervos.*` | Cell (UTXO-like) | -- | [nervos.md](os/nervos.md) |
-| Polkadot | PolkaVM | `ext.polkadot.*` | Account | XCM | [polkadot.md](os/polkadot.md) |
-| Linux | x86-64 / ARM64 / RISC-V | `ext.linux.*` | Process | POSIX syscalls | [linux.md](os/linux.md) |
-| macOS | ARM64 / x86-64 | `ext.macos.*` | Process | POSIX + Mach | [macos.md](os/macos.md) |
-| Android | ARM64 / x86-64 | `ext.android.*` | Process (sandboxed) | NDK, JNI | [android.md](os/android.md) |
-| WASI | WASM | `ext.wasi.*` | Process (capability) | WASI preview 2 | [wasi.md](os/wasi.md) |
-| Browser | WASM | `ext.browser.*` | Event loop | JavaScript, Web APIs | [browser.md](os/browser.md) |
+25 OSes across provable, blockchain, and traditional runtimes:
+
+| OS | VM | Runtime binding | Account / process model | Interop | Details |
+|----|-----|----------------|------------------------|---------|---------|
+| **Provable** | | | | | |
+| Neptune | [Triton VM](targets/triton.md) | `ext.neptune.*` | UTXO | -- | [neptune.md](os/neptune.md) |
+| Polygon Miden | [Miden VM](targets/miden.md) | `ext.miden.*` | Account | -- | [miden.md](os/miden.md) |
+| Nockchain | [Nock](targets/nock.md) | `ext.nockchain.*` | UTXO (Notes) | -- | [nockchain.md](os/nockchain.md) |
+| Starknet | [Cairo VM](targets/cairo.md) | `ext.starknet.*` | Account | Ethereum L2 | [starknet.md](os/starknet.md) |
+| Boundless | [RISC Zero](targets/risczero.md) | `ext.boundless.*` | -- | Ethereum verification | [boundless.md](os/boundless.md) |
+| Succinct | [SP1](targets/sp1.md) | `ext.succinct.*` | -- | Ethereum verification | [succinct.md](os/succinct.md) |
+| OpenVM network | [OpenVM](targets/openvm.md) | `ext.openvm.*` | -- | -- | [openvm-network.md](os/openvm-network.md) |
+| Aleo | [AVM (Leo)](targets/leo.md) | `ext.aleo.*` | Record (UTXO) | -- | [aleo.md](os/aleo.md) |
+| Aztec | [Aztec (Noir)](targets/aztec.md) | `ext.aztec.*` | Note (UTXO) + public | Ethereum L2 | [aztec.md](os/aztec.md) |
+| **Blockchain** | | | | | |
+| Ethereum | [EVM](targets/evm.md) | `ext.ethereum.*` | Account | -- | [ethereum.md](os/ethereum.md) |
+| Solana | [eBPF (SVM)](targets/svm.md) | `ext.solana.*` | Account (stateless programs) | -- | [solana.md](os/solana.md) |
+| Near Protocol | [WASM](targets/wasm.md) | `ext.near.*` | Account (1 contract each) | -- | [near.md](os/near.md) |
+| Cosmos (100+ chains) | [WASM](targets/wasm.md) | `ext.cosmwasm.*` | Account | IBC | [cosmwasm.md](os/cosmwasm.md) |
+| Arbitrum | [WASM](targets/wasm.md) + [EVM](targets/evm.md) | `ext.arbitrum.*` | Account (EVM-compatible) | Ethereum L2 | [arbitrum.md](os/arbitrum.md) |
+| Internet Computer | [WASM](targets/wasm.md) | `ext.icp.*` | Canister | -- | [icp.md](os/icp.md) |
+| Sui | [MoveVM](targets/movevm.md) | `ext.sui.*` | Object-centric | -- | [sui.md](os/sui.md) |
+| Aptos | [MoveVM](targets/movevm.md) | `ext.aptos.*` | Account (resources) | -- | [aptos.md](os/aptos.md) |
+| Ton | [TVM](targets/tvm.md) | `ext.ton.*` | Account (cells) | -- | [ton.md](os/ton.md) |
+| Nervos CKB | [CKB-VM](targets/ckb.md) | `ext.nervos.*` | Cell (UTXO-like) | -- | [nervos.md](os/nervos.md) |
+| Polkadot | [PolkaVM](targets/polkavm.md) | `ext.polkadot.*` | Account | XCM | [polkadot.md](os/polkadot.md) |
+| **Traditional** | | | | | |
+| Linux | [x86-64](targets/x86-64.md) / [ARM64](targets/arm64.md) / [RISC-V](targets/riscv.md) | `ext.linux.*` | Process | POSIX syscalls | [linux.md](os/linux.md) |
+| macOS | [ARM64](targets/arm64.md) / [x86-64](targets/x86-64.md) | `ext.macos.*` | Process | POSIX + Mach | [macos.md](os/macos.md) |
+| Android | [ARM64](targets/arm64.md) / [x86-64](targets/x86-64.md) | `ext.android.*` | Process (sandboxed) | NDK, JNI | [android.md](os/android.md) |
+| WASI | [WASM](targets/wasm.md) | `ext.wasi.*` | Process (capability) | WASI preview 2 | [wasi.md](os/wasi.md) |
+| Browser | [WASM](targets/wasm.md) | `ext.browser.*` | Event loop | JavaScript, Web APIs | [browser.md](os/browser.md) |
 
 Key observations:
 
-- **WASM** powers 6+ OSes: Near, Cosmos, Arbitrum (Stylus), Icp, WASI,
-  Browser. Same `.wasm` output, different `ext.*` bindings.
-- **x86-64** and **ARM64** power traditional OSes: Linux, macOS, Android.
-  Same ELF/Mach-O output, different `ext.*` bindings (POSIX vs NDK).
-- **MoveVM** powers 2 OSes: Sui (object model) and Aptos (account model).
-  Same `.mv` output, different `ext.*` bindings.
-- **EVM** bytecode runs on Ethereum and all EVM-compatible chains.
-  Arbitrum also supports WASM via Stylus.
-- **RISC-V** lowering is shared across SP1, OpenVM, RISC Zero, Jolt, CKB-VM,
+- **One VM, many OSes.** WASM powers 6+ OSes (Near, Cosmos, ICP, Arbitrum,
+  WASI, Browser). x86-64 and ARM64 power Linux, macOS, Android. MoveVM
+  powers Sui and Aptos. Same bytecode output, different `ext.*` bindings.
+- **RISC-V lowering is shared** across SP1, OpenVM, RISC Zero, Jolt, CKB-VM,
   PolkaVM, and native RISC-V — 7 targets from one `RiscVLowering`.
+- **Arbitrum** supports both WASM (Stylus) and EVM.
 
 ---
 
@@ -371,22 +320,22 @@ Key observations:
 
 ### Adding a VM
 
-1. Write `targets/<vm>.toml` with CPU parameters (field, hash, stack, cost).
-   This makes `--target <vm>` work for bare (OS-less) compilation.
+1. Write `targets/<vm>.toml` with CPU parameters (word size, hash, stack,
+   cost). This makes `--target <vm>` work for bare compilation.
 2. Implement the appropriate lowering trait:
    - `StackLowering` — stack machines (Triton, Miden, TVM)
    - `RegisterLowering` — register machines (SP1, OpenVM, RISC Zero, Jolt, Cairo, AVM)
    - `TreeLowering` — tree/combinator machines (Nock)
    - `EvmLowering` — EVM bytecode
    - `WasmLowering` — WASM bytecode
-   - `BpfLowering` — eBPF bytecode (SVM)
+   - `BpfLowering` — eBPF bytecode
    - `MoveLowering` — Move bytecode
    - `AcirLowering` — arithmetic circuits (Aztec/Noir)
    - `KernelLowering` — GPU compute kernels (planned)
 3. Implement `CostModel` for the VM's billing model
 4. Write `docs/reference/targets/<vm>.md` documentation
 
-### Adding an OS (to an existing VM)
+### Adding an OS
 
 1. Write `os/<os-name>.toml` — must include `vm = "<vm-name>"` referencing
    an existing VM in `targets/`. This makes `--target <os-name>` work.
@@ -394,12 +343,12 @@ Key observations:
 3. Write `docs/reference/os/<os-name>.md` documentation
 
 No new lowering needed — the VM already compiles. Only the runtime differs.
-The `os/<os-name>.toml` file is what registers the OS as a valid `--target`.
 
 The `ext/` directory is keyed by **OS name** (not VM name): `ext/neptune/`,
-`ext/solana/`, `ext/near/` — because the bindings are OS-specific.
+`ext/solana/`, `ext/linux/` — because the bindings are OS-specific.
 
-See [ir.md Part VI](ir.md) for lowering trait interfaces and the backend guide.
+See [ir.md Part VI](ir.md) for lowering trait interfaces and the backend
+guide.
 
 ---
 
