@@ -20,8 +20,8 @@ Consumes `Vec<TIROp>` and produces target-specific assembly text.
 | `Loop` | labeled subroutine with `recurse` | inline `if.true/drop/else/exec.self/end` |
 | `FnStart` | `__name:` label | `proc.name` |
 | `FnEnd` | flushes deferred blocks | `end` |
-| `EmitEvent` | `push tag; write_io 1` per field | comment + `drop` |
-| `SealEvent` | pad + `hash` + `write_io 5` | pad + `hperm` + `drop` |
+| `Open` | `push tag; write_io 1` per field | comment + `drop` |
+| `Seal` | pad + `hash` + `write_io 5` | pad + `hperm` + `drop` |
 | `ExtMul` / `FoldExt` etc. | native recursion instructions | comments (not yet supported) |
 
 ## Adding a backend

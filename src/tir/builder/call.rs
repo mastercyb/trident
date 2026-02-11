@@ -173,19 +173,19 @@ impl TIRBuilder {
 
             // ── RAM ──
             "ram_read" => {
-                self.ops.push(TIROp::StorageRead { width: 1 });
+                self.ops.push(TIROp::ReadStorage { width: 1 });
                 self.push_temp(1);
             }
             "ram_write" => {
-                self.ops.push(TIROp::StorageWrite { width: 1 });
+                self.ops.push(TIROp::WriteStorage { width: 1 });
                 self.push_temp(0);
             }
             "ram_read_block" => {
-                self.ops.push(TIROp::StorageRead { width: 5 });
+                self.ops.push(TIROp::ReadStorage { width: 5 });
                 self.push_temp(5);
             }
             "ram_write_block" => {
-                self.ops.push(TIROp::StorageWrite { width: 5 });
+                self.ops.push(TIROp::WriteStorage { width: 5 });
                 self.push_temp(0);
             }
 

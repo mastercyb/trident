@@ -104,7 +104,7 @@ fn test_lower_label_formatting() {
 fn test_lower_comment_and_raw() {
     let ops = vec![
         TIROp::Comment("test comment".into()),
-        TIROp::RawAsm {
+        TIROp::Asm {
             lines: vec!["nop".into(), "nop".into()],
             effect: 0,
         },
@@ -154,10 +154,10 @@ fn test_lower_already_prefixed_labels() {
 // ─── Comparison Tests: TIRBuilder + TritonLowering == Emitter ─────
 
 use crate::codegen::emitter::Emitter;
-use crate::tir::builder::TIRBuilder;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::target::TargetConfig;
+use crate::tir::builder::TIRBuilder;
 
 /// Compile with old Emitter path.
 fn compile_old(source: &str) -> String {
@@ -300,7 +300,7 @@ fn test_compare_struct() {
 
 #[test]
 fn test_compare_event() {
-    // Event emission now uses abstract EmitEvent op — the new pipeline
+    // Event emission now uses abstract Open op — the new pipeline
     // pushes all fields first, then the lowering writes tag + fields.
     // This is functionally equivalent but not byte-identical to the old
     // Emitter (which interleaved push/write_io per field).

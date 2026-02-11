@@ -108,7 +108,7 @@ pub enum LIROp {
     /// Comment text (lowering adds target-specific prefix).
     Comment(String),
     /// Inline assembly passed through verbatim.
-    RawAsm { lines: Vec<String> },
+    Asm { lines: Vec<String> },
 
     // ═══════════════════════════════════════════════════════════════
     // Tier 1 — Universal
@@ -184,15 +184,15 @@ pub enum LIROp {
     HashDigest { dst: Reg, src: Reg, count: u32 },
 
     // ── Events (2) ──
-    /// Emit an observable event. Fields in consecutive regs starting at `src`.
-    EmitEvent {
+    /// Open an observable event. Fields in consecutive regs starting at `src`.
+    Open {
         name: String,
         tag: u64,
         src: Reg,
         field_count: u32,
     },
-    /// Emit a sealed (hashed) event commitment.
-    SealEvent {
+    /// Seal (hash-commit) an event.
+    Seal {
         name: String,
         tag: u64,
         src: Reg,
@@ -201,9 +201,9 @@ pub enum LIROp {
 
     // ── Storage (2) ──
     /// Read from persistent storage. Key in `key`, result in `dst`.
-    StorageRead { dst: Reg, key: Reg, width: u32 },
+    ReadStorage { dst: Reg, key: Reg, width: u32 },
     /// Write to persistent storage. Key in `key`, value in `src`.
-    StorageWrite { key: Reg, src: Reg, width: u32 },
+    WriteStorage { key: Reg, src: Reg, width: u32 },
 
     // ═══════════════════════════════════════════════════════════════
     // Tier 2 — Provable
@@ -269,7 +269,7 @@ impl fmt::Display for LIROp {
             LIROp::Preamble(main) => write!(f, "preamble {}", main),
             LIROp::BlankLine => write!(f, ""),
             LIROp::Comment(text) => write!(f, "// {}", text),
-            LIROp::RawAsm { lines } => write!(f, "raw_asm({} lines)", lines.len()),
+            LIROp::Asm { lines } => write!(f, "asm({} lines)", lines.len()),
 
             // Tier 1
             LIROp::LoadImm(dst, val) => write!(f, "li {}, {}", dst, val),
@@ -324,27 +324,27 @@ impl fmt::Display for LIROp {
             LIROp::HashDigest { dst, src, count } => {
                 write!(f, "hash_digest {}, {}, {}", dst, src, count)
             }
-            LIROp::EmitEvent {
+            LIROp::Open {
                 name,
                 src,
                 field_count,
                 ..
             } => {
-                write!(f, "emit_event {}({}, {})", name, src, field_count)
+                write!(f, "open {}({}, {})", name, src, field_count)
             }
-            LIROp::SealEvent {
+            LIROp::Seal {
                 name,
                 src,
                 field_count,
                 ..
             } => {
-                write!(f, "seal_event {}({}, {})", name, src, field_count)
+                write!(f, "seal {}({}, {})", name, src, field_count)
             }
-            LIROp::StorageRead { dst, key, width } => {
-                write!(f, "storage_read {}, {}, {}", dst, key, width)
+            LIROp::ReadStorage { dst, key, width } => {
+                write!(f, "read_storage {}, {}, {}", dst, key, width)
             }
-            LIROp::StorageWrite { key, src, width } => {
-                write!(f, "storage_write {}, {}, {}", key, src, width)
+            LIROp::WriteStorage { key, src, width } => {
+                write!(f, "write_storage {}, {}, {}", key, src, width)
             }
 
             // Tier 2
@@ -479,7 +479,7 @@ mod tests {
             LIROp::Preamble("main".into()),
             LIROp::BlankLine,
             LIROp::Comment("test".into()),
-            LIROp::RawAsm {
+            LIROp::Asm {
                 lines: vec!["nop".into()],
             },
             // Tier 1
@@ -541,24 +541,24 @@ mod tests {
                 src: r1,
                 count: 1,
             },
-            LIROp::EmitEvent {
+            LIROp::Open {
                 name: "Transfer".into(),
                 tag: 0,
                 src: r0,
                 field_count: 2,
             },
-            LIROp::SealEvent {
+            LIROp::Seal {
                 name: "Nullifier".into(),
                 tag: 1,
                 src: r0,
                 field_count: 1,
             },
-            LIROp::StorageRead {
+            LIROp::ReadStorage {
                 dst: r0,
                 key: r1,
                 width: 1,
             },
-            LIROp::StorageWrite {
+            LIROp::WriteStorage {
                 key: r0,
                 src: r1,
                 width: 1,

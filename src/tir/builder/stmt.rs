@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use crate::ast::*;
-use crate::tir::TIROp;
 use crate::span::Spanned;
+use crate::tir::TIROp;
 
 use super::layout::resolve_type_width;
 use super::TIRBuilder;
@@ -202,7 +202,7 @@ impl TIRBuilder {
                     }
                 }
 
-                self.ops.push(TIROp::EmitEvent {
+                self.ops.push(TIROp::Open {
                     name: event_name.node.clone(),
                     tag,
                     field_count: decl_order.len() as u32,
@@ -230,7 +230,7 @@ impl TIRBuilder {
                     .collect();
 
                 if !lines.is_empty() {
-                    self.ops.push(TIROp::RawAsm {
+                    self.ops.push(TIROp::Asm {
                         lines,
                         effect: *effect,
                     });
@@ -269,7 +269,7 @@ impl TIRBuilder {
                     }
                 }
 
-                self.ops.push(TIROp::SealEvent {
+                self.ops.push(TIROp::Seal {
                     name: event_name.node.clone(),
                     tag,
                     field_count,

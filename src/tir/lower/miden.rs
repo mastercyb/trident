@@ -108,15 +108,15 @@ impl MidenLowering {
             TIROp::AssertVector => self.emit(out, "assert  # assert_vector (4 words)"),
 
             // ── Abstract operations (Miden lowering) ──
-            TIROp::EmitEvent {
+            TIROp::Open {
                 name, field_count, ..
             } => {
-                self.emit(out, &format!("# emit {} ({} fields)", name, field_count));
+                self.emit(out, &format!("# open {} ({} fields)", name, field_count));
                 for _ in 0..*field_count {
                     self.emit(out, "drop  # event field");
                 }
             }
-            TIROp::SealEvent {
+            TIROp::Seal {
                 name, field_count, ..
             } => {
                 self.emit(out, &format!("# seal {} ({} fields)", name, field_count));
@@ -129,10 +129,10 @@ impl MidenLowering {
                     self.emit(out, "drop  # seal digest");
                 }
             }
-            TIROp::StorageRead { width } => {
+            TIROp::ReadStorage { width } => {
                 self.emit(out, &format!("mem_load  # read {}", width));
             }
-            TIROp::StorageWrite { width } => {
+            TIROp::WriteStorage { width } => {
                 self.emit(out, &format!("mem_store  # write {}", width));
             }
             TIROp::HashDigest => {
@@ -219,7 +219,7 @@ impl MidenLowering {
             TIROp::Comment(text) => {
                 self.emit(out, &format!("# {}", text));
             }
-            TIROp::RawAsm { lines, .. } => {
+            TIROp::Asm { lines, .. } => {
                 for line in lines {
                     let trimmed = line.trim();
                     if !trimmed.is_empty() {

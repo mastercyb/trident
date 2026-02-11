@@ -73,7 +73,7 @@ pub enum TIROp {
     /// Comment text (without prefix — lowering adds target-specific prefix).
     Comment(String),
     /// Inline assembly passed through verbatim with declared stack effect.
-    RawAsm {
+    Asm {
         lines: Vec<String>,
         effect: i32,
     },
@@ -125,16 +125,15 @@ pub enum TIROp {
     HashDigest,
 
     // ── Events (2) ──
-    /// Emit an observable event. Fields are on the stack (topmost = first field).
+    /// Open an observable event. Fields are on the stack (topmost = first field).
     /// Lowering maps to target-native events (Triton: write_io, EVM: LOG, etc.).
-    EmitEvent {
+    Open {
         name: String,
         tag: u64,
         field_count: u32,
     },
-    /// Emit a sealed (hashed) event commitment.
-    /// Fields are on the stack (topmost = first field).
-    SealEvent {
+    /// Seal (hash-commit) an event. Fields are on the stack (topmost = first field).
+    Seal {
         name: String,
         tag: u64,
         field_count: u32,
@@ -143,12 +142,12 @@ pub enum TIROp {
     // ── Storage (2) ──
     /// Read from persistent storage. Key is on the stack.
     /// Produces `width` elements. Lowering maps to target-native storage.
-    StorageRead {
+    ReadStorage {
         width: u32,
     },
     /// Write to persistent storage. Key and value(s) are on the stack.
     /// Lowering maps to target-native storage.
-    StorageWrite {
+    WriteStorage {
         width: u32,
     },
 
@@ -224,14 +223,14 @@ impl fmt::Display for TIROp {
             TIROp::MerkleLoad => write!(f, "merkle_load"),
             TIROp::Assert => write!(f, "assert"),
             TIROp::AssertVector => write!(f, "assert_vector"),
-            TIROp::EmitEvent {
+            TIROp::Open {
                 name, field_count, ..
-            } => write!(f, "emit_event {}({})", name, field_count),
-            TIROp::SealEvent {
+            } => write!(f, "open {}({})", name, field_count),
+            TIROp::Seal {
                 name, field_count, ..
-            } => write!(f, "seal_event {}({})", name, field_count),
-            TIROp::StorageRead { width } => write!(f, "storage_read {}", width),
-            TIROp::StorageWrite { width } => write!(f, "storage_write {}", width),
+            } => write!(f, "seal {}({})", name, field_count),
+            TIROp::ReadStorage { width } => write!(f, "read_storage {}", width),
+            TIROp::WriteStorage { width } => write!(f, "write_storage {}", width),
             TIROp::HashDigest => write!(f, "hash_digest"),
             TIROp::Call(label) => write!(f, "call {}", label),
             TIROp::Return => write!(f, "return"),
@@ -259,8 +258,8 @@ impl fmt::Display for TIROp {
             TIROp::Preamble(main) => write!(f, "preamble {}", main),
             TIROp::BlankLine => write!(f, ""),
             TIROp::Comment(text) => write!(f, "// {}", text),
-            TIROp::RawAsm { lines, effect } => {
-                write!(f, "raw_asm({} lines, effect={})", lines.len(), effect)
+            TIROp::Asm { lines, effect } => {
+                write!(f, "asm({} lines, effect={})", lines.len(), effect)
             }
         }
     }
@@ -351,18 +350,18 @@ mod tests {
             TIROp::MerkleLoad,
             TIROp::Assert,
             TIROp::AssertVector,
-            TIROp::EmitEvent {
+            TIROp::Open {
                 name: "Transfer".into(),
                 tag: 0,
                 field_count: 2,
             },
-            TIROp::SealEvent {
+            TIROp::Seal {
                 name: "Nullifier".into(),
                 tag: 1,
                 field_count: 1,
             },
-            TIROp::StorageRead { width: 1 },
-            TIROp::StorageWrite { width: 1 },
+            TIROp::ReadStorage { width: 1 },
+            TIROp::WriteStorage { width: 1 },
             TIROp::HashDigest,
             TIROp::Call("f".into()),
             TIROp::Return,
@@ -382,7 +381,7 @@ mod tests {
             TIROp::Preamble("main".into()),
             TIROp::BlankLine,
             TIROp::Comment("test".into()),
-            TIROp::RawAsm {
+            TIROp::Asm {
                 lines: vec!["nop".into()],
                 effect: 0,
             },

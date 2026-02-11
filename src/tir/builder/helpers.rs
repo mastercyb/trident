@@ -1,8 +1,8 @@
 //! Stack wrappers, label generation, cfg helpers, and spill parser.
 
 use crate::ast::*;
-use crate::tir::TIROp;
 use crate::span::Spanned;
+use crate::tir::TIROp;
 
 use super::TIRBuilder;
 
@@ -47,8 +47,8 @@ pub(crate) fn parse_spill_effect(line: &str) -> TIROp {
         }
     }
 
-    // Fallback: emit as raw ASM so nothing is silently lost.
-    TIROp::RawAsm {
+    // Fallback: emit as inline ASM so nothing is silently lost.
+    TIROp::Asm {
         lines: vec![trimmed.to_string()],
         effect: 0,
     }

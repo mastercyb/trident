@@ -91,7 +91,7 @@ impl TritonLowering {
             TIROp::AssertVector => out.push("    assert_vector".to_string()),
 
             // ── Abstract operations (Triton lowering) ──
-            TIROp::EmitEvent {
+            TIROp::Open {
                 tag, field_count, ..
             } => {
                 // Triton: write tag then each field to public output.
@@ -101,7 +101,7 @@ impl TritonLowering {
                     out.push("    write_io 1".to_string());
                 }
             }
-            TIROp::SealEvent {
+            TIROp::Seal {
                 tag, field_count, ..
             } => {
                 // Triton: pad to rate=10, hash, write 5-element digest.
@@ -113,12 +113,12 @@ impl TritonLowering {
                 out.push("    hash".to_string());
                 out.push("    write_io 5".to_string());
             }
-            TIROp::StorageRead { width } => {
+            TIROp::ReadStorage { width } => {
                 // Triton: read_mem + pop address.
                 out.push(format!("    read_mem {}", width));
                 out.push("    pop 1".to_string());
             }
-            TIROp::StorageWrite { width } => {
+            TIROp::WriteStorage { width } => {
                 // Triton: write_mem + pop address.
                 out.push(format!("    write_mem {}", width));
                 out.push("    pop 1".to_string());
@@ -240,7 +240,7 @@ impl TritonLowering {
             TIROp::Comment(text) => {
                 out.push(format!("    // {}", text));
             }
-            TIROp::RawAsm { lines, .. } => {
+            TIROp::Asm { lines, .. } => {
                 for line in lines {
                     let trimmed = line.trim();
                     if !trimmed.is_empty() {
