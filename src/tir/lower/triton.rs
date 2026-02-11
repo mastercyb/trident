@@ -91,6 +91,15 @@ impl TritonLowering {
             TIROp::FoldExt => out.push("    xx_dot_step".to_string()),
             TIROp::FoldBase => out.push("    xb_dot_step".to_string()),
 
+            // ── Recursion — proof verification block ──
+            TIROp::ProofBlock { program_hash, body } => {
+                out.push(format!("    // proof_block {}", program_hash));
+                for body_op in body {
+                    self.lower_op(body_op, out);
+                }
+                out.push("    // end proof_block".to_string());
+            }
+
             // ── I/O ──
             TIROp::ReadIo(n) => out.push(format!("    read_io {}", n)),
             TIROp::WriteIo(n) => out.push(format!("    write_io {}", n)),

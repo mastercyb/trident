@@ -11,7 +11,7 @@ use std::fmt;
 
 // ─── IR Operations ────────────────────────────────────────────────
 
-/// 53 TIR operations across 4 tiers. Higher tier = narrower target set.
+/// 54 TIR operations across 4 tiers. Higher tier = narrower target set.
 ///
 /// **Tier 0 — Structure** (every program, every target)
 ///   Control flow (6), Program structure (3), Passthrough (2) = 11
@@ -25,9 +25,9 @@ use std::fmt;
 ///   Sponge (4), Merkle (2) = 6
 ///
 /// **Tier 3 — Recursion** (requires recursive verification capability)
-///   Extension field (2), Folding (2) = 4
+///   Extension field (2), Folding (2), Verification (1) = 5
 ///
-/// Total: 11 + 32 + 6 + 4 = 53 variants
+/// Total: 11 + 32 + 6 + 5 = 54 variants
 #[derive(Debug, Clone)]
 pub enum TIROp {
     // ═══════════════════════════════════════════════════════════════
@@ -180,10 +180,11 @@ pub enum TIROp {
     MerkleLoad,
 
     // ═══════════════════════════════════════════════════════════════
-    // Tier 3 — Recursion (4)
+    // Tier 3 — Recursion (5)
     // STARK-in-STARK verification primitives. Extension field
-    // arithmetic and FRI folding steps. Currently Triton-only;
-    // any backend with recursive verification will need equivalents.
+    // arithmetic, FRI folding steps, and proof verification blocks.
+    // Currently Triton-only; any backend with recursive verification
+    // will need equivalents.
     // ═══════════════════════════════════════════════════════════════
 
     // ── Extension field (2) ──
@@ -193,6 +194,16 @@ pub enum TIROp {
     // ── Folding (2) ──
     FoldExt,
     FoldBase,
+
+    // ── Verification (1) ──
+    /// Recursive proof verification block. The body contains the
+    /// verification circuit (typically Tier 3 ops). Backends with native
+    /// recursion can optimize the entire block; others lower the body
+    /// as plain arithmetic.
+    ProofBlock {
+        program_hash: String,
+        body: Vec<TIROp>,
+    },
 }
 
 // ─── Display ──────────────────────────────────────────────────────
@@ -225,6 +236,9 @@ impl fmt::Display for TIROp {
             TIROp::ExtInvert => write!(f, "ext_invert"),
             TIROp::FoldExt => write!(f, "fold_ext"),
             TIROp::FoldBase => write!(f, "fold_base"),
+            TIROp::ProofBlock { program_hash, body } => {
+                write!(f, "proof_block {}(body={})", program_hash, body.len())
+            }
             TIROp::ReadIo(n) => write!(f, "read_io {}", n),
             TIROp::WriteIo(n) => write!(f, "write_io {}", n),
             TIROp::Hint(n) => write!(f, "hint {}", n),
@@ -378,6 +392,10 @@ mod tests {
             },
             TIROp::ReadStorage { width: 1 },
             TIROp::WriteStorage { width: 1 },
+            TIROp::ProofBlock {
+                program_hash: "abc123".into(),
+                body: vec![TIROp::ExtMul],
+            },
             TIROp::Call("f".into()),
             TIROp::Return,
             TIROp::Halt,

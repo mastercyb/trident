@@ -53,7 +53,7 @@ impl fmt::Display for Label {
 
 // ─── LIR Operations ──────────────────────────────────────────────
 
-/// 51 LIR operations. Higher tier = narrower target set.
+/// 53 LIR operations. Higher tier = narrower target set.
 ///
 /// **Tier 0 — Structure** (every program, every target)
 ///   Control flow (5), Program structure (4), Passthrough (2) = 11
@@ -66,9 +66,9 @@ impl fmt::Display for Label {
 ///   Sponge (4), Merkle (2) = 6
 ///
 /// **Tier 3 — Recursion** (requires recursive verification capability)
-///   Extension field (2), Folding (2) = 4
+///   Extension field (2), Folding (2), Verification (2) = 6
 ///
-/// Total: 11 + 30 + 6 + 4 = 51 variants
+/// Total: 11 + 30 + 6 + 6 = 53 variants
 #[derive(Debug, Clone)]
 pub enum LIROp {
     // ═══════════════════════════════════════════════════════════════
@@ -228,9 +228,9 @@ pub enum LIROp {
     MerkleLoad { dst: Reg, node: Reg, addr: Reg },
 
     // ═══════════════════════════════════════════════════════════════
-    // Tier 3 — Recursion (4)
+    // Tier 3 — Recursion (6)
     // STARK-in-STARK verification primitives. Extension field
-    // arithmetic and FRI folding steps.
+    // arithmetic, FRI folding steps, and proof verification blocks.
     // ═══════════════════════════════════════════════════════════════
 
     // ── Extension field (2) ──
@@ -244,6 +244,13 @@ pub enum LIROp {
     FoldExt { dst: Reg, src1: Reg, src2: Reg },
     /// Fold base field elements.
     FoldBase { dst: Reg, src1: Reg, src2: Reg },
+
+    // ── Verification (2) ──
+    /// Recursive proof verification block start marker.
+    /// The verification ops follow until ProofBlockEnd.
+    ProofBlock { program_hash: String },
+    /// End of a proof verification block.
+    ProofBlockEnd,
 }
 
 // ─── Display ──────────────────────────────────────────────────────
@@ -372,6 +379,10 @@ impl fmt::Display for LIROp {
             LIROp::FoldBase { dst, src1, src2 } => {
                 write!(f, "fold_base {}, {}, {}", dst, src1, src2)
             }
+            LIROp::ProofBlock { program_hash } => {
+                write!(f, "proof_block {}", program_hash)
+            }
+            LIROp::ProofBlockEnd => write!(f, "proof_block_end"),
         }
     }
 }
@@ -589,6 +600,10 @@ mod tests {
                 src1: r1,
                 src2: r2,
             },
+            LIROp::ProofBlock {
+                program_hash: "abc123".into(),
+            },
+            LIROp::ProofBlockEnd,
         ];
     }
 }

@@ -84,6 +84,21 @@ impl MidenLowering {
             TIROp::FoldExt => self.emit(out, "# fold_ext (recursion: not yet supported)"),
             TIROp::FoldBase => self.emit(out, "# fold_base (recursion: not yet supported)"),
 
+            // ── Recursion — proof verification block ──
+            TIROp::ProofBlock { program_hash, body } => {
+                self.emit(
+                    out,
+                    &format!(
+                        "# proof_block {} (recursion: not yet supported)",
+                        program_hash
+                    ),
+                );
+                for body_op in body {
+                    self.lower_op(body_op, out);
+                }
+                self.emit(out, "# end proof_block");
+            }
+
             // ── I/O ──
             TIROp::ReadIo(n) => {
                 for _ in 0..*n {
