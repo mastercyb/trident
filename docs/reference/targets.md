@@ -185,16 +185,24 @@ behavior differs. Unlisted VMs (all Tier 0-1 only) behave identically:
 
 #### Types
 
-| Type | Tier | Triton VM | Miden VM | Nock | Cairo VM | AVM | Aztec | EVM | TVM | All Others |
-|------|------|-----------|----------|------|----------|-----|-------|-----|-----|------------|
-| `Field` | 0 | 64-bit | 64-bit | 64-bit | 251-bit | 251-bit | 254-bit | u256 | u257 | u64 |
-| `Bool` | 0 | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| `U32` | 0 | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| `Digest` | 0 | [Field; 5] | [Field; 4] | [Field; 5] | [Field; 1] | [Field; 1] | [Field; 1] | 32 bytes | 32 bytes | 32 bytes |
-| `XField` | 2 | [Field; 3] | -- | [Field; 3] | -- | -- | -- | -- | -- | -- |
+`Bool` and `U32` are available on every VM (Tier 0). The table below shows
+only the types that differ across VMs.
 
-"All Others" = SP1, OpenVM, RISC Zero, Jolt, WASM, eBPF, MoveVM, CKB-VM,
-PolkaVM, x86-64, ARM64, RISC-V.
+| VM | `Field` | `Digest` | `XField` |
+|----|---------|----------|----------|
+| Triton VM | 64-bit | [Field; 5] | [Field; 3] |
+| Miden VM | 64-bit | [Field; 4] | -- |
+| Nock | 64-bit | [Field; 5] | [Field; 3] |
+| Cairo VM | 251-bit | [Field; 1] | -- |
+| AVM (Leo) | 251-bit | [Field; 1] | -- |
+| Aztec (Noir) | 254-bit | [Field; 1] | -- |
+| EVM | u256 | 32 bytes | -- |
+| TVM | u257 | 32 bytes | -- |
+| All others | u64 | 32 bytes | -- |
+
+`XField` is Tier 2 — only Triton VM and Nock. "All others" = SP1, OpenVM,
+RISC Zero, Jolt, WASM, eBPF, MoveVM, CKB-VM, PolkaVM, x86-64, ARM64,
+RISC-V.
 
 #### Operators
 
@@ -204,26 +212,40 @@ PolkaVM, x86-64, ARM64, RISC-V.
 | `<` `&` `^` `/%` | 1 | All VMs. Nock: jets. |
 | `*.` (extension field multiply) | 2 | Triton VM, Nock only. |
 
-#### Builtins
+#### Builtins — Tier 1 (Universal)
 
-| Builtin group | Tier | Triton VM | Miden VM | Nock | RISC Zero | AVM | Aztec | All Others |
-|---------------|------|-----------|----------|------|-----------|-----|-------|------------|
-| I/O (`pub_read`, `pub_write`) | 1 | yes | yes | scry | journal | yes | yes | yes |
-| Field (`sub`, `neg`, `inv`) | 1 | yes | yes | jets | yes | native | native | yes |
-| U32 (`split`, `log2`, `pow`) | 1 | yes | yes | jets | yes | yes | yes | yes |
-| Assert (`assert`, `assert_eq`) | 1 | yes | yes | crash | yes | yes | yes | yes |
-| RAM (`ram_read`, `ram_write`) | 1 | yes | yes | tree edit | yes | yes | yes | yes |
-| Witness (`hint`) | 2 | yes | yes | Nock 11 | yes | yes | yes | -- |
-| Hash (`hash`, `sponge_*`) | 2 | Tip5 R=10 D=5 | Rescue R=8 D=4 | Tip5 R=10 D=5 | SHA-256 | Poseidon | Poseidon2 | -- |
-| Merkle (`merkle_step`) | 2 | native | emulated | jets | -- | -- | -- | -- |
-| XField (`xfield`, `xinvert`, dot) | 2 | yes | -- | yes | quartic | -- | -- | -- |
+All Tier 1 builtins compile to every VM. The table below shows only VMs
+where the mapping is non-obvious.
 
-R = hash rate (fields per absorption). D = digest width (fields per digest).
+| VM | I/O | Field | U32 | Assert | RAM |
+|----|-----|-------|-----|--------|-----|
+| Nock | scry | jets | jets | crash | tree edit |
+| RISC Zero | journal | yes | yes | yes | yes |
+| AVM (Leo) | yes | native | yes | yes | yes |
+| Aztec (Noir) | yes | native | yes | yes | yes |
+| EVM | yes | yes | yes | revert | yes |
+| All others | yes | yes | yes | yes | yes |
 
 Tier 1 builtins map to different primitives depending on the VM: I/O
 becomes host function calls on virtual machines, stdio on native targets.
 Assertions become revert on EVM, crash on Nock, abort on native. Field
 arithmetic uses software modular reduction on non-provable targets.
+
+#### Builtins — Tier 2 (Provable)
+
+Tier 2 builtins require a proof-capable VM. `--` = not available.
+
+| VM | Witness | Hash | Merkle | XField |
+|----|---------|------|--------|--------|
+| Triton VM | yes | Tip5 R=10 D=5 | native | yes |
+| Miden VM | yes | Rescue R=8 D=4 | emulated | -- |
+| Nock | Nock 11 | Tip5 R=10 D=5 | jets | yes |
+| RISC Zero | yes | SHA-256 | -- | quartic |
+| AVM (Leo) | yes | Poseidon | -- | -- |
+| Aztec (Noir) | yes | Poseidon2 | -- | -- |
+| All others | -- | -- | -- | -- |
+
+R = hash rate (fields per absorption). D = digest width (fields per digest).
 
 ---
 
