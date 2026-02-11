@@ -92,7 +92,7 @@ pub enum LIROp {
     /// Unconditional jump.
     Jump(Label),
 
-    // ── Program structure (5) ──
+    // ── Program structure (4) ──
     /// Label definition (branch/jump target).
     LabelDef(Label),
     /// Function entry point.
@@ -101,8 +101,6 @@ pub enum LIROp {
     FnEnd,
     /// Program entry preamble.
     Preamble(String),
-    /// Blank line in output.
-    BlankLine,
 
     // ── Passthrough (2) ──
     /// Comment text (lowering adds target-specific prefix).
@@ -265,7 +263,6 @@ impl fmt::Display for LIROp {
             LIROp::FnStart(name) => write!(f, "fn {}:", name),
             LIROp::FnEnd => write!(f, "fn_end"),
             LIROp::Preamble(main) => write!(f, "preamble {}", main),
-            LIROp::BlankLine => write!(f, ""),
             LIROp::Comment(text) => write!(f, "// {}", text),
             LIROp::Asm { lines } => write!(f, "asm({} lines)", lines.len()),
 
@@ -474,7 +471,6 @@ mod tests {
             LIROp::FnStart("main".into()),
             LIROp::FnEnd,
             LIROp::Preamble("main".into()),
-            LIROp::BlankLine,
             LIROp::Comment("test".into()),
             LIROp::Asm {
                 lines: vec!["nop".into()],

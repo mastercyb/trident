@@ -24,9 +24,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
 use crate::codegen::stack::StackManager;
-use crate::tir::TIROp;
 use crate::stack::SpillFormatter;
 use crate::target::TargetConfig;
+use crate::tir::TIROp;
 use crate::typecheck::MonoInstance;
 
 use self::layout::{format_type_name, resolve_type_width, resolve_type_width_with_subs};
@@ -252,7 +252,7 @@ impl TIRBuilder {
                         if width == 1 { "" } else { "s" }
                     )));
                 }
-                self.ops.push(TIROp::BlankLine);
+                // (blank line between sec_ram and functions handled by lowering)
             }
         }
 

@@ -91,7 +91,7 @@ fn test_lower_loop() {
 #[test]
 fn test_lower_label_formatting() {
     let ops = vec![
-        TIROp::Label("my_func".into()),
+        TIROp::FnStart("my_func".into()),
         TIROp::Call("other_func".into()),
     ];
     let lowering = TritonLowering::new();
@@ -143,7 +143,7 @@ fn test_lower_crypto_ops() {
 fn test_lower_already_prefixed_labels() {
     let ops = vec![
         TIROp::Call("__main".into()),
-        TIROp::Label("__my_label".into()),
+        TIROp::FnStart("__my_label".into()),
     ];
     let lowering = TritonLowering::new();
     let out = lowering.lower(&ops);
@@ -485,9 +485,10 @@ fn test_miden_comment_prefix() {
 }
 
 #[test]
-fn test_miden_neg_one() {
-    let ops = vec![TIROp::PushNegOne];
+fn test_miden_neg() {
+    let ops = vec![TIROp::Neg];
     let lowering = MidenLowering::new();
     let out = lowering.lower(&ops);
     assert_eq!(out[0], "    push.18446744069414584320");
+    assert_eq!(out[1], "    mul");
 }

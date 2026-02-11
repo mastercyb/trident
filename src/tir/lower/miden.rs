@@ -38,7 +38,6 @@ impl MidenLowering {
         match op {
             // ── Stack ──
             TIROp::Push(v) => self.emit(out, &format!("push.{}", v)),
-            TIROp::PushNegOne => self.emit(out, &format!("push.{}", MIDEN_NEG_ONE)),
             TIROp::Pop(n) => {
                 for _ in 0..*n {
                     self.emit(out, "drop");
@@ -55,7 +54,16 @@ impl MidenLowering {
 
             // ── Arithmetic ──
             TIROp::Add => self.emit(out, "add"),
+            TIROp::Sub => {
+                self.emit(out, &format!("push.{}", MIDEN_NEG_ONE));
+                self.emit(out, "mul");
+                self.emit(out, "add");
+            }
             TIROp::Mul => self.emit(out, "mul"),
+            TIROp::Neg => {
+                self.emit(out, &format!("push.{}", MIDEN_NEG_ONE));
+                self.emit(out, "mul");
+            }
             TIROp::Eq => self.emit(out, "eq"),
             TIROp::Lt => self.emit(out, "u32lt"),
             TIROp::And => self.emit(out, "u32and"),
@@ -193,9 +201,6 @@ impl MidenLowering {
             }
 
             // ── Program structure ──
-            TIROp::Label(name) => {
-                out.push(format!("proc.{}", name));
-            }
             TIROp::FnStart(name) => {
                 out.push(format!("proc.{}", name));
                 self.indent = 1;
@@ -211,10 +216,6 @@ impl MidenLowering {
                 out.push("end".to_string());
                 out.push(String::new());
             }
-            TIROp::BlankLine => {
-                out.push(String::new());
-            }
-
             // ── Passthrough ──
             TIROp::Comment(text) => {
                 self.emit(out, &format!("# {}", text));

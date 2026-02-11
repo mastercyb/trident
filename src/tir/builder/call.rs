@@ -113,14 +113,11 @@ impl TIRBuilder {
                 self.push_temp(1);
             }
             "neg" => {
-                self.ops.push(TIROp::PushNegOne);
-                self.ops.push(TIROp::Mul);
+                self.ops.push(TIROp::Neg);
                 self.push_temp(1);
             }
             "sub" => {
-                self.ops.push(TIROp::PushNegOne);
-                self.ops.push(TIROp::Mul);
-                self.ops.push(TIROp::Add);
+                self.ops.push(TIROp::Sub);
                 self.push_temp(1);
             }
 

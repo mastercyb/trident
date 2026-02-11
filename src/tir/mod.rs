@@ -57,17 +57,13 @@ pub enum TIROp {
         body: Vec<TIROp>,
     },
 
-    // ── Program structure (5) ──
-    /// Label definition.
-    Label(String),
+    // ── Program structure (3) ──
     /// Function start (label name).
     FnStart(String),
     /// Function end.
     FnEnd,
     /// Program entry preamble (main function label).
     Preamble(String),
-    /// Blank line in output.
-    BlankLine,
 
     // ── Passthrough (2) ──
     /// Comment text (without prefix — lowering adds target-specific prefix).
@@ -84,16 +80,17 @@ pub enum TIROp {
     // I/O, memory, hashing, events, storage.
     // ═══════════════════════════════════════════════════════════════
 
-    // ── Stack (5) ──
+    // ── Stack (4) ──
     Push(u64),
-    PushNegOne,
     Pop(u32),
     Dup(u32),
     Swap(u32),
 
-    // ── Arithmetic (12) ──
+    // ── Arithmetic (14) ──
     Add,
+    Sub,
     Mul,
+    Neg,
     Eq,
     Lt,
     And,
@@ -193,12 +190,13 @@ impl fmt::Display for TIROp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TIROp::Push(v) => write!(f, "push {}", v),
-            TIROp::PushNegOne => write!(f, "push -1"),
             TIROp::Pop(n) => write!(f, "pop {}", n),
             TIROp::Dup(d) => write!(f, "dup {}", d),
             TIROp::Swap(d) => write!(f, "swap {}", d),
             TIROp::Add => write!(f, "add"),
+            TIROp::Sub => write!(f, "sub"),
             TIROp::Mul => write!(f, "mul"),
+            TIROp::Neg => write!(f, "neg"),
             TIROp::Eq => write!(f, "eq"),
             TIROp::Lt => write!(f, "lt"),
             TIROp::And => write!(f, "and"),
@@ -255,11 +253,9 @@ impl fmt::Display for TIROp {
             TIROp::Loop { label, body } => {
                 write!(f, "loop {}(body={})", label, body.len())
             }
-            TIROp::Label(name) => write!(f, "label {}", name),
             TIROp::FnStart(name) => write!(f, "fn_start {}", name),
             TIROp::FnEnd => write!(f, "fn_end"),
             TIROp::Preamble(main) => write!(f, "preamble {}", main),
-            TIROp::BlankLine => write!(f, ""),
             TIROp::Comment(text) => write!(f, "// {}", text),
             TIROp::Asm { lines, effect } => {
                 write!(f, "asm({} lines, effect={})", lines.len(), effect)
@@ -319,12 +315,13 @@ mod tests {
         // Verify every variant can be constructed without panic
         let _ops: Vec<TIROp> = vec![
             TIROp::Push(0),
-            TIROp::PushNegOne,
             TIROp::Pop(1),
             TIROp::Dup(0),
             TIROp::Swap(1),
             TIROp::Add,
+            TIROp::Sub,
             TIROp::Mul,
+            TIROp::Neg,
             TIROp::Eq,
             TIROp::Lt,
             TIROp::And,
@@ -378,11 +375,9 @@ mod tests {
                 label: "l".into(),
                 body: vec![],
             },
-            TIROp::Label("x".into()),
             TIROp::FnStart("main".into()),
             TIROp::FnEnd,
             TIROp::Preamble("main".into()),
-            TIROp::BlankLine,
             TIROp::Comment("test".into()),
             TIROp::Asm {
                 lines: vec!["nop".into()],

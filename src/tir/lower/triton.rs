@@ -43,14 +43,22 @@ impl TritonLowering {
         match op {
             // ── Stack ──
             TIROp::Push(v) => out.push(format!("    push {}", v)),
-            TIROp::PushNegOne => out.push("    push -1".to_string()),
             TIROp::Pop(n) => out.push(format!("    pop {}", n)),
             TIROp::Dup(d) => out.push(format!("    dup {}", d)),
             TIROp::Swap(d) => out.push(format!("    swap {}", d)),
 
             // ── Arithmetic ──
             TIROp::Add => out.push("    add".to_string()),
+            TIROp::Sub => {
+                out.push("    push -1".to_string());
+                out.push("    mul".to_string());
+                out.push("    add".to_string());
+            }
             TIROp::Mul => out.push("    mul".to_string()),
+            TIROp::Neg => {
+                out.push("    push -1".to_string());
+                out.push("    mul".to_string());
+            }
             TIROp::Eq => out.push("    eq".to_string()),
             TIROp::Lt => out.push("    lt".to_string()),
             TIROp::And => out.push("    and".to_string()),
@@ -202,14 +210,6 @@ impl TritonLowering {
             }
 
             // ── Program structure ──
-            TIROp::Label(name) => {
-                let formatted = if name.starts_with("__") {
-                    name.clone()
-                } else {
-                    self.format_label(name)
-                };
-                out.push(format!("{}:", formatted));
-            }
             TIROp::FnStart(name) => {
                 let formatted = if name.starts_with("__") {
                     name.clone()
@@ -230,9 +230,6 @@ impl TritonLowering {
                 };
                 out.push(format!("    call {}", formatted));
                 out.push("    halt".to_string());
-                out.push(String::new());
-            }
-            TIROp::BlankLine => {
                 out.push(String::new());
             }
 
@@ -280,6 +277,7 @@ impl Lowering for TritonLowering {
     fn lower(&self, ops: &[TIROp]) -> Vec<String> {
         let mut lowerer = TritonLowering::new();
         let mut out = Vec::new();
+
         for op in ops {
             lowerer.lower_op(op, &mut out);
         }

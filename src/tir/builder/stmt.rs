@@ -455,13 +455,13 @@ impl TIRBuilder {
 
         // Emit deferred subroutines inline.
         for (label, block, _is_literal) in deferred_subs {
-            self.ops.push(TIROp::Label(label));
+            self.ops.push(TIROp::FnStart(label));
             let saved = self.stack.save_state();
             self.stack.clear();
             self.build_block(&block);
             self.stack.restore_state(saved);
             self.ops.push(TIROp::Return);
-            self.ops.push(TIROp::BlankLine);
+            self.ops.push(TIROp::FnEnd);
         }
     }
 
