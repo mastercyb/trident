@@ -16,18 +16,18 @@ use std::fmt;
 /// **Tier 0 — Structure** (every program, every target)
 ///   Control flow (6), Program structure (3), Passthrough (2) = 11
 ///
-/// **Tier 1 — Universal** (compiles to every target including conventional)
+/// **Tier 1 — Universal** (compiles to every target including non-provable)
 ///   Stack (4), Modular arithmetic (5), Comparison (2), Bitwise (5),
-///   Unsigned arithmetic (5), I/O (2), Witness (1), Memory (2),
-///   Assertions (1), Hash (1), Events (2), Storage (2) = 32
+///   Unsigned arithmetic (5), I/O (2), Memory (2),
+///   Assertions (1), Hash (1), Events (2), Storage (2) = 31
 ///
 /// **Tier 2 — Provable** (requires a proof-capable target)
-///   Sponge (4), Merkle (2) = 6
+///   Witness (1), Sponge (4), Merkle (2) = 7
 ///
 /// **Tier 3 — Recursion** (requires recursive verification capability)
 ///   Extension field (2), Folding (2), Verification (1) = 5
 ///
-/// Total: 11 + 32 + 6 + 5 = 54 variants
+/// Total: 11 + 31 + 7 + 5 = 54 variants
 #[derive(Debug, Clone)]
 pub enum TIROp {
     // ═══════════════════════════════════════════════════════════════
@@ -76,9 +76,9 @@ pub enum TIROp {
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // Tier 1 — Universal (32)
+    // Tier 1 — Universal (31)
     // Compiles to every target. Stack primitives, arithmetic,
-    // I/O, witness, memory, hashing, events, storage.
+    // I/O, memory, hashing, events, storage.
     // ═══════════════════════════════════════════════════════════════
 
     // ── Stack (4) ──
@@ -115,11 +115,6 @@ pub enum TIROp {
     // ── I/O (2) ──
     ReadIo(u32),
     WriteIo(u32),
-
-    // ── Witness (1) ──
-    /// Non-deterministic hint input. Moved from I/O to its own group
-    /// because hints are a proof-system concept, not general I/O.
-    Hint(u32),
 
     // ── Memory (2) ──
     ReadMem(u32),
@@ -164,10 +159,16 @@ pub enum TIROp {
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // Tier 2 — Provable (6)
-    // Requires a proof-capable target. Sponge construction and Merkle
-    // authentication have no meaningful equivalent on conventional VMs.
+    // Tier 2 — Provable (7)
+    // Requires a proof-capable target. Witness input, sponge construction,
+    // and Merkle authentication have no meaningful equivalent on
+    // conventional VMs.
     // ═══════════════════════════════════════════════════════════════
+
+    // ── Witness (1) ──
+    /// Non-deterministic hint input. Hints are a proof-system concept,
+    /// not general I/O.
+    Hint(u32),
 
     // ── Sponge (4) ──
     SpongeInit,

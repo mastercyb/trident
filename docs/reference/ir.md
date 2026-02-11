@@ -54,7 +54,7 @@ Every program, every target. Just computation.
 The IR expresses intent, not formatting. Lowering handles labels, entry
 boilerplate, and blank lines.
 
-### Tier 1 — Universal (32)
+### Tier 1 — Universal (31)
 
 Every target — provable or non-provable. All values are field elements.
 Arithmetic groups are named by **interpretation**: how the value is treated.
@@ -67,19 +67,19 @@ Arithmetic groups are named by **interpretation**: how the value is treated.
 | **Bitwise** (5) | `And` `Or` `Xor` `PopCount` `Split` | Bit pattern. `Split` → 2 u32 limbs |
 | **Unsigned** (5) | `DivMod` `Shl` `Shr` `Log2` `Pow` | Unsigned integer. `DivMod` → 2 values |
 | **I/O** (2) | `ReadIo(u32)` `WriteIo(u32)` | Public input/output channels |
-| **Witness** (1) | `Hint(u32)` | Non-deterministic input from the prover |
 | **Memory** (2) | `ReadMem(u32)` `WriteMem(u32)` | Address on stack, popped after access |
 | **Assertions** (1) | `Assert(u32)` | Assert N elements are nonzero |
 | **Hash** (1) | `Hash { width: u32 }` | Hash N elements into a digest |
 | **Events** (2) | `Reveal { name, tag, field_count }` `Seal { name, tag, field_count }` | `Reveal` = fields in the clear; `Seal` = hashed, only digest visible |
 | **Storage** (2) | `ReadStorage { width }` `WriteStorage { width }` | Persistent state access |
 
-### Tier 2 — Provable (6)
+### Tier 2 — Provable (7)
 
 Proof-capable targets only. No meaningful equivalent on non-provable targets.
 
 | Group | Variants | Intent |
 |-------|----------|--------|
+| **Witness** (1) | `Hint(u32)` | Non-deterministic input from the prover |
 | **Sponge** (4) | `SpongeInit` `SpongeAbsorb` `SpongeSqueeze` `SpongeLoad` | Incremental algebraic hashing |
 | **Merkle** (2) | `MerkleStep` `MerkleLoad` | Merkle tree authentication |
 
@@ -98,8 +98,8 @@ Recursive verification only. STARK-in-STARK primitives.
 | Tier | Name | Count | What it enables |
 |------|------|-------|-----------------|
 | 0 | Structure | 11 | Any program on any target |
-| 1 | Universal | 32 | Full computation — any target |
-| 2 | Provable | 6 | Proof generation and verification |
+| 1 | Universal | 31 | Full computation — any target |
+| 2 | Provable | 7 | Proof generation and verification |
 | 3 | Recursion | 5 | Proofs that verify other proofs |
 | | **Total** | **54** | |
 
