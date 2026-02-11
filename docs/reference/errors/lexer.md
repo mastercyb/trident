@@ -26,7 +26,7 @@ error: non-ASCII byte 0xNN at position N
 
 Trident source is ASCII-only. Unicode identifiers are not supported.
 
-**Spec:** language.md Section 20 (IDENT production).
+**Spec:** grammar.md (IDENT production).
 
 ---
 
@@ -174,7 +174,7 @@ error: unexpected '"'; Trident has no string type
   help: strings are a permanent exclusion — no target VM supports string operations
 ```
 
-**Spec:** language.md Section 2, Section 21 (permanent exclusion).
+**Spec:** language.md Section 2, patterns.md Permanent Exclusions.
 
 ---
 
@@ -188,7 +188,7 @@ error: block comments '/* */' are not supported
 Trident only supports line comments (`//`). Block comments are not part of
 the grammar.
 
-**Spec:** language.md Section 20 (grammar: `comment = "//" .* NEWLINE`).
+**Spec:** grammar.md (`comment = "//" .* NEWLINE`).
 
 ---
 

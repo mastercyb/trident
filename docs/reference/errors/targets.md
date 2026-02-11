@@ -35,7 +35,7 @@ Target names cannot contain path traversal characters.
 
 ```
 error: program uses Tier 2 operations but target 'sp1' only supports up to Tier 1
-  help: remove hash/sponge/merkle operations or choose a Tier 2 target (triton, miden)
+  help: remove hash/sponge/merkle operations or choose a Tier 2 target (triton, miden, nock)
 ```
 
 The program's tier (highest-tier op used) exceeds the target's maximum
@@ -49,7 +49,7 @@ supported tier. See [targets.md](../targets.md) for tier compatibility.
 
 ```
 error: type 'XField' is not available on target 'miden' (xfield_width = 0)
-  help: XField requires a target with extension field support (currently: triton)
+  help: XField requires a target with extension field support (currently: triton, nock)
 ```
 
 **Spec:** language.md Section 11, targets.md (XField = Tier 2, extension field
@@ -61,10 +61,10 @@ targets only).
 
 ```
 error: operator '*.' (scalar multiply) is not available on target 'miden'
-  help: '*.' requires XField support (currently: triton only)
+  help: '*.' requires XField support (currently: triton, nock)
 ```
 
-**Spec:** language.md Section 12 (Tier 2 operator), targets.md.
+**Spec:** provable.md Extension Field (Tier 2 operator), targets.md.
 
 ---
 
@@ -72,10 +72,10 @@ error: operator '*.' (scalar multiply) is not available on target 'miden'
 
 ```
 error: builtin 'hash' is not available on target 'sp1' (Tier 2 required)
-  help: hash/sponge operations require a target with native hash coprocessor (triton, miden)
+  help: hash/sponge operations require a target with native hash coprocessor (triton, miden, nock)
 ```
 
-**Spec:** language.md Section 13, targets.md (hash = Tier 2).
+**Spec:** provable.md Hash and Sponge, targets.md (hash = Tier 2).
 
 ---
 
@@ -83,10 +83,10 @@ error: builtin 'hash' is not available on target 'sp1' (Tier 2 required)
 
 ```
 error: builtin 'sponge_init' is not available on target 'sp1'
-  help: sponge operations require a Tier 2 target (triton, miden)
+  help: sponge operations require a Tier 2 target (triton, miden, nock)
 ```
 
-**Spec:** language.md Section 13, targets.md (sponge = Tier 2).
+**Spec:** provable.md Hash and Sponge, targets.md (sponge = Tier 2).
 
 ---
 
@@ -101,7 +101,7 @@ error: 'seal' requires sponge support (Tier 2)
 writing the commitment digest to public output. Targets without sponge
 support cannot execute `seal`.
 
-**Spec:** language.md Section 15 (seal requires sponge = Tier 2).
+**Spec:** provable.md Hash and Sponge (seal requires sponge = Tier 2).
 
 ---
 
@@ -109,10 +109,10 @@ support cannot execute `seal`.
 
 ```
 error: builtin 'merkle_step' is not available on target 'sp1'
-  help: Merkle operations require a Tier 2 target (triton, miden)
+  help: Merkle operations require a Tier 2 target (triton, miden, nock)
 ```
 
-**Spec:** language.md Section 14, targets.md (merkle = Tier 2).
+**Spec:** provable.md Merkle Authentication, targets.md (merkle = Tier 2).
 
 ---
 
@@ -120,10 +120,10 @@ error: builtin 'merkle_step' is not available on target 'sp1'
 
 ```
 error: builtin 'xfield' is not available on target 'miden'
-  help: extension field builtins require XField support (currently: triton only)
+  help: extension field builtins require XField support (currently: triton, nock)
 ```
 
-**Spec:** language.md Section 16, targets.md (XField builtins = Triton only).
+**Spec:** provable.md Extension Field, targets.md (XField builtins = Triton VM, Nock).
 
 ---
 
@@ -131,24 +131,24 @@ error: builtin 'xfield' is not available on target 'miden'
 
 ```
 error: cannot import 'ext.neptune.xfield' when compiling for target 'miden'
-  help: ext.<target>.* modules bind to a specific target
+  help: ext.<os>.* modules bind to a specific OS
 ```
 
-Importing `ext.<target>.*` binds the program to that target. Compiling
-for a different target is a hard error.
+Importing `ext.<os>.*` binds the program to that OS. Compiling for a
+different target is a hard error.
 
-**Spec:** language.md Section 18, targets.md (cross-target imports rejected).
+**Spec:** stdlib.md OS Extensions, targets.md (cross-OS imports rejected).
 
 ---
 
 ### Tier 3 on non-Triton target **(planned)**
 
 ```
-error: recursive proof verification (Tier 3) is only available on Triton VM
-  help: ProofBlock, FriVerify, and extension field folding require Triton VM
+error: recursive proof verification (Tier 3) is only available on Triton VM and Nock
+  help: ProofBlock, FriVerify, and extension field folding require Triton VM or Nock
 ```
 
-**Spec:** ir.md (Tier 3 = Triton only), targets.md tier compatibility.
+**Spec:** ir.md (Tier 3 = Triton VM, Nock), targets.md tier compatibility.
 
 ---
 
@@ -161,7 +161,7 @@ error: proof_block() requires Digest argument, got Field
 The `proof_block` construct takes a program hash of type `Digest` to
 identify which program's proof is being verified recursively.
 
-**Spec:** language.md Section 17 (proof_block(program_hash: Digest)).
+**Spec:** provable.md Proof Composition (proof_block(program_hash: Digest)).
 
 ---
 
@@ -174,7 +174,7 @@ error: hash() requires 10 field arguments on target 'triton', got 8
 
 The number of arguments to `hash()` must match the target's hash rate R.
 
-**Spec:** language.md Section 13 (hash takes R elements, R is target-dependent).
+**Spec:** provable.md Hash and Sponge (hash takes R elements, R is target-dependent).
 
 ---
 
@@ -185,4 +185,4 @@ error: sponge_absorb() requires 10 field arguments on target 'triton', got 5
   help: sponge rate R = 10 for Triton VM; see targets.md for per-target rates
 ```
 
-**Spec:** language.md Section 13 (sponge_absorb takes R elements).
+**Spec:** provable.md Hash and Sponge (sponge_absorb takes R elements).

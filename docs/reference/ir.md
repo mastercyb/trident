@@ -56,7 +56,7 @@ boilerplate, and blank lines.
 
 ### Tier 1 — Universal (31)
 
-Every target — blockchain or conventional. All values are field elements.
+Every target — provable or non-provable. All values are field elements.
 Arithmetic groups are named by **interpretation**: how the value is treated.
 
 | Group | Variants | Interpretation |
@@ -75,7 +75,7 @@ Arithmetic groups are named by **interpretation**: how the value is treated.
 
 ### Tier 2 — Provable (7)
 
-Proof-capable targets only. No meaningful equivalent on conventional machines.
+Proof-capable targets only. No meaningful equivalent on non-provable targets.
 
 | Group | Variants | Intent |
 |-------|----------|--------|
@@ -98,7 +98,7 @@ Recursive verification only. STARK-in-STARK primitives.
 | Tier | Name | Count | What it enables |
 |------|------|-------|-----------------|
 | 0 | Structure | 11 | Any program on any target |
-| 1 | Universal | 31 | Full computation — blockchain or conventional |
+| 1 | Universal | 31 | Full computation — any target |
 | 2 | Provable | 7 | Proof generation and verification |
 | 3 | Recursion | 5 | Proofs that verify other proofs |
 | | **Total** | **54** | |
@@ -191,9 +191,9 @@ SNARKs, every future proof system will use polynomial commitments over
 fields. This is math, not a choice.
 
 When compiling to x86, field arithmetic has overhead (modular reduction).
-That's the cost of provability. The conventional targets serve the
-provable world — for testing, debugging, local execution. If you want
-a fast native calculator without provability, use C.
+That's the cost of provability. The native targets serve the provable
+world — for testing, debugging, local execution. If you want a fast
+native calculator without provability, use C.
 
 The type system has `Field`, `U32`, `Bool`, `Digest` — but at the IR
 level, they're all field elements with different range constraints.
@@ -201,18 +201,17 @@ The type checker validates before IR generation. By the time we emit
 TIR, correctness is already guaranteed. The IR doesn't need types
 because there's no instruction selection decision that depends on type.
 
-### Provable-first, conventional-second
+### Provable-first, portable-second
 
 The compiler is not a general-purpose toolchain that happens to support
 proofs. It's a provable-first compiler that happens to also run on
-conventional targets.
+non-provable targets.
 
 This resolves every design tension:
 - Stack-based TIR as canonical? Yes — proof VMs are stack machines.
 - Field elements only? Yes — proofs operate over fields.
 - Events in the universal tier? Yes — they're how provable programs
-  communicate with the chain. On conventional targets, they're
-  structured logging.
+  communicate with the OS. On native targets, they're structured logging.
 
 ### Concurrency is orchestration, not computation
 

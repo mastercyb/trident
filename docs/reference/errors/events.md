@@ -62,7 +62,7 @@ error: reveal field 'amount': expected Field but got Bool
 
 The expression type does not match the event field's declared type.
 
-**Spec:** language.md Section 15, Section 10 (reveal/seal must match event
+**Spec:** language.md Section 10 (reveal/seal must match event
 with matching field types).
 
 ---
@@ -73,4 +73,4 @@ with matching field types).
 error: event 'Transfer' is already defined
 ```
 
-**Spec:** language.md Section 20 (items are unique within a module).
+**Spec:** language.md Section 1 (items are unique within a module).

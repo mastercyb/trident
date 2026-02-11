@@ -67,7 +67,7 @@ error: module 'my_module' must not define `fn main()`
 error: duplicate struct definition 'Point'
 ```
 
-**Spec:** language.md Section 20 (items are unique within a module).
+**Spec:** language.md Section 1 (items are unique within a module).
 
 ---
 
@@ -77,7 +77,7 @@ error: duplicate struct definition 'Point'
 error: duplicate constant definition 'MAX'
 ```
 
-**Spec:** language.md Section 20 (items are unique within a module).
+**Spec:** language.md Section 1 (items are unique within a module).
 
 ---
 
