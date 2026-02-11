@@ -22,10 +22,12 @@ TIRBuilder    →  Vec<TIROp>          ← target-independent
   │     ▼
   │   Linker → final .tasm/.masm
   │
-  └─→ tir_to_lir()      → Vec<LIROp>  ← register targets (x86-64, ARM64, RISC-V)
-        │
-        ▼
-      RegisterLowering → Vec<u8>       ← native machine code
+  ├─→ tir_to_lir()      → Vec<LIROp>  ← register targets (x86-64, ARM64, RISC-V)
+  │     │
+  │     ▼
+  │   RegisterLowering → Vec<u8>       ← native machine code
+  │
+  └─→ KernelLowering    → String       ← GPU targets (CUDA, Metal, Vulkan)
 ```
 
 ---
@@ -466,8 +468,9 @@ flow.
 The **LIR** (Low-level IR) provides this as a parallel lowering path:
 
 ```
-AST → TIR ─→ Lowering ──────────→ Vec<String>   (stack targets)
-          └→ LIR → RegisterLowering → Vec<u8>   (register targets)
+AST → TIR ─→ Lowering          → Vec<String>  (stack targets)
+          ├→ LIR → RegisterLow  → Vec<u8>      (register targets)
+          └→ KIR → KernelLow    → String        (GPU kernel source)
 ```
 
 ### LIR design
@@ -522,6 +525,47 @@ of register allocation and instruction selection.
 
 ---
 
+## KIR: GPU Kernel Lowering
+
+GPUs execute thousands of threads in lockstep — the same instruction on
+different data. Trident programs are scalar, but can be **batch-executed**:
+run N copies of the same program on N different inputs simultaneously.
+
+KIR is not a separate IR. It takes TIR directly and wraps it in a GPU
+compute kernel. Each GPU thread runs one program instance:
+
+- `ReadIo` → `buffer[thread_id * input_width + i]`
+- `WriteIo` → `buffer[thread_id * output_width + i]`
+- All other ops → scalar computation per thread
+
+### KernelLowering trait
+
+```rust
+pub trait KernelLowering {
+    fn target_name(&self) -> &str;
+    fn lower(&self, ops: &[TIROp]) -> String;  // complete kernel source
+}
+```
+
+### File layout
+
+```
+src/kir/
+├── mod.rs          ← module docs
+└── lower/
+    ├── mod.rs      ← KernelLowering trait + create_kernel_lowering() factory
+    ├── cuda.rs     ← CudaLowering stub (NVIDIA)
+    ├── metal.rs    ← MetalLowering stub (Apple Silicon)
+    └── vulkan.rs   ← VulkanLowering stub (cross-platform)
+```
+
+### Current status
+
+Scaffold only — all types, traits, and tests compile. Backend `lower()`
+methods are `todo!()` stubs.
+
+---
+
 ## Cross-references
 
 - [Universal design](universal-design.md) — multi-target architecture overview
@@ -533,3 +577,5 @@ of register allocation and instruction selection.
 - [`src/codegen/stack.rs`](../src/codegen/stack.rs) — StackManager implementation
 - [`src/lir/mod.rs`](../src/lir/mod.rs) — LIROp enum + register-based IR
 - [`src/lir/lower/mod.rs`](../src/lir/lower/mod.rs) — RegisterLowering trait + native backends
+- [`src/kir/mod.rs`](../src/kir/mod.rs) — KIR module + GPU kernel lowering
+- [`src/kir/lower/mod.rs`](../src/kir/lower/mod.rs) — KernelLowering trait + GPU backends
