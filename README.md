@@ -330,4 +330,4 @@ Organized following the [Diataxis](https://diataxis.fr/) framework:
 
 ## License
 
-Cyber License: Don't trust. Don't fear. Don't beg.
+[Cyber License](docs/explanation/cyber-license.md): Don't trust. Don't fear. Don't beg.
