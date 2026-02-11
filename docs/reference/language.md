@@ -103,7 +103,7 @@ width D varies by target (5 on Triton, 4 on Miden, 8 on SP1/OpenVM, 1 on Cairo).
 No implicit conversions. `Field` and `U32` do not auto-convert. Use `as_field()`
 and `as_u32()` (the latter inserts a range check).
 
-For extension field types, see [Part II: Provable Types](#11-provable-types).
+For extension field types, see [provable.md](provable.md).
 
 ### Composite Types
 
@@ -232,7 +232,7 @@ sec ram: { 17: Field, 42: Field }   // pre-initialized RAM slots
 No subtraction operator (`-`). No division operator (`/`). No `!=`, `>`, `<=`,
 `>=`. No `&&`, `||`, `!`. Use builtins: `sub(a, b)`, `neg(a)`, `inv(a)`.
 
-For extension field operators, see [Part II: Provable Operators](#12-provable-operators).
+For extension field operators, see [provable.md](provable.md).
 
 ### Other Expressions
 

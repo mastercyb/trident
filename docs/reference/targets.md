@@ -170,7 +170,7 @@ computation). Higher tiers require specific VM capabilities:
 |------|-------------|-----|
 | 0 — Structure | Entry, Call, Return, Const, Let | All 20 VMs |
 | 1 — Universal | Arithmetic, control flow, memory, I/O | All 20 VMs |
-| 2 — Provable | Hash, MerkleStep, Sponge, Reveal, Seal, Witness | Triton VM, Miden VM, Nock + partial: RISC Zero (SHA-256), AVM (Poseidon), Aztec (Poseidon2) |
+| 2 — Provable | Witness, Sponge, MerkleStep | Triton VM, Miden VM, Nock + partial: RISC Zero (SHA-256), AVM (Poseidon), Aztec (Poseidon2) |
 | 3 — Recursion | ProofBlock, FriVerify, recursive composition | Triton VM, Nock |
 
 Programs using only Tier 0-1 compile to any VM. Programs using Tier 2+

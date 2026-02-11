@@ -34,9 +34,8 @@ bindings: storage, accounts, syscalls, transaction models.
 | `ext.neptune.kernel` | Neptune kernel interface |
 | `ext.neptune.proof` | Recursive proof composition |
 
-Each OS provides its own `ext.<os>.*` modules (e.g., `ext.neptune.*`,
-`ext.ethereum.*`, `ext.linux.*`). Importing any `ext.<os>.*` module binds
-the program to that OS — the compiler rejects cross-OS imports.
+Importing any `ext.<os>.*` module binds the program to that OS — the
+compiler rejects cross-OS imports.
 
 See [targets.md Part II](targets.md) for the full OS registry and available
 `ext.*` bindings per OS.
