@@ -40,7 +40,7 @@ impl MonoInstance {
     /// Mangled label: `sum` with N=3 → `__sum__N3`.
     pub fn mangled_name(&self) -> String {
         let suffix: Vec<String> = self.size_args.iter().map(|n| format!("{}", n)).collect();
-        format!("__{}__N{}", self.name, suffix.join("_"))
+        format!("{}__N{}", self.name, suffix.join("_"))
     }
 }
 

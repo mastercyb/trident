@@ -80,6 +80,121 @@ pub(crate) trait StackBackend {
     fn inst_xb_dot_step(&self) -> &'static str {
         "xb_dot_step"
     }
+
+    // ── Code generation patterns ─────────────────────────────────
+    // These methods abstract target-specific code generation strategies.
+    // Defaults match Triton VM behavior.
+
+    // --- Labels ---
+
+    /// Format a user-visible name into a target label (e.g. "main" → "__main").
+    fn format_label(&self, name: &str) -> String {
+        format!("__{}", name)
+    }
+
+    /// Emit a label definition line (e.g. "__main" → "__main:").
+    fn emit_label_def(&self, label: &str) -> String {
+        format!("{}:", label)
+    }
+
+    // --- Program structure ---
+
+    /// Lines emitted at program start before any functions.
+    fn program_preamble(&self, main_label: &str) -> Vec<String> {
+        vec![
+            format!("    {}", self.inst_call(main_label)),
+            format!("    {}", self.inst_halt()),
+            String::new(),
+        ]
+    }
+
+    // --- Function structure ---
+
+    /// Lines emitted at the start of a function definition.
+    fn function_prologue(&self, label: &str) -> Vec<String> {
+        vec![format!("{}:", label)]
+    }
+
+    /// Lines emitted at the end of a function body.
+    fn function_epilogue(&self) -> Vec<String> {
+        vec![self.inst_return().to_string(), String::new()]
+    }
+
+    // --- Control flow ---
+
+    /// Emit an if/else branch. Condition bool is on top of stack (already consumed by caller).
+    fn emit_if_else(&self, then_label: &str, else_label: &str) -> Vec<String> {
+        vec![
+            self.inst_push(1),
+            self.inst_swap(1),
+            self.inst_skiz().to_string(),
+            self.inst_call(then_label),
+            self.inst_skiz().to_string(),
+            self.inst_call(else_label),
+        ]
+    }
+
+    /// Emit an if-only branch (no else). Condition bool is on top of stack.
+    fn emit_if_only(&self, then_label: &str) -> Vec<String> {
+        vec![self.inst_skiz().to_string(), self.inst_call(then_label)]
+    }
+
+    /// Lines emitted at the start of a deferred block body.
+    fn deferred_block_prologue(&self, clears_flag: bool) -> Vec<String> {
+        if clears_flag {
+            vec![self.inst_pop(1)]
+        } else {
+            vec![]
+        }
+    }
+
+    /// Lines emitted at the end of a deferred block body.
+    fn deferred_block_epilogue(&self, clears_flag: bool) -> Vec<String> {
+        let mut v = vec![];
+        if clears_flag {
+            v.push(self.inst_push(0));
+        }
+        v.push(self.inst_return().to_string());
+        v
+    }
+
+    // --- Loops ---
+
+    /// Emit the loop-entry check: if counter == 0, exit.
+    fn loop_check_zero(&self) -> Vec<String> {
+        vec![
+            self.inst_dup(0),
+            self.inst_push(0),
+            self.inst_eq().to_string(),
+            self.inst_skiz().to_string(),
+            self.inst_return().to_string(),
+        ]
+    }
+
+    /// Emit the counter decrement (counter -= 1).
+    fn loop_decrement(&self) -> Vec<String> {
+        vec![
+            self.inst_push_neg_one().to_string(),
+            self.inst_add().to_string(),
+        ]
+    }
+
+    /// Emit the loop tail (jump back to loop start).
+    fn loop_tail(&self) -> Vec<String> {
+        vec![self.inst_recurse().to_string()]
+    }
+
+    // --- Output formatting ---
+
+    /// Indentation prefix for instructions.
+    fn instruction_indent(&self) -> &str {
+        "    "
+    }
+
+    /// Comment prefix for the target assembly language.
+    fn comment_prefix(&self) -> &str {
+        "//"
+    }
 }
 
 pub(crate) use cairo::CairoBackend;

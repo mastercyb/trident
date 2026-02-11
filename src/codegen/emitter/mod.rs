@@ -245,10 +245,6 @@ impl Emitter {
                     .map(|t| resolve_type_width_with_subs(&t.node, &subs, &self.target_config))
                     .unwrap_or(0);
                 let mangled = inst.mangled_name();
-                // Strip the leading __ from mangled_name for fn_return_widths lookup
-                let base = mangled.trim_start_matches("__");
-                self.fn_return_widths.insert(base.to_string(), width);
-                // Also register under full mangled name
                 self.fn_return_widths.insert(mangled.clone(), width);
             }
         }
@@ -314,10 +310,14 @@ impl Emitter {
         // Emit sec ram metadata as comments (prover pre-initializes these RAM slots)
         for decl in &file.declarations {
             if let Declaration::SecRam(entries) = decl {
-                self.raw("// sec ram: prover-initialized RAM slots");
+                self.raw(&format!(
+                    "{} sec ram: prover-initialized RAM slots",
+                    self.backend.comment_prefix()
+                ));
                 for (addr, ty) in entries {
                     self.raw(&format!(
-                        "// ram[{}]: {} ({} field element{})",
+                        "{} ram[{}]: {} ({} field element{})",
+                        self.backend.comment_prefix(),
                         addr,
                         crate::emit::format_type_name(&ty.node),
                         resolve_type_width(&ty.node, &self.target_config),
@@ -333,11 +333,11 @@ impl Emitter {
         }
 
         if file.kind == FileKind::Program {
-            let call_inst = self.backend.inst_call("__main");
-            let halt_inst = self.backend.inst_halt();
-            self.raw(&format!("    {}", call_inst));
-            self.raw(&format!("    {}", halt_inst));
-            self.raw("");
+            let main_label = self.backend.format_label("main");
+            let preamble = self.backend.program_preamble(&main_label);
+            for line in preamble {
+                self.raw(&line);
+            }
         }
 
         for item in &file.items {
@@ -367,13 +367,11 @@ impl Emitter {
             return;
         }
 
-        let label = if func.name.node == "main" {
-            "__main".to_string()
-        } else {
-            format!("__{}", func.name.node)
-        };
-
-        self.emit_label(&label);
+        let label = self.backend.format_label(&func.name.node);
+        let prologue = self.backend.function_prologue(&label);
+        for line in prologue {
+            self.raw(&line);
+        }
         self.stack.clear();
         self.deferred.clear();
 
@@ -406,8 +404,10 @@ impl Emitter {
             self.emit_pop(total_width);
         }
 
-        self.b_return();
-        self.raw("");
+        let epilogue = self.backend.function_epilogue();
+        for line in epilogue {
+            self.inst(&line);
+        }
 
         // Emit deferred blocks
         self.flush_deferred();
@@ -426,8 +426,11 @@ impl Emitter {
             self.current_subs.insert(param.node.clone(), *val);
         }
 
-        let label = inst.mangled_name();
-        self.emit_label(&label);
+        let label = self.backend.format_label(&inst.mangled_name());
+        let prologue = self.backend.function_prologue(&label);
+        for line in prologue {
+            self.raw(&line);
+        }
         self.stack.clear();
         self.deferred.clear();
 
@@ -466,8 +469,10 @@ impl Emitter {
             self.emit_pop(total_width);
         }
 
-        self.b_return();
-        self.raw("");
+        let epilogue = self.backend.function_epilogue();
+        for line in epilogue {
+            self.inst(&line);
+        }
 
         self.flush_deferred();
         self.stack.clear();
@@ -479,14 +484,15 @@ impl Emitter {
             let deferred = std::mem::take(&mut self.deferred);
             for block in deferred {
                 self.emit_label(&block.label);
-                if block.clears_flag {
-                    self.b_pop(1);
+                let prologue = self.backend.deferred_block_prologue(block.clears_flag);
+                for line in prologue {
+                    self.inst(&line);
                 }
                 self.emit_block(&block.block);
-                if block.clears_flag {
-                    self.b_push(0);
+                let epilogue = self.backend.deferred_block_epilogue(block.clears_flag);
+                for line in epilogue {
+                    self.inst(&line);
                 }
-                self.b_return();
                 self.raw("");
             }
         }
@@ -494,13 +500,18 @@ impl Emitter {
 
     fn fresh_label(&mut self, prefix: &str) -> String {
         self.label_counter += 1;
-        format!("__{}__{}", prefix, self.label_counter)
+        self.backend
+            .format_label(&format!("{}__{}", prefix, self.label_counter))
     }
 
     // ── Low-level output helpers ──────────────────────────────────
 
     fn inst(&mut self, instruction: &str) {
-        self.output.push(format!("    {}", instruction));
+        self.output.push(format!(
+            "{}{}",
+            self.backend.instruction_indent(),
+            instruction
+        ));
     }
 
     fn raw(&mut self, line: &str) {
@@ -508,7 +519,7 @@ impl Emitter {
     }
 
     fn emit_label(&mut self, label: &str) {
-        self.output.push(format!("{}:", label));
+        self.output.push(self.backend.emit_label_def(label));
     }
 }
 

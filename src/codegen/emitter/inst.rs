@@ -63,9 +63,6 @@ impl Emitter {
     pub(super) fn b_pop_count(&mut self) {
         self.inst(self.backend.inst_pop_count());
     }
-    pub(super) fn b_skiz(&mut self) {
-        self.inst(self.backend.inst_skiz());
-    }
     pub(super) fn b_assert(&mut self) {
         self.inst(self.backend.inst_assert());
     }
@@ -99,12 +96,6 @@ impl Emitter {
     pub(super) fn b_call(&mut self, label: &str) {
         let s = self.backend.inst_call(label);
         self.inst(&s);
-    }
-    pub(super) fn b_return(&mut self) {
-        self.inst(self.backend.inst_return());
-    }
-    pub(super) fn b_recurse(&mut self) {
-        self.inst(self.backend.inst_recurse());
     }
     #[allow(dead_code)]
     pub(super) fn b_read_io(&mut self, count: u32) {

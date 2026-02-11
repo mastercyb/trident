@@ -45,7 +45,11 @@ impl Emitter {
                             let s = self.backend.inst_push(val);
                             self.emit_and_push(&s, 1);
                         } else {
-                            self.inst(&format!("// ERROR: unresolved constant '{}'", name));
+                            self.inst(&format!(
+                                "{} ERROR: unresolved constant '{}'",
+                                self.backend.comment_prefix(),
+                                name
+                            ));
                             let s = self.backend.inst_push(0);
                             self.emit_and_push(&s, 1);
                         }
@@ -87,8 +91,11 @@ impl Emitter {
                                 }
                             } else {
                                 self.inst(&format!(
-                                    "// BUG: variable '{}' unreachable (depth {}+{}), aborting",
-                                    name, depth2, width
+                                    "{} BUG: variable '{}' unreachable (depth {}+{}), aborting",
+                                    self.backend.comment_prefix(),
+                                    name,
+                                    depth2,
+                                    width
                                 ));
                                 self.b_push(0);
                                 self.b_assert(); // halt: stack depth exceeded
@@ -229,7 +236,11 @@ impl Emitter {
                             self.stack.push_temp(fw);
                             self.flush_stack_effects();
                         } else {
-                            self.inst(&format!("// ERROR: unresolved field '{}'", field.node));
+                            self.inst(&format!(
+                                "{} ERROR: unresolved field '{}'",
+                                self.backend.comment_prefix(),
+                                field.node
+                            ));
                             self.stack.pop();
                             self.stack.push_temp(1);
                             self.flush_stack_effects();

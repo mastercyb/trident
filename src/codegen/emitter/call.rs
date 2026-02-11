@@ -280,11 +280,11 @@ impl Emitter {
                         name: name.to_string(),
                         size_args,
                     };
-                    let mangled = inst.mangled_name();
-                    let base = mangled.clone();
-                    (mangled, base)
+                    let base = inst.mangled_name();
+                    let label = self.backend.format_label(&base);
+                    (label, base)
                 } else if name.contains('.') {
-                    // Cross-module call: "merkle.verify" → "call merkle__verify"
+                    // Cross-module call: "merkle.verify" → "call __merkle__verify"
                     let parts: Vec<&str> = name.rsplitn(2, '.').collect();
                     let fn_name = parts[0];
                     let short_module = parts[1];
@@ -294,9 +294,12 @@ impl Emitter {
                         .map(|s| s.as_str())
                         .unwrap_or(short_module);
                     let mangled = full_module.replace('.', "_");
-                    (format!("{}__{}", mangled, fn_name), fn_name.to_string())
+                    let base = format!("{}__{}", mangled, fn_name);
+                    let label = self.backend.format_label(&base);
+                    (label, fn_name.to_string())
                 } else {
-                    (format!("__{}", name), name.to_string())
+                    let label = self.backend.format_label(name);
+                    (label, name.to_string())
                 };
                 let ret_width = self.fn_return_widths.get(&base_name).copied().unwrap_or(0);
                 let call_inst = self.backend.inst_call(&call_label);

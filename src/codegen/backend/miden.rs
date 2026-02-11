@@ -151,5 +151,94 @@ impl StackBackend for MidenBackend {
     fn inst_push_neg_one(&self) -> &'static str {
         "push.18446744069414584320" // Goldilocks p - 1
     }
-}
 
+    // --- Code generation patterns (Miden-specific overrides) ---
+
+    fn format_label(&self, name: &str) -> String {
+        name.to_string()
+    }
+
+    fn emit_label_def(&self, label: &str) -> String {
+        format!("proc.{}", label)
+    }
+
+    fn program_preamble(&self, main_label: &str) -> Vec<String> {
+        vec![
+            "begin".to_string(),
+            format!("    exec.{}", main_label),
+            "end".to_string(),
+            String::new(),
+        ]
+    }
+
+    fn function_prologue(&self, label: &str) -> Vec<String> {
+        vec![format!("proc.{}", label)]
+    }
+
+    fn function_epilogue(&self) -> Vec<String> {
+        vec!["end".to_string(), String::new()]
+    }
+
+    fn emit_if_else(&self, _then_label: &str, _else_label: &str) -> Vec<String> {
+        // Miden uses inline if/else — the emitter still uses deferred blocks,
+        // but Miden wraps them in if.true/else/end structure.
+        // For now, emit the Triton-compatible deferred-call pattern using Miden instructions.
+        vec![
+            self.inst_push(1),
+            self.inst_swap(1),
+            "if.true".to_string(),
+            self.inst_call(_then_label),
+            "else".to_string(),
+            self.inst_call(_else_label),
+            "end".to_string(),
+        ]
+    }
+
+    fn emit_if_only(&self, _then_label: &str) -> Vec<String> {
+        vec![
+            "if.true".to_string(),
+            self.inst_call(_then_label),
+            "end".to_string(),
+        ]
+    }
+
+    fn deferred_block_prologue(&self, clears_flag: bool) -> Vec<String> {
+        if clears_flag {
+            vec![self.inst_pop(1)]
+        } else {
+            vec![]
+        }
+    }
+
+    fn deferred_block_epilogue(&self, _clears_flag: bool) -> Vec<String> {
+        // Miden: no flag clearing needed — if/else is structural, not flag-based
+        vec!["end".to_string()]
+    }
+
+    fn loop_check_zero(&self) -> Vec<String> {
+        vec![
+            self.inst_dup(0),
+            self.inst_push(0),
+            self.inst_eq().to_string(),
+            "if.true".to_string(),
+            "  drop".to_string(), // clean up counter
+            "  end".to_string(),  // exit the proc
+            "end".to_string(),
+        ]
+    }
+
+    fn loop_decrement(&self) -> Vec<String> {
+        vec![
+            self.inst_push_neg_one().to_string(),
+            self.inst_add().to_string(),
+        ]
+    }
+
+    fn loop_tail(&self) -> Vec<String> {
+        vec!["exec.self".to_string()]
+    }
+
+    fn comment_prefix(&self) -> &str {
+        "#"
+    }
+}

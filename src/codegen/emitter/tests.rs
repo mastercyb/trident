@@ -19,9 +19,8 @@ fn test_minimal_program() {
 
 #[test]
 fn test_pub_read_write() {
-    let tasm = compile(
-        "program test\nfn main() {\n    let a: Field = pub_read()\n    pub_write(a)\n}",
-    );
+    let tasm =
+        compile("program test\nfn main() {\n    let a: Field = pub_read()\n    pub_write(a)\n}");
     assert!(tasm.contains("read_io 1"));
     assert!(tasm.contains("dup 0")); // access a
     assert!(tasm.contains("write_io 1"));
@@ -88,7 +87,7 @@ fn test_cross_module_call_emission() {
     let tasm = compile(
         "program test\nfn main() {\n    let a: Field = pub_read()\n    let b: Field = helpers.double(a)\n    pub_write(b)\n}",
     );
-    assert!(tasm.contains("call helpers__double"));
+    assert!(tasm.contains("call __helpers__double"));
 }
 
 #[test]
@@ -530,7 +529,7 @@ fn test_compile_minimal_triton() {
 #[test]
 fn test_compile_minimal_miden() {
     let out = compile_with_target("program test\nfn main() {\n}", "miden");
-    assert!(out.contains("exec.__main"));
+    assert!(out.contains("exec.main"));
 }
 
 #[test]
@@ -599,7 +598,7 @@ fn test_cross_target_control_flow() {
         assert!(!out.is_empty(), "{}: empty output for control flow", target);
         // All targets should have labels for branching
         assert!(
-            out.contains("__main"),
+            out.contains("main"),
             "{}: missing main label in control flow",
             target
         );
@@ -613,8 +612,8 @@ fn test_cross_target_function_calls() {
         let out = compile_with_target(source, target);
         assert!(!out.is_empty(), "{}: empty for function calls", target);
         // Should have both main and add_one labels
-        assert!(out.contains("__main"), "{}: missing __main", target);
-        assert!(out.contains("__add_one"), "{}: missing __add_one", target);
+        assert!(out.contains("main"), "{}: missing main", target);
+        assert!(out.contains("add_one"), "{}: missing add_one", target);
     }
 }
 
@@ -626,7 +625,7 @@ fn test_cross_target_loops() {
         assert!(!out.is_empty(), "{}: empty for loops", target);
         // Loops desugar to labels and jumps in all targets
         assert!(
-            out.contains("__main"),
+            out.contains("main"),
             "{}: missing main in loop test",
             target
         );
@@ -680,9 +679,9 @@ fn test_cross_target_multiple_functions() {
     let source = "program test\nfn double(x: Field) -> Field {\n  x * 2\n}\nfn triple(x: Field) -> Field {\n  x * 3\n}\nfn main() {\n  let a: Field = double(5)\n  let b: Field = triple(5)\n  pub_write(a + b)\n}";
     for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
         let out = compile_with_target(source, target);
-        assert!(out.contains("__double"), "{}: missing __double", target);
-        assert!(out.contains("__triple"), "{}: missing __triple", target);
-        assert!(out.contains("__main"), "{}: missing __main", target);
+        assert!(out.contains("double"), "{}: missing double", target);
+        assert!(out.contains("triple"), "{}: missing triple", target);
+        assert!(out.contains("main"), "{}: missing main", target);
     }
 }
 
@@ -723,8 +722,8 @@ fn test_cross_target_nested_calls() {
     let source = "program test\nfn inc(x: Field) -> Field {\n  x + 1\n}\nfn add_two(x: Field) -> Field {\n  inc(inc(x))\n}\nfn main() {\n  pub_write(add_two(40))\n}";
     for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
         let out = compile_with_target(source, target);
-        assert!(out.contains("__inc"), "{}: missing __inc", target);
-        assert!(out.contains("__add_two"), "{}: missing __add_two", target);
+        assert!(out.contains("inc"), "{}: missing inc", target);
+        assert!(out.contains("add_two"), "{}: missing add_two", target);
     }
 }
 
@@ -734,7 +733,7 @@ fn test_cross_target_struct() {
     for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
         let out = compile_with_target(source, target);
         assert!(!out.is_empty(), "{}: empty for struct test", target);
-        assert!(out.contains("__origin"), "{}: missing __origin", target);
+        assert!(out.contains("origin"), "{}: missing origin", target);
     }
 }
 
@@ -767,7 +766,8 @@ fn test_cross_target_hash() {
 
 #[test]
 fn test_cross_target_seal() {
-    let source = "program test\nevent Secret {\n  val: Field,\n}\nfn main() {\n  seal Secret { val: 42 }\n}";
+    let source =
+        "program test\nevent Secret {\n  val: Field,\n}\nfn main() {\n  seal Secret { val: 42 }\n}";
     for target in &["triton", "miden", "openvm", "sp1", "cairo"] {
         let out = compile_with_target(source, target);
         assert!(!out.is_empty(), "{}: empty for seal test", target);

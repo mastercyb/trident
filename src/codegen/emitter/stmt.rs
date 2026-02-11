@@ -108,12 +108,10 @@ impl Emitter {
                     let then_label = self.fresh_label("then");
                     let else_label = self.fresh_label("else");
 
-                    self.b_push(1);
-                    self.b_swap(1);
-                    self.b_skiz();
-                    self.b_call(&then_label);
-                    self.b_skiz();
-                    self.b_call(&else_label);
+                    let lines = self.backend.emit_if_else(&then_label, &else_label);
+                    for line in lines {
+                        self.inst(&line);
+                    }
 
                     self.deferred.push(DeferredBlock {
                         label: then_label,
@@ -127,8 +125,11 @@ impl Emitter {
                     });
                 } else {
                     let then_label = self.fresh_label("then");
-                    self.b_skiz();
-                    self.b_call(&then_label);
+
+                    let lines = self.backend.emit_if_only(&then_label);
+                    for line in lines {
+                        self.inst(&line);
+                    }
 
                     self.deferred.push(DeferredBlock {
                         label: then_label,
@@ -286,13 +287,11 @@ impl Emitter {
                             // eq → produces bool on stack
                             self.b_eq();
 
-                            // Use the flag pattern: push 1, swap, skiz call arm, skiz call rest
-                            self.b_push(1);
-                            self.b_swap(1);
-                            self.b_skiz();
-                            self.b_call(&arm_label);
-                            self.b_skiz();
-                            self.b_call(&rest_label);
+                            // Branch: match arm vs continue to next pattern
+                            let lines = self.backend.emit_if_else(&arm_label, &rest_label);
+                            for line in lines {
+                                self.inst(&line);
+                            }
 
                             // Build arm body: pop scrutinee then run original body
                             let pop_inst = self.backend.inst_pop(1);
@@ -535,13 +534,13 @@ impl Emitter {
 
     pub(super) fn emit_loop_subroutine(&mut self, label: &str, body: &Block, _var_name: &str) {
         self.emit_label(label);
-        self.b_dup(0);
-        self.b_push(0);
-        self.b_eq();
-        self.b_skiz();
-        self.b_return();
-        self.b_push_neg_one();
-        self.b_add();
+
+        for line in self.backend.loop_check_zero() {
+            self.inst(&line);
+        }
+        for line in self.backend.loop_decrement() {
+            self.inst(&line);
+        }
 
         // Save and restore stack model since loop body is a separate context
         let saved = self.stack.save_state();
@@ -549,7 +548,9 @@ impl Emitter {
         self.emit_block(body);
         self.stack.restore_state(saved);
 
-        self.b_recurse();
+        for line in self.backend.loop_tail() {
+            self.inst(&line);
+        }
         self.raw("");
     }
 }
