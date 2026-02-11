@@ -80,7 +80,8 @@ src/codegen/ir/                    ← backward-compatible re-exports only
 
 `TIROp` is an enum with **53 variants** in four tiers. Higher tier = narrower
 target set. No target instructions (`skiz`, `recurse`, `if.true`, `proc`)
-appear in the TIR.
+appear in the TIR. All names follow **verb-first** convention — ops are
+imperative commands: Read, Write, Emit, Assert.
 
 ### Tier 0 — Structure (13 variants)
 
@@ -100,44 +101,49 @@ Each backend lowers structural ops differently:
 - **Miden**: emits inline `if.true / else / end`
 - **RISC-V**: could emit conditional branches to labels
 
-### Tier 1 — Universal (30 variants)
+### Tier 1 — Universal (29 variants)
 
-Compiles to every blockchain target. Stack primitives, arithmetic, I/O,
-memory, hashing, events, storage.
+Compiles to every target — blockchain or conventional. Stack primitives,
+arithmetic, I/O, memory, hashing, events, storage.
 
 | Group | Variants | Notes |
 |-------|----------|-------|
-| **Stack** (5) | `Push(u64)` `PushNegOne` `Pop(u32)` `Dup(u32)` `Swap(u32)` | Indices from top (0 = TOS). Depth ≤ [`stack_depth`](../src/tools/target.rs:20) |
-| **Arithmetic** (12) | `Add` `Mul` `Eq` `Lt` `And` `Xor` `DivMod` `Invert` `Split` `Log2` `Pow` `PopCount` | Native field. `DivMod` → 2 values; `Split` → 2 u32 limbs |
-| **I/O** (3) | `ReadIo(u32)` `WriteIo(u32)` `Divine(u32)` | Public I/O and non-deterministic witness |
+| **Stack** (4) | `Push(u64)` `Pop(u32)` `Dup(u32)` `Swap(u32)` | Indices from top (0 = TOS). Depth ≤ [`stack_depth`](../src/tools/target.rs:20) |
+| **Field arithmetic** (5) | `Add` `Sub` `Mul` `Neg` `Invert` | Native field element operations |
+| **Comparison** (2) | `Eq` `Lt` | Produce boolean (0 or 1) result |
+| **Bitwise** (5) | `And` `Or` `Xor` `PopCount` `Split` | Treat values as bit patterns. `Split` → 2 u32 limbs |
+| **Integer arithmetic** (3) | `DivMod` `Log2` `Pow` | Unsigned integer operations. `DivMod` → 2 values |
+| **I/O** (2) | `ReadIo(u32)` `WriteIo(u32)` | Public input/output channels |
 | **Memory** (2) | `ReadMem(u32)` `WriteMem(u32)` | Address on stack, popped after access |
-| **Assertions** (2) | `Assert` `AssertVector` | Single element or word-width check |
-| **Hash** (2) | `Hash` `HashDigest` | Every target has some hash primitive |
-| **Events** (2) | `EmitEvent { name, tag, field_count }` `SealEvent { name, tag, field_count }` | Observable events and hash-sealed commitments |
-| **Storage** (2) | `StorageRead { width }` `StorageWrite { width }` | Persistent state access |
+| **Assertions** (1) | `Assert(u32)` | Assert N stack elements are nonzero |
+| **Hash** (1) | `Hash { width: u32 }` | Hash N elements into a digest |
+| **Events** (2) | `Publish { name, tag, field_count }` `Seal { name, tag, field_count }` | `Publish` = fields in the clear; `Seal` = fields hashed into cryptographic seal |
+| **Storage** (2) | `ReadStorage { width }` `WriteStorage { width }` | Persistent state access |
 
 How backends expand abstract Tier 1 ops:
 
 | Op | Triton | Miden | EVM (future) |
 |----|--------|-------|-------------|
-| `EmitEvent` | `push tag; write_io 1` per field | comment + `drop` | `LOG` + topic hash |
-| `SealEvent` | pad + `hash` + `write_io 5` | pad + `hperm` + `drop` | keccak + emit |
-| `StorageRead` | `read_mem` + `pop 1` | `mem_load` | `SLOAD` |
-| `StorageWrite` | `write_mem` + `pop 1` | `mem_store` | `SSTORE` |
-| `HashDigest` | `hash` | `hperm` | `KECCAK256` |
+| `Publish` | `push tag; write_io 1` per field | comment + `drop` | `LOG` + topic hash |
+| `Seal` | pad + `hash` + `write_io 5` | pad + `hperm` + `drop` | keccak + emit |
+| `ReadStorage` | `read_mem` + `pop 1` | `mem_load` | `SLOAD` |
+| `WriteStorage` | `write_mem` + `pop 1` | `mem_store` | `SSTORE` |
+| `Hash` | `hash` | `hperm` | `KECCAK256` |
 
-### Tier 2 — Provable (6 variants)
+### Tier 2 — Provable (7 variants)
 
-Requires a proof-capable target. Sponge construction and Merkle
-authentication have no meaningful equivalent on conventional VMs.
+Requires a proof-capable target. Non-deterministic witness input, sponge
+construction, and Merkle authentication have no meaningful equivalent on
+conventional VMs.
 
 | Group | Variants | Intent |
 |-------|----------|--------|
+| **Witness** (1) | `Hint(u32)` | Non-deterministic input from the prover (advice/witness) |
 | **Sponge** (4) | `SpongeInit` `SpongeAbsorb` `SpongeSqueeze` `SpongeAbsorbMem` | Incremental algebraic hashing for proof systems |
 | **Merkle** (2) | `MerkleStep` `MerkleStepMem` | Merkle tree authentication |
 
 Programs using these ops require `--target` with proof capability.
-The compiler can reject them when targeting conventional chains.
+The compiler can reject them when targeting conventional architectures.
 
 ### Tier 3 — Recursion (4 variants)
 
@@ -212,7 +218,7 @@ Then emission:
 - [`build_expr`](../src/tir/builder/expr.rs:11) — literals, variables, binary
   ops, function calls, tuples, arrays, field access, indexing, struct init
 - [`build_call`](../src/tir/builder/call.rs:12) — resolves ~40 intrinsics
-  (pub_read/write, divine, assert, hash, sponge, merkle, ram, xfield ops) or
+  (pub_read/write, hint, assert, hash, sponge, merkle, ram, xfield ops) or
   delegates to [`build_user_call`](../src/tir/builder/call.rs:225) for
   user-defined functions
 
@@ -377,7 +383,8 @@ end
 | `Call(f)` | `call __f` | `exec.f` |
 | `Return` | `return` | (implicit — `end` closes proc) |
 | `Comment(s)` | `// s` | `# s` |
-| `PushNegOne` | `push -1` | `push.18446744069414584320` |
+| `Neg` | `push -1; mul` | `push.18446744069414584320; mul` |
+| `Sub` | `push -1; mul; add` | `push.18446744069414584320; mul; add` |
 
 ---
 
@@ -435,7 +442,7 @@ the mechanism. This is what makes the TIR target-independent.
 
 ### Abstract operations over hardcoded patterns
 
-`EmitEvent` instead of `push tag; write_io 1; write_io 1; ...`. The abstract
+`Publish` instead of `push tag; write_io 1; write_io 1; ...`. The abstract
 op carries the semantic meaning (event name, tag, field count), letting each
 backend implement events in its native way — or ignore them entirely.
 
@@ -449,8 +456,8 @@ backend implement events in its native way — or ignore them entirely.
 3. Handle each TIROp variant, paying special attention to:
    - `IfElse`, `IfOnly`, `Loop` — your target's control flow conventions
    - `FnStart`/`FnEnd` — your target's function boundary syntax
-   - `EmitEvent`/`SealEvent` — your target's event model
-   - `StorageRead`/`StorageWrite` — your target's persistence model
+   - `Publish`/`Seal` — your target's event model
+   - `ReadStorage`/`WriteStorage` — your target's persistence model
 4. Register in [`create_lowering`](../src/tir/lower/mod.rs:23)
 5. Add a [`TargetConfig`](../src/tools/target.rs:20) (hardcoded or TOML)
 6. Add tests — the comparison test pattern in
@@ -482,14 +489,15 @@ AST → TIR ─→ Lowering ──────────→ Vec<String>   (sta
 | Memory | `ReadMem(n)` / `WriteMem(n)` | `Load { dst, base, offset }` / `Store { src, base, offset }` |
 | Output | Assembly text `Vec<String>` | Machine code `Vec<u8>` |
 
-LIR has **51 variants** (TIR has 53) in the same four-tier structure:
+LIR mirrors TIR's four-tier structure with register-addressed equivalents.
+Variant counts will track TIR as naming is finalized.
 
-- **Tier 0 — Structure (12)**: `Branch`/`Jump`/`LabelDef` replace nested
-  `IfElse`/`IfOnly`/`Loop` bodies. No `Push`/`Pop`/`Dup`/`Swap` stack ops.
-- **Tier 1 — Universal (29)**: `LoadImm`/`Move` replace stack manipulation.
+- **Tier 0 — Structure**: `Branch`/`Jump`/`LabelDef` replace nested
+  `IfElse`/`IfOnly`/`Loop` bodies. No stack ops.
+- **Tier 1 — Universal**: `LoadImm`/`Move` replace stack manipulation.
   Base+offset `Load`/`Store` replace `ReadMem`/`WriteMem`.
-- **Tier 2 — Provable (6)**: Same sponge/merkle ops, register-addressed.
-- **Tier 3 — Recursion (4)**: Same ops, three-address form.
+- **Tier 2 — Provable**: Same sponge/merkle/hint ops, register-addressed.
+- **Tier 3 — Recursion**: Same ops, three-address form.
 
 ### File layout
 
