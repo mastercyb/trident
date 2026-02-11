@@ -1,6 +1,6 @@
 # Nervos CKB — Operating System
 
-[← Target Reference](../targets.md) | VM: [CKB-VM](../targets/ckb.md)
+[← Target Reference](../targets.md) | VM: [CKB-VM](../vm/ckb.md)
 
 ---
 
@@ -36,4 +36,4 @@ Cost is measured in cycles, corresponding to the number of RISC-V instructions
 executed plus syscall overhead.
 
 For CKB-VM details (instruction set, lowering path, bytecode format),
-see [ckb.md](../targets/ckb.md).
+see [ckb.md](../vm/ckb.md).

@@ -1,6 +1,6 @@
 # Aztec
 
-[← Target Reference](../targets.md) | VM: [Aztec/Noir](../targets/aztec.md)
+[← Target Reference](../targets.md) | VM: [Aztec/Noir](../vm/aztec.md)
 
 ---
 
@@ -26,4 +26,4 @@
 
 Dual cost model: private in gates (client-side), public in gas (sequencer).
 
-For VM details, see [aztec.md](../targets/aztec.md).
+For VM details, see [aztec.md](../vm/aztec.md).

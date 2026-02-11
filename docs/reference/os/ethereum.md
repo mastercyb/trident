@@ -1,6 +1,6 @@
 # Ethereum
 
-[← Target Reference](../targets.md) | VM: [EVM](../targets/evm.md)
+[← Target Reference](../targets.md) | VM: [EVM](../vm/evm.md)
 
 ---
 
@@ -27,4 +27,4 @@
 
 Ethereum is the canonical EVM chain — L1 settlement layer. Same .evm bytecode runs on all EVM-compatible chains with different ext.* bindings.
 
-For VM details, see [evm.md](../targets/evm.md).
+For VM details, see [evm.md](../vm/evm.md).

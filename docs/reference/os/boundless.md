@@ -1,6 +1,6 @@
 # Boundless
 
-[← Target Reference](../targets.md) | VM: [RISC Zero](../targets/risczero.md)
+[← Target Reference](../targets.md) | VM: [RISC Zero](../vm/risczero.md)
 
 ---
 
@@ -25,4 +25,4 @@
 
 Boundless is RISC Zero's proving network — proofs verify on any chain with a Groth16 verifier.
 
-For VM details, see [risczero.md](../targets/risczero.md).
+For VM details, see [risczero.md](../vm/risczero.md).

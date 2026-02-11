@@ -1,6 +1,6 @@
 # Cosmos (CosmWasm) — Operating System
 
-[← Target Reference](../targets.md) | VM: [WASM](../targets/wasm.md)
+[← Target Reference](../targets.md) | VM: [WASM](../vm/wasm.md)
 
 ---
 
@@ -36,4 +36,4 @@ bindings handle chain-specific module differences. IBC enables cross-chain
 contract calls natively.
 
 For WASM VM details (instruction set, lowering path, bytecode format),
-see [wasm.md](../targets/wasm.md).
+see [wasm.md](../vm/wasm.md).

@@ -1,6 +1,6 @@
 # Linux — Operating System
 
-[← OS Reference](../targets.md) | VM: [x86-64](../targets/x86-64.md), [ARM64](../targets/arm64.md), [RISC-V](../targets/riscv.md)
+[← OS Reference](../targets.md) | VM: [x86-64](../vm/x86-64.md), [ARM64](../vm/arm64.md), [RISC-V](../vm/riscv.md)
 
 ---
 
@@ -31,5 +31,5 @@ syscalls through the `ext.linux.*` module.
 Multiple VMs share this OS — the same `ext.linux.*` API works regardless
 of whether the underlying CPU is x86-64, ARM64, or RISC-V.
 
-For VM details, see [x86-64.md](../targets/x86-64.md),
-[arm64.md](../targets/arm64.md), or [riscv.md](../targets/riscv.md).
+For VM details, see [x86-64.md](../vm/x86-64.md),
+[arm64.md](../vm/arm64.md), or [riscv.md](../vm/riscv.md).

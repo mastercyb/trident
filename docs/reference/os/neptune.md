@@ -1,6 +1,6 @@
 # Neptune
 
-[← Target Reference](../targets.md) | VM: [Triton VM](../targets/triton.md)
+[← Target Reference](../targets.md) | VM: [Triton VM](../vm/triton.md)
 
 ---
 
@@ -26,4 +26,4 @@
 
 Neptune is the provable blockchain powered by Triton VM. Programs produce STARK proofs of correct execution.
 
-For VM details, see [triton.md](../targets/triton.md).
+For VM details, see [triton.md](../vm/triton.md).

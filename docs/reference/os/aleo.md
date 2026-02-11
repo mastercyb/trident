@@ -1,6 +1,6 @@
 # Aleo
 
-[← Target Reference](../targets.md) | VM: [AVM/Leo](../targets/leo.md)
+[← Target Reference](../targets.md) | VM: [AVM/Leo](../vm/leo.md)
 
 ---
 
@@ -25,4 +25,4 @@
 
 Privacy-first L1 — programs execute off-chain and produce proofs verified on-chain.
 
-For VM details, see [leo.md](../targets/leo.md).
+For VM details, see [leo.md](../vm/leo.md).

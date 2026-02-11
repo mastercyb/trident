@@ -1,6 +1,6 @@
 # Succinct
 
-[← Target Reference](../targets.md) | VM: [SP1](../targets/sp1.md)
+[← Target Reference](../targets.md) | VM: [SP1](../vm/sp1.md)
 
 ---
 
@@ -25,4 +25,4 @@
 
 Succinct is SP1's proving network for verifiable computation.
 
-For VM details, see [sp1.md](../targets/sp1.md).
+For VM details, see [sp1.md](../vm/sp1.md).

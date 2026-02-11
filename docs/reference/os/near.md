@@ -1,6 +1,6 @@
 # Near Protocol — Operating System
 
-[← Target Reference](../targets.md) | VM: [WASM](../targets/wasm.md)
+[← Target Reference](../targets.md) | VM: [WASM](../vm/wasm.md)
 
 ---
 
@@ -33,4 +33,4 @@ function calls (storage reads/writes, cross-contract calls, cryptographic
 operations).
 
 For WASM VM details (instruction set, lowering path, bytecode format),
-see [wasm.md](../targets/wasm.md).
+see [wasm.md](../vm/wasm.md).

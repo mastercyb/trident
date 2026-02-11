@@ -1,6 +1,6 @@
 # Polkadot — Operating System
 
-[← Target Reference](../targets.md) | VM: [PolkaVM](../targets/polkavm.md)
+[← Target Reference](../targets.md) | VM: [PolkaVM](../vm/polkavm.md)
 
 ---
 
@@ -36,4 +36,4 @@ opens Polkadot smart contract development beyond Rust/ink! to any language
 with a RISC-V backend.
 
 For PolkaVM details (instruction set, lowering path, bytecode format),
-see [polkavm.md](../targets/polkavm.md).
+see [polkavm.md](../vm/polkavm.md).

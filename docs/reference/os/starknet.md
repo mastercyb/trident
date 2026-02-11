@@ -1,6 +1,6 @@
 # Starknet
 
-[← Target Reference](../targets.md) | VM: [Cairo VM](../targets/cairo.md)
+[← Target Reference](../targets.md) | VM: [Cairo VM](../vm/cairo.md)
 
 ---
 
@@ -26,4 +26,4 @@
 
 Starknet is a ZK rollup on Ethereum using STARK proofs from Cairo VM.
 
-For VM details, see [cairo.md](../targets/cairo.md).
+For VM details, see [cairo.md](../vm/cairo.md).

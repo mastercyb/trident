@@ -1,6 +1,6 @@
 # Arbitrum (Stylus) — Operating System
 
-[← Target Reference](../targets.md) | VM: [WASM](../targets/wasm.md) + [EVM](../targets/evm.md)
+[← Target Reference](../targets.md) | VM: [WASM](../vm/wasm.md) + [EVM](../vm/evm.md)
 
 ---
 
@@ -33,4 +33,4 @@ oracle operations. Gas model is EVM-compatible — same units, same block
 limits, but WASM execution costs less per operation.
 
 For WASM VM details (instruction set, lowering path, bytecode format),
-see [wasm.md](../targets/wasm.md).
+see [wasm.md](../vm/wasm.md).

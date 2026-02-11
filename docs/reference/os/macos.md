@@ -1,6 +1,6 @@
 # macOS — Operating System
 
-[← OS Reference](../targets.md) | VM: [ARM64](../targets/arm64.md), [x86-64](../targets/x86-64.md)
+[← OS Reference](../targets.md) | VM: [ARM64](../vm/arm64.md), [x86-64](../vm/x86-64.md)
 
 ---
 
@@ -31,5 +31,5 @@ the `ext.macos.*` module.
 Shares the POSIX-compatible API surface with Linux — most `ext.linux.*`
 programs port to `ext.macos.*` with minimal changes.
 
-For VM details, see [arm64.md](../targets/arm64.md) or
-[x86-64.md](../targets/x86-64.md).
+For VM details, see [arm64.md](../vm/arm64.md) or
+[x86-64.md](../vm/x86-64.md).

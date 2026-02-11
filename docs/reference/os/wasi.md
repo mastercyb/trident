@@ -1,6 +1,6 @@
 # WASI — Operating System
 
-[← OS Reference](../targets.md) | VM: [WASM](../targets/wasm.md)
+[← OS Reference](../targets.md) | VM: [WASM](../vm/wasm.md)
 
 ---
 
@@ -34,4 +34,4 @@ filesystem, clock, and random capabilities instead of blockchain storage
 and accounts.
 
 For WASM VM details (instruction set, lowering path, bytecode format),
-see [wasm.md](../targets/wasm.md).
+see [wasm.md](../vm/wasm.md).

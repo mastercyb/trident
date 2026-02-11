@@ -1,6 +1,6 @@
 # Browser — Operating System
 
-[← OS Reference](../targets.md) | VM: [WASM](../targets/wasm.md)
+[← OS Reference](../targets.md) | VM: [WASM](../vm/wasm.md)
 
 ---
 
@@ -33,4 +33,4 @@ host function imports differ. Browser provides DOM, fetch, and Web APIs
 instead of filesystem and clock capabilities.
 
 For WASM VM details (instruction set, lowering path, bytecode format),
-see [wasm.md](../targets/wasm.md).
+see [wasm.md](../vm/wasm.md).

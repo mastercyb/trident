@@ -100,7 +100,7 @@ impl TargetConfig {
         Self::parse_toml(&content, path)
     }
 
-    /// Resolve a target by name: look for `targets/{name}.toml` relative to
+    /// Resolve a target by name: look for `vm/{name}.toml` relative to
     /// the compiler binary or working directory, falling back to built-in configs.
     pub fn resolve(name: &str) -> Result<Self, Diagnostic> {
         // Reject path traversal
@@ -117,8 +117,8 @@ impl TargetConfig {
             return Ok(Self::triton());
         }
 
-        // Search for targets/{name}.toml
-        let filename = format!("targets/{}.toml", name);
+        // Search for vm/{name}.toml
+        let filename = format!("vm/{}.toml", name);
 
         // 1. Relative to compiler binary
         if let Ok(exe) = std::env::current_exe() {
@@ -127,7 +127,7 @@ impl TargetConfig {
                 if path.exists() {
                     return Self::load(&path);
                 }
-                // One level up (target/debug/../targets/)
+                // One level up (target/debug/../vm/)
                 if let Some(parent) = dir.parent() {
                     let path = parent.join(&filename);
                     if path.exists() {

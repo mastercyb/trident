@@ -1,6 +1,6 @@
 # Aptos — Operating System
 
-[← Target Reference](../targets.md) | VM: [MoveVM](../targets/movevm.md)
+[← Target Reference](../targets.md) | VM: [MoveVM](../vm/movevm.md)
 
 ---
 
@@ -38,4 +38,4 @@ resources can only be created, moved, or destroyed by the module that
 defines them.
 
 For MoveVM details (instruction set, lowering path, bytecode format),
-see [movevm.md](../targets/movevm.md).
+see [movevm.md](../vm/movevm.md).

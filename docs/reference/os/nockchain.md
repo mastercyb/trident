@@ -1,6 +1,6 @@
 # Nockchain
 
-[← Target Reference](../targets.md) | VM: [Nock](../targets/nock.md)
+[← Target Reference](../targets.md) | VM: [Nock](../vm/nock.md)
 
 ---
 
@@ -25,4 +25,4 @@
 
 Nockchain is a provable blockchain using Nock combinator VM with STARK proofs.
 
-For VM details, see [nock.md](../targets/nock.md).
+For VM details, see [nock.md](../vm/nock.md).

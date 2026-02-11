@@ -1,6 +1,6 @@
 # Polygon Miden
 
-[← Target Reference](../targets.md) | VM: [Miden VM](../targets/miden.md)
+[← Target Reference](../targets.md) | VM: [Miden VM](../vm/miden.md)
 
 ---
 
@@ -26,4 +26,4 @@
 
 Polygon Miden is a ZK rollup on Ethereum. Client-side proving — users prove their own transactions.
 
-For VM details, see [miden.md](../targets/miden.md).
+For VM details, see [miden.md](../vm/miden.md).

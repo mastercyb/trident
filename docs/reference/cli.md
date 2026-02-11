@@ -50,7 +50,7 @@ trident lsp                             # Start LSP server
 `--target <name>` resolves as:
 
 1. Is `<name>` an OS? → load `os/<name>.toml`, derive VM from `vm` field
-2. Is `<name>` a VM? → load `targets/<name>.toml`, no OS (bare compilation)
+2. Is `<name>` a VM? → load `vm/<name>.toml`, no OS (bare compilation)
 3. Neither → error: unknown target
 
 See [targets.md](targets.md) for the full target registry.

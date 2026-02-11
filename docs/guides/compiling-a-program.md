@@ -329,7 +329,7 @@ The `--target` flag selects a `TargetConfig` by name. The built-in `triton` conf
 | Output extension | `.tasm` |
 | Cost tables | processor, hash, u32, op_stack, ram, jump_stack |
 
-Custom targets can be defined as TOML files in a `targets/` directory. The compiler searches for `targets/{name}.toml` relative to the compiler binary and the working directory. A custom target file specifies the same parameters:
+Custom targets can be defined as TOML files in the `vm/` directory. The compiler searches for `vm/{name}.toml` relative to the compiler binary and the working directory. A custom target file specifies the same parameters:
 
 ```toml
 [target]

@@ -40,8 +40,8 @@ expose target-specific capabilities.
 
 ## TargetConfig
 
-Targets are defined as TOML files in the `targets/` directory. The compiler loads
-a target by name via `--target <name>`, which resolves to `targets/<name>.toml`.
+Targets are defined as TOML files in the `vm/` directory. The compiler loads
+a target by name via `--target <name>`, which resolves to `vm/<name>.toml`.
 Triton VM also has a hardcoded fallback in `TargetConfig::triton()` so the
 compiler works without any TOML files on disk.
 
@@ -352,7 +352,7 @@ To add support for a new stack-based zkVM:
 
 ### 1. Create the target TOML
 
-Add `targets/<name>.toml` with the target's parameters:
+Add `vm/<name>.toml` with the target's parameters:
 
 ```toml
 [target]

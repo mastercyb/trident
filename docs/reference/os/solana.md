@@ -1,6 +1,6 @@
 # Solana
 
-[← Target Reference](../targets.md) | VM: [eBPF/SVM](../targets/svm.md)
+[← Target Reference](../targets.md) | VM: [eBPF/SVM](../vm/svm.md)
 
 ---
 
@@ -26,4 +26,4 @@
 
 Solana uses stateless programs — all state lives in accounts passed as transaction inputs.
 
-For VM details, see [svm.md](../targets/svm.md).
+For VM details, see [svm.md](../vm/svm.md).

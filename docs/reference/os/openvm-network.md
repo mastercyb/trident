@@ -1,6 +1,6 @@
 # OpenVM Network — Operating System
 
-[← Target Reference](../targets.md) | VM: [OpenVM](../targets/openvm.md)
+[← Target Reference](../targets.md) | VM: [OpenVM](../vm/openvm.md)
 
 ---
 
@@ -36,4 +36,4 @@ Cost is measured in cycles — the number of VM execution steps, which
 directly determines proof generation time and size.
 
 For OpenVM details (instruction set, lowering path, bytecode format),
-see [openvm.md](../targets/openvm.md).
+see [openvm.md](../vm/openvm.md).

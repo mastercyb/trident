@@ -1,6 +1,6 @@
 # Ton — Operating System
 
-[← Target Reference](../targets.md) | VM: [TVM](../targets/tvm.md)
+[← Target Reference](../targets.md) | VM: [TVM](../vm/tvm.md)
 
 ---
 
@@ -37,4 +37,4 @@ and persistent storage. The cell-based model means all data — code,
 state, messages — is represented as directed acyclic graphs of cells.
 
 For TVM details (instruction set, lowering path, bytecode format),
-see [tvm.md](../targets/tvm.md).
+see [tvm.md](../vm/tvm.md).

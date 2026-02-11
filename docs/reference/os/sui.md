@@ -1,6 +1,6 @@
 # Sui — Operating System
 
-[← Target Reference](../targets.md) | VM: [MoveVM](../targets/movevm.md)
+[← Target Reference](../targets.md) | VM: [MoveVM](../vm/movevm.md)
 
 ---
 
@@ -37,4 +37,4 @@ objects cannot be duplicated or implicitly destroyed, preventing
 double-spend and asset-loss bugs by construction.
 
 For MoveVM details (instruction set, lowering path, bytecode format),
-see [movevm.md](../targets/movevm.md).
+see [movevm.md](../vm/movevm.md).

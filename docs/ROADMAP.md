@@ -10,7 +10,8 @@ are the remaining roadmap.
 - [x] Rewrite Neptune transaction validation in Trident (target: < 2x hand-written TASM)
 - [x] Benchmark suite: Trident vs hand-optimized TASM for standard patterns
 - [x] Gadget library: SHA-256, Keccak (needed for bridge verification)
-- [x] Recursive STARK verifier via `xx_dot_step` / `xb_dot_step` builtins
+- [x] Recursive STARK verifier via `xx_
+- [ ] dot_step` / `xb_dot_step` builtins
 - [x] Language spec: clean up spec.md for public release (v0.5)
 
 ## Milestone 2: Formal Verification (Embedded)
@@ -73,7 +74,7 @@ are the remaining roadmap.
 - [x] Canonical forms for pure field arithmetic (polynomial normalization)
 
 ### Phase 5: On-Chain Registry
-- [x] Merkle tree registry contract (`ext/neptune/registry.tri`)
+- [x] Merkle tree registry contract (`ext/triton/registry.tri`)
 - [x] On-chain verification certificate validation (`onchain.rs`)
 - [x] Proof generation (register/verify/update/equivalence)
 
@@ -83,7 +84,7 @@ Architecture is in place (TargetConfig, StackBackend trait, CostModel
 trait, target-tagged asm blocks, 5 target TOML configs). Only Triton VM
 backend is fully implemented; others are stubs.
 
-- [x] Target abstraction: `TargetConfig`, `targets/*.toml` (triton, miden, openvm, sp1, cairo)
+- [x] Target abstraction: `TargetConfig`, `vm/*.toml` (triton, miden, openvm, sp1, cairo)
 - [x] `StackBackend` trait + `TritonBackend`
 - [x] `CostModel` trait + `TritonCostModel`
 - [x] Target-tagged asm blocks: `asm(triton) { ... }`
@@ -148,7 +149,7 @@ expressions (`M + N`, `N * 2`), `#[pure]` I/O enforcement.
 **Standard Library** — `std/core/` (assert, convert, field, u32),
 `std/io/` (io, mem, storage), `std/crypto/` (hash, merkle, auth,
 sha256, keccak256, secp256k1, ed25519, ecdsa, poseidon, bigint),
-`ext/neptune/` (xfield, kernel, utxo, registry). Digest destructuring.
+`ext/triton/` (xfield, kernel, utxo, registry). Digest destructuring.
 `#[intrinsic]` restricted to std modules.
 
 **CLI** — `trident build` (--costs, --hotspots, --hints, --annotate,

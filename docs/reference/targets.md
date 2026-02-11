@@ -38,7 +38,7 @@ A **target** is either a VM or an OS. The compiler resolves `--target <name>`
 by checking OS configs first, then VM configs:
 
 1. Is `<name>` an OS? → load `os/<name>.toml`, derive VM from `vm` field
-2. Is `<name>` a VM? → load `targets/<name>.toml`, no OS (bare compilation)
+2. Is `<name>` a VM? → load `vm/<name>.toml`, no OS (bare compilation)
 3. Neither → error: unknown target
 
 ```
@@ -124,7 +124,7 @@ See [ir.md](ir.md) for the full IR architecture and lowering paths.
 
 ### VM Registry
 
-Each VM is defined by a `.toml` configuration file in `targets/` specifying
+Each VM is defined by a `.toml` configuration file in `vm/` specifying
 CPU parameters. `TargetConfig` is the compiler's hardware abstraction layer.
 
 20 VMs across three categories:
@@ -132,28 +132,28 @@ CPU parameters. `TargetConfig` is the compiler's hardware abstraction layer.
 | VM | Arch | Word | Hash | Tier | Output | Details |
 |----|------|------|------|------|--------|---------|
 | **Provable** | | | | | | |
-| Triton VM | Stack | Goldilocks 64-bit | Tip5 | 0-3 | `.tasm` | [triton.md](targets/triton.md) |
-| Miden VM | Stack | Goldilocks 64-bit | Rescue-Prime | 0-2 | `.masm` | [miden.md](targets/miden.md) |
-| Nock | Tree | Goldilocks 64-bit | Tip5 | 0-3 | `.jam` | [nock.md](targets/nock.md) |
-| SP1 | Register (RISC-V) | Mersenne31 31-bit | Poseidon2 | 0-1 | `.S` | [sp1.md](targets/sp1.md) |
-| OpenVM | Register (RISC-V) | Goldilocks 64-bit | Poseidon2 | 0-1 | `.S` | [openvm.md](targets/openvm.md) |
-| RISC Zero | Register (RISC-V) | BabyBear 31-bit | SHA-256 | 0-1 | ELF | [risczero.md](targets/risczero.md) |
-| Jolt | Register (RISC-V) | BN254 254-bit | Poseidon2 | 0-1 | ELF | [jolt.md](targets/jolt.md) |
-| Cairo VM | Register | STARK-252 251-bit | Pedersen | 0-1 | `.sierra` | [cairo.md](targets/cairo.md) |
-| AVM (Leo) | Register | Aleo 251-bit | Poseidon | 0-1 | `.aleo` | [leo.md](targets/leo.md) |
-| Aztec (Noir) | Circuit (ACIR) | BN254 254-bit | Poseidon2 | 0-1 | `.acir` | [aztec.md](targets/aztec.md) |
+| Triton VM | Stack | Goldilocks 64-bit | Tip5 | 0-3 | `.tasm` | [triton.md](vm/triton.md) |
+| Miden VM | Stack | Goldilocks 64-bit | Rescue-Prime | 0-2 | `.masm` | [miden.md](vm/miden.md) |
+| Nock | Tree | Goldilocks 64-bit | Tip5 | 0-3 | `.jam` | [nock.md](vm/nock.md) |
+| SP1 | Register (RISC-V) | Mersenne31 31-bit | Poseidon2 | 0-1 | `.S` | [sp1.md](vm/sp1.md) |
+| OpenVM | Register (RISC-V) | Goldilocks 64-bit | Poseidon2 | 0-1 | `.S` | [openvm.md](vm/openvm.md) |
+| RISC Zero | Register (RISC-V) | BabyBear 31-bit | SHA-256 | 0-1 | ELF | [risczero.md](vm/risczero.md) |
+| Jolt | Register (RISC-V) | BN254 254-bit | Poseidon2 | 0-1 | ELF | [jolt.md](vm/jolt.md) |
+| Cairo VM | Register | STARK-252 251-bit | Pedersen | 0-1 | `.sierra` | [cairo.md](vm/cairo.md) |
+| AVM (Leo) | Register | Aleo 251-bit | Poseidon | 0-1 | `.aleo` | [leo.md](vm/leo.md) |
+| Aztec (Noir) | Circuit (ACIR) | BN254 254-bit | Poseidon2 | 0-1 | `.acir` | [aztec.md](vm/aztec.md) |
 | **Non-provable** | | | | | | |
-| EVM | Stack | u256 | Keccak-256 | 0-1 | `.evm` | [evm.md](targets/evm.md) |
-| WASM | Stack | u64 | -- (runtime-dependent) | 0-1 | `.wasm` | [wasm.md](targets/wasm.md) |
-| eBPF (SVM) | Register | u64 | SHA-256 | 0-1 | `.so` | [svm.md](targets/svm.md) |
-| MoveVM | Register/hybrid | u64 | SHA3-256 | 0-1 | `.mv` | [movevm.md](targets/movevm.md) |
-| TVM | Stack | u257 | SHA-256 | 0-1 | `.boc` | [tvm.md](targets/tvm.md) |
-| CKB-VM | Register (RISC-V) | u64 | Blake2b | 0-1 | ELF | [ckb.md](targets/ckb.md) |
-| PolkaVM | Register (RISC-V) | u64 | Blake2b | 0-1 | PVM | [polkavm.md](targets/polkavm.md) |
+| EVM | Stack | u256 | Keccak-256 | 0-1 | `.evm` | [evm.md](vm/evm.md) |
+| WASM | Stack | u64 | -- (runtime-dependent) | 0-1 | `.wasm` | [wasm.md](vm/wasm.md) |
+| eBPF (SVM) | Register | u64 | SHA-256 | 0-1 | `.so` | [svm.md](vm/svm.md) |
+| MoveVM | Register/hybrid | u64 | SHA3-256 | 0-1 | `.mv` | [movevm.md](vm/movevm.md) |
+| TVM | Stack | u257 | SHA-256 | 0-1 | `.boc` | [tvm.md](vm/tvm.md) |
+| CKB-VM | Register (RISC-V) | u64 | Blake2b | 0-1 | ELF | [ckb.md](vm/ckb.md) |
+| PolkaVM | Register (RISC-V) | u64 | Blake2b | 0-1 | PVM | [polkavm.md](vm/polkavm.md) |
 | **Native** | | | | | | |
-| x86-64 | Register | u64 | Software | 0-1 | ELF | [x86-64.md](targets/x86-64.md) |
-| ARM64 | Register | u64 | Software | 0-1 | ELF | [arm64.md](targets/arm64.md) |
-| RISC-V | Register | u64 | Software | 0-1 | ELF | [riscv.md](targets/riscv.md) |
+| x86-64 | Register | u64 | Software | 0-1 | ELF | [x86-64.md](vm/x86-64.md) |
+| ARM64 | Register | u64 | Software | 0-1 | ELF | [arm64.md](vm/arm64.md) |
+| RISC-V | Register | u64 | Software | 0-1 | ELF | [riscv.md](vm/riscv.md) |
 
 **Planned**: CUDA, Metal, Vulkan (GPU — `KernelLowering`).
 
@@ -258,7 +258,7 @@ The cost model is a property of the VM, not the OS. Provable VMs report
 proving cost. Non-provable VMs report execution metering. Native targets
 report wall-clock time.
 
-See [targets/triton.md](targets/triton.md) for the full per-instruction
+See [vm/triton.md](vm/triton.md) for the full per-instruction
 cost matrix and optimization hints.
 
 ---
@@ -277,33 +277,33 @@ the OS, not the instruction set.
 | OS | VM | Runtime binding | Account / process model | Interop | Details |
 |----|-----|----------------|------------------------|---------|---------|
 | **Provable** | | | | | |
-| Neptune | [Triton VM](targets/triton.md) | `ext.neptune.*` | UTXO | -- | [neptune.md](os/neptune.md) |
-| Polygon Miden | [Miden VM](targets/miden.md) | `ext.miden.*` | Account | -- | [miden.md](os/miden.md) |
-| Nockchain | [Nock](targets/nock.md) | `ext.nockchain.*` | UTXO (Notes) | -- | [nockchain.md](os/nockchain.md) |
-| Starknet | [Cairo VM](targets/cairo.md) | `ext.starknet.*` | Account | Ethereum L2 | [starknet.md](os/starknet.md) |
-| Boundless | [RISC Zero](targets/risczero.md) | `ext.boundless.*` | -- | Ethereum verification | [boundless.md](os/boundless.md) |
-| Succinct | [SP1](targets/sp1.md) | `ext.succinct.*` | -- | Ethereum verification | [succinct.md](os/succinct.md) |
-| OpenVM network | [OpenVM](targets/openvm.md) | `ext.openvm.*` | -- | -- | [openvm-network.md](os/openvm-network.md) |
-| Aleo | [AVM (Leo)](targets/leo.md) | `ext.aleo.*` | Record (UTXO) | -- | [aleo.md](os/aleo.md) |
-| Aztec | [Aztec (Noir)](targets/aztec.md) | `ext.aztec.*` | Note (UTXO) + public | Ethereum L2 | [aztec.md](os/aztec.md) |
+| Neptune | [Triton VM](vm/triton.md) | `ext.neptune.*` | UTXO | -- | [neptune.md](os/neptune.md) |
+| Polygon Miden | [Miden VM](vm/miden.md) | `ext.miden.*` | Account | -- | [miden.md](os/miden.md) |
+| Nockchain | [Nock](vm/nock.md) | `ext.nockchain.*` | UTXO (Notes) | -- | [nockchain.md](os/nockchain.md) |
+| Starknet | [Cairo VM](vm/cairo.md) | `ext.starknet.*` | Account | Ethereum L2 | [starknet.md](os/starknet.md) |
+| Boundless | [RISC Zero](vm/risczero.md) | `ext.boundless.*` | -- | Ethereum verification | [boundless.md](os/boundless.md) |
+| Succinct | [SP1](vm/sp1.md) | `ext.succinct.*` | -- | Ethereum verification | [succinct.md](os/succinct.md) |
+| OpenVM network | [OpenVM](vm/openvm.md) | `ext.openvm.*` | -- | -- | [openvm-network.md](os/openvm-network.md) |
+| Aleo | [AVM (Leo)](vm/leo.md) | `ext.aleo.*` | Record (UTXO) | -- | [aleo.md](os/aleo.md) |
+| Aztec | [Aztec (Noir)](vm/aztec.md) | `ext.aztec.*` | Note (UTXO) + public | Ethereum L2 | [aztec.md](os/aztec.md) |
 | **Blockchain** | | | | | |
-| Ethereum | [EVM](targets/evm.md) | `ext.ethereum.*` | Account | -- | [ethereum.md](os/ethereum.md) |
-| Solana | [eBPF (SVM)](targets/svm.md) | `ext.solana.*` | Account (stateless programs) | -- | [solana.md](os/solana.md) |
-| Near Protocol | [WASM](targets/wasm.md) | `ext.near.*` | Account (1 contract each) | -- | [near.md](os/near.md) |
-| Cosmos (100+ chains) | [WASM](targets/wasm.md) | `ext.cosmwasm.*` | Account | IBC | [cosmwasm.md](os/cosmwasm.md) |
-| Arbitrum | [WASM](targets/wasm.md) + [EVM](targets/evm.md) | `ext.arbitrum.*` | Account (EVM-compatible) | Ethereum L2 | [arbitrum.md](os/arbitrum.md) |
-| Internet Computer | [WASM](targets/wasm.md) | `ext.icp.*` | Canister | -- | [icp.md](os/icp.md) |
-| Sui | [MoveVM](targets/movevm.md) | `ext.sui.*` | Object-centric | -- | [sui.md](os/sui.md) |
-| Aptos | [MoveVM](targets/movevm.md) | `ext.aptos.*` | Account (resources) | -- | [aptos.md](os/aptos.md) |
-| Ton | [TVM](targets/tvm.md) | `ext.ton.*` | Account (cells) | -- | [ton.md](os/ton.md) |
-| Nervos CKB | [CKB-VM](targets/ckb.md) | `ext.nervos.*` | Cell (UTXO-like) | -- | [nervos.md](os/nervos.md) |
-| Polkadot | [PolkaVM](targets/polkavm.md) | `ext.polkadot.*` | Account | XCM | [polkadot.md](os/polkadot.md) |
+| Ethereum | [EVM](vm/evm.md) | `ext.ethereum.*` | Account | -- | [ethereum.md](os/ethereum.md) |
+| Solana | [eBPF (SVM)](vm/svm.md) | `ext.solana.*` | Account (stateless programs) | -- | [solana.md](os/solana.md) |
+| Near Protocol | [WASM](vm/wasm.md) | `ext.near.*` | Account (1 contract each) | -- | [near.md](os/near.md) |
+| Cosmos (100+ chains) | [WASM](vm/wasm.md) | `ext.cosmwasm.*` | Account | IBC | [cosmwasm.md](os/cosmwasm.md) |
+| Arbitrum | [WASM](vm/wasm.md) + [EVM](vm/evm.md) | `ext.arbitrum.*` | Account (EVM-compatible) | Ethereum L2 | [arbitrum.md](os/arbitrum.md) |
+| Internet Computer | [WASM](vm/wasm.md) | `ext.icp.*` | Canister | -- | [icp.md](os/icp.md) |
+| Sui | [MoveVM](vm/movevm.md) | `ext.sui.*` | Object-centric | -- | [sui.md](os/sui.md) |
+| Aptos | [MoveVM](vm/movevm.md) | `ext.aptos.*` | Account (resources) | -- | [aptos.md](os/aptos.md) |
+| Ton | [TVM](vm/tvm.md) | `ext.ton.*` | Account (cells) | -- | [ton.md](os/ton.md) |
+| Nervos CKB | [CKB-VM](vm/ckb.md) | `ext.nervos.*` | Cell (UTXO-like) | -- | [nervos.md](os/nervos.md) |
+| Polkadot | [PolkaVM](vm/polkavm.md) | `ext.polkadot.*` | Account | XCM | [polkadot.md](os/polkadot.md) |
 | **Traditional** | | | | | |
-| Linux | [x86-64](targets/x86-64.md) / [ARM64](targets/arm64.md) / [RISC-V](targets/riscv.md) | `ext.linux.*` | Process | POSIX syscalls | [linux.md](os/linux.md) |
-| macOS | [ARM64](targets/arm64.md) / [x86-64](targets/x86-64.md) | `ext.macos.*` | Process | POSIX + Mach | [macos.md](os/macos.md) |
-| Android | [ARM64](targets/arm64.md) / [x86-64](targets/x86-64.md) | `ext.android.*` | Process (sandboxed) | NDK, JNI | [android.md](os/android.md) |
-| WASI | [WASM](targets/wasm.md) | `ext.wasi.*` | Process (capability) | WASI preview 2 | [wasi.md](os/wasi.md) |
-| Browser | [WASM](targets/wasm.md) | `ext.browser.*` | Event loop | JavaScript, Web APIs | [browser.md](os/browser.md) |
+| Linux | [x86-64](vm/x86-64.md) / [ARM64](vm/arm64.md) / [RISC-V](vm/riscv.md) | `ext.linux.*` | Process | POSIX syscalls | [linux.md](os/linux.md) |
+| macOS | [ARM64](vm/arm64.md) / [x86-64](vm/x86-64.md) | `ext.macos.*` | Process | POSIX + Mach | [macos.md](os/macos.md) |
+| Android | [ARM64](vm/arm64.md) / [x86-64](vm/x86-64.md) | `ext.android.*` | Process (sandboxed) | NDK, JNI | [android.md](os/android.md) |
+| WASI | [WASM](vm/wasm.md) | `ext.wasi.*` | Process (capability) | WASI preview 2 | [wasi.md](os/wasi.md) |
+| Browser | [WASM](vm/wasm.md) | `ext.browser.*` | Event loop | JavaScript, Web APIs | [browser.md](os/browser.md) |
 
 Key observations:
 
@@ -320,7 +320,7 @@ Key observations:
 
 ### Adding a VM
 
-1. Write `targets/<vm>.toml` with CPU parameters (word size, hash, stack,
+1. Write `vm/<vm>.toml` with CPU parameters (word size, hash, stack,
    cost). This makes `--target <vm>` work for bare compilation.
 2. Implement the appropriate lowering trait:
    - `StackLowering` — stack machines (Triton, Miden, TVM)
@@ -333,12 +333,12 @@ Key observations:
    - `AcirLowering` — arithmetic circuits (Aztec/Noir)
    - `KernelLowering` — GPU compute kernels (planned)
 3. Implement `CostModel` for the VM's billing model
-4. Write `docs/reference/targets/<vm>.md` documentation
+4. Write `docs/reference/vm/<vm>.md` documentation
 
 ### Adding an OS
 
 1. Write `os/<os-name>.toml` — must include `vm = "<vm-name>"` referencing
-   an existing VM in `targets/`. This makes `--target <os-name>` work.
+   an existing VM in `vm/`. This makes `--target <os-name>` work.
 2. Write `ext/<os-name>/*.tri` runtime binding modules
 3. Write `docs/reference/os/<os-name>.md` documentation
 

@@ -1,6 +1,6 @@
 # Icp (Internet Computer) — Operating System
 
-[← Target Reference](../targets.md) | VM: [WASM](../targets/wasm.md)
+[← Target Reference](../targets.md) | VM: [WASM](../vm/wasm.md)
 
 ---
 
@@ -38,4 +38,4 @@ Cycle cost model is distinct from gas — cycles are purchased with Icp
 tokens and consumed per instruction plus storage.
 
 For WASM VM details (instruction set, lowering path, bytecode format),
-see [wasm.md](../targets/wasm.md).
+see [wasm.md](../vm/wasm.md).
