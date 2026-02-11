@@ -1,6 +1,12 @@
-# Sui — Operating System
+# Sui
 
 [← Target Reference](../targets.md) | VM: [MoveVM](../vm/movevm.md)
+
+Sui is the object-centric blockchain powered by MoveVM. Trident compiles
+to Move bytecode (`.mv`) and links against `ext.sui.*` for Sui-specific
+runtime bindings. Sui's unique contribution is the object model -- state
+is organized as objects with explicit ownership, enabling parallel
+execution without global locks.
 
 ---
 
@@ -12,29 +18,245 @@
 | Runtime binding | `ext.sui.*` |
 | Account model | Object-centric (ownership graph) |
 | Storage model | Object store |
+| Transaction model | Signed (Ed25519, Secp256k1, zkLogin) |
 | Cost model | Gas |
 | Cross-chain | -- |
 
-## Runtime Binding (`ext.sui.*`)
+---
 
-- **Object operations** — create, read, update, delete objects
-- **Dynamic fields** — attach and access dynamic fields on objects
-- **Shared objects** — consensus-ordered access to shared mutable objects
-- **Transfer operations** — transfer object ownership between addresses
+## Programming Model
+
+### Entry Points
+
+Sui programs expose **entry functions** that receive objects as arguments.
+The runtime passes objects based on the transaction's specified inputs.
+
+- **`init`** -- called once when the module is published
+- **entry functions** -- callable by transactions
+- **public functions** -- callable by other modules
+
+```
+program my_token
+
+use ext.sui.object
+use ext.sui.transfer
+use ext.sui.tx
+use ext.sui.coin
+
+// Called once at module publication
+fn init() {
+    let treasury: Field = ext.sui.object.new()
+    ext.sui.transfer.send(treasury, ext.sui.tx.sender())
+}
+
+// Entry function: mint tokens
+pub fn mint(treasury: Field, amount: Field, recipient: Field) {
+    // Verify caller owns the treasury capability
+    let coin: Field = ext.sui.coin.mint(treasury, amount)
+    ext.sui.transfer.public_send(coin, recipient)
+}
+
+// Entry function: transfer tokens
+pub fn send(coin: Field, recipient: Field) {
+    ext.sui.transfer.public_send(coin, recipient)
+}
+```
+
+### State Access
+
+Sui state is organized as **objects** -- uniquely identified entities with
+an owner. Objects come in three flavors:
+
+| Object type | Access | Consensus | Use for |
+|-------------|--------|-----------|---------|
+| **Owned** | Single writer (owner) | No consensus needed | Tokens, capabilities, user data |
+| **Shared** | Multiple writers | Consensus-ordered | AMM pools, auctions, registries |
+| **Immutable** | Read-only, everyone | No consensus needed | Package code, frozen configs |
+
+```
+use ext.sui.object
+use ext.sui.dynamic_field
+
+// Create a new object
+let id: Field = ext.sui.object.new()
+
+// Read object fields (by UID)
+let value: Field = ext.sui.object.borrow(id, field_offset)
+
+// Mutate object fields
+ext.sui.object.borrow_mut(id, field_offset, new_value)
+
+// Delete an object
+ext.sui.object.delete(id)
+
+// Dynamic fields -- attach/read/remove key-value pairs on objects
+ext.sui.dynamic_field.add(parent_id, key, value)
+let val: Field = ext.sui.dynamic_field.borrow(parent_id, key)
+ext.sui.dynamic_field.remove(parent_id, key)
+let exists: Bool = ext.sui.dynamic_field.exists(parent_id, key)
+```
+
+The object model eliminates Ethereum's global state contention. Transactions
+touching different owned objects execute in parallel without ordering.
+Only shared objects require consensus.
+
+### Identity and Authorization
+
+Transaction sender identity comes from the signing key:
+
+```
+use ext.sui.tx
+
+let sender: Field = ext.sui.tx.sender()
+let epoch: Field = ext.sui.tx.epoch()
+let epoch_timestamp: Field = ext.sui.tx.epoch_timestamp_ms()
+```
+
+Authorization is enforced by **object ownership**: only the owner of an
+object can pass it to a transaction as a mutable reference. **Capabilities**
+are objects that grant specific permissions:
+
+```
+// Capability pattern: whoever owns the TreasuryCap can mint
+pub fn mint(treasury_cap: Field, amount: Field, recipient: Field) {
+    // treasury_cap is an owned object -- only the owner can call this
+    let coin: Field = ext.sui.coin.mint(treasury_cap, amount)
+    ext.sui.transfer.public_send(coin, recipient)
+}
+```
+
+No access control lists, no role mappings. If you own the capability
+object, you have the permission.
+
+### Value Transfer
+
+Sui has native `Coin<T>` objects. Value moves by transferring object
+ownership:
+
+```
+use ext.sui.coin
+use ext.sui.transfer
+
+// Split a coin (take amount out of existing coin)
+let split_coin: Field = ext.sui.coin.split(coin, amount)
+
+// Merge coins (combine into one)
+ext.sui.coin.merge(target_coin, source_coin)
+
+// Get coin value
+let balance: Field = ext.sui.coin.value(coin)
+
+// Transfer coin to recipient
+ext.sui.transfer.public_send(coin, recipient)
+
+// Create a zero-value coin
+let empty: Field = ext.sui.coin.zero()
+```
+
+### Cross-Contract Interaction
+
+Sui modules can call each other's public functions directly -- there is
+no message-passing layer. Shared objects enable multi-module transactions:
+
+```
+// Direct function call to another module
+// (if the module is imported and the function is public)
+use other_package.amm
+
+fn swap(pool: Field, coin_in: Field) -> Field {
+    other_package.amm.swap(pool, coin_in)
+}
+```
+
+Shared objects are the mechanism for composability. An AMM pool is a
+shared object that multiple users can interact with concurrently
+(consensus-ordered).
+
+### Events
+
+Sui events are typed and emitted via the event module:
+
+```
+event Transfer { from: Field, to: Field, amount: Field }
+
+// reveal compiles to event::emit
+reveal Transfer { from: sender, to: recipient, amount: value }
+```
+
+`reveal` maps to `sui::event::emit`. `seal` emits only the commitment
+hash as event data.
+
+---
+
+## Ecosystem Mapping
+
+| Move/Sui concept | Trident equivalent |
+|---|---|
+| `module my_package::my_token` | `program my_token` with `use ext.sui.*` |
+| `fun init(ctx: &mut TxContext)` | `fn init()` |
+| `public entry fun transfer(...)` | `pub fn transfer(...)` |
+| `public fun balance(coin): u64` | `pub fn balance(coin: Field) -> Field` |
+| `tx_context::sender(ctx)` | `ext.sui.tx.sender()` |
+| `tx_context::epoch(ctx)` | `ext.sui.tx.epoch()` |
+| `object::new(ctx)` | `ext.sui.object.new()` |
+| `object::delete(id)` | `ext.sui.object.delete(id)` |
+| `transfer::transfer(obj, recipient)` | `ext.sui.transfer.send(obj, recipient)` |
+| `transfer::public_transfer(obj, recipient)` | `ext.sui.transfer.public_send(obj, recipient)` |
+| `transfer::share_object(obj)` | `ext.sui.transfer.share(obj)` |
+| `transfer::freeze_object(obj)` | `ext.sui.transfer.freeze(obj)` |
+| `dynamic_field::add(parent, key, val)` | `ext.sui.dynamic_field.add(parent, key, val)` |
+| `dynamic_field::borrow(parent, key)` | `ext.sui.dynamic_field.borrow(parent, key)` |
+| `dynamic_field::remove(parent, key)` | `ext.sui.dynamic_field.remove(parent, key)` |
+| `coin::value(coin)` | `ext.sui.coin.value(coin)` |
+| `coin::split(coin, amount, ctx)` | `ext.sui.coin.split(coin, amount)` |
+| `coin::join(target, source)` | `ext.sui.coin.merge(target, source)` |
+| `coin::zero(ctx)` | `ext.sui.coin.zero()` |
+| `event::emit(MyEvent { ... })` | `reveal MyEvent { ... }` |
+| `assert!(condition, ERROR_CODE)` | `assert(condition)` |
+
+---
+
+## `ext.sui.*` API Reference
+
+| Module | Function | Signature | Description |
+|--------|----------|-----------|-------------|
+| **object** | `new()` | `-> Field` | Create new object UID |
+| | `delete(id)` | `Field -> ()` | Delete object |
+| | `borrow(id, offset)` | `(Field, U32) -> Field` | Read object field |
+| | `borrow_mut(id, offset, val)` | `(Field, U32, Field) -> ()` | Write object field |
+| | `id(obj)` | `Field -> Digest` | Get object ID |
+| **transfer** | `send(obj, recipient)` | `(Field, Field) -> ()` | Transfer owned object |
+| | `public_send(obj, recipient)` | `(Field, Field) -> ()` | Transfer with store ability |
+| | `share(obj)` | `Field -> ()` | Make object shared |
+| | `freeze(obj)` | `Field -> ()` | Make object immutable |
+| **dynamic_field** | `add(parent, key, val)` | `(Field, Field, Field) -> ()` | Add dynamic field |
+| | `borrow(parent, key)` | `(Field, Field) -> Field` | Read dynamic field |
+| | `borrow_mut(parent, key, val)` | `(Field, Field, Field) -> ()` | Write dynamic field |
+| | `remove(parent, key)` | `(Field, Field) -> Field` | Remove dynamic field |
+| | `exists(parent, key)` | `(Field, Field) -> Bool` | Check field existence |
+| **tx** | `sender()` | `-> Field` | Transaction sender |
+| | `epoch()` | `-> Field` | Current epoch |
+| | `epoch_timestamp_ms()` | `-> Field` | Epoch timestamp (ms) |
+| **coin** | `value(coin)` | `Field -> Field` | Coin balance |
+| | `split(coin, amount)` | `(Field, Field) -> Field` | Split coin |
+| | `merge(target, source)` | `(Field, Field) -> ()` | Merge coins |
+| | `zero()` | `-> Field` | Zero-value coin |
+| | `mint(cap, amount)` | `(Field, Field) -> Field` | Mint new coins |
+| | `burn(cap, coin)` | `(Field, Field) -> ()` | Burn coins |
+| **event** | `emit(type, data)` | `(Field, [Field]) -> ()` | Emit typed event |
+
+---
 
 ## Notes
 
-Sui uses an object-centric model — assets are objects with ownership,
-enabling parallel execution of independent object graphs. Transactions
-touching disjoint object sets execute concurrently without contention.
+Sui's object model maps naturally to Trident's value semantics -- all
+values are copied, not referenced. Move's linear type system (resources
+cannot be copied or dropped) is enforced by the Sui runtime, not by
+Trident's type checker. The compiler emits the correct Move bytecode
+with the appropriate abilities (copy, drop, store, key).
 
-Owned objects can be processed without consensus (simple transactions),
-while shared objects require consensus ordering. This hybrid approach
-achieves high throughput for common operations like token transfers.
+Parallel execution: transactions on owned objects bypass consensus entirely.
+This is why Sui achieves high throughput for transfers and simple operations.
+Only shared-object transactions require ordering.
 
-The Move type system enforces resource safety at the bytecode level —
-objects cannot be duplicated or implicitly destroyed, preventing
-double-spend and asset-loss bugs by construction.
-
-For MoveVM details (instruction set, lowering path, bytecode format),
-see [movevm.md](../vm/movevm.md).
+For VM details, see [movevm.md](../vm/movevm.md).

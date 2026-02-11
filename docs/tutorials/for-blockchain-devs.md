@@ -834,32 +834,54 @@ major ZK system scores on quantum safety.
 - **No ABI.** Public I/O is a sequence of field elements. No encoding/decoding.
 - **No inheritance.** Use modules and `use` imports. Composition over inheritance.
 
+When targeting Ethereum directly, `ext.ethereum.*` provides familiar EVM
+primitives: `ext.ethereum.account.caller()` = msg.sender,
+`ext.ethereum.storage.read(slot)` = SLOAD, etc. See
+[Ethereum OS Reference](../reference/os/ethereum.md) for the full API.
+
+Also see: [Starknet](../reference/os/starknet.md) (Cairo VM, native account
+abstraction), [Sui](../reference/os/sui.md) (MoveVM, object-centric model).
+
 ### Coming from SVM (Anchor / Rust)
 
-- **No accounts model.** State is a Merkle tree, not separate account buffers.
-- **No PDAs (Program Derived Addresses).** Identity is a hash preimage.
-- **No CPI (Cross-Program Invocation).** Programs are standalone. Composition
-  happens through recursive proof verification.
-- **No `Signer` constraint.** Authorization is in-circuit via `divine` + `hash`
-  + `assert`.
+- **No accounts model** (on provable targets). State is a Merkle tree, not
+  separate account buffers. On Solana itself, `ext.solana.account.*` provides
+  the familiar account-passing model.
+- **No PDAs** (on provable targets). Identity is a hash preimage. On Solana,
+  `ext.solana.pda.find()` works as expected.
+- **No CPI** (on provable targets). Composition happens through recursive proof
+  verification. On Solana, `ext.solana.cpi.invoke()` provides native CPI.
+- **No `Signer` constraint.** Use `ext.solana.account.is_signer(index)` on
+  Solana, or `divine` + `hash` + `assert` on provable targets.
 - **Simpler type system.** No lifetimes, no borrows, no `Option<T>`. Every type
   has a fixed width known at compile time.
 
+See [Solana OS Reference](../reference/os/solana.md) for the full `ext.solana.*`
+API and programming model.
+
 ### Coming from CosmWasm
 
-- **No `deps.storage`.** No key-value store. State is a Merkle root.
-- **No `info.sender`.** Auth is explicit hash preimage verification.
+- **No `deps.storage`** (on provable targets). State is a Merkle root. On
+  Cosmos chains, `ext.cosmwasm.*` provides the familiar key-value store.
+- **No `info.sender`** (on provable targets). Auth is explicit hash preimage
+  verification. On Cosmos, the runtime provides sender identity.
 - **No `Response` with messages.** No inter-contract messages. Programs produce
   proofs, not responses.
 - **No JSON schema.** I/O is field elements, not JSON.
 
+See [CosmWasm OS Reference](../reference/os/cosmwasm.md) for the programming model.
+
 ### Coming from Substrate
 
 - **No runtime pallets.** Each program is self-contained.
-- **No weight system.** Cost is the padded table height, not weight classes.
+- **No weight system** (on provable targets). Cost is the padded table height.
+  On Polkadot, `ext.polkadot.*` uses the native 2D weight model (ref_time +
+  proof_size).
 - **No on-chain governance hooks.** Admin auth is a hash preimage; governance
   would be a separate proof that composes with the program proof.
 - **No storage tries.** State is a Merkle tree you manage explicitly.
+
+See [Polkadot OS Reference](../reference/os/polkadot.md) for the programming model.
 
 ---
 

@@ -26,19 +26,32 @@ Available on all targets. These modules provide the core language runtime.
 ## OS Extensions (`ext.<os>.*`)
 
 Each OS provides its own `ext.<os>.*` modules with runtime-specific
-bindings: storage, accounts, syscalls, transaction models.
+bindings: storage, accounts, syscalls, transaction models. Importing any
+`ext.<os>.*` module binds the program to that OS — the compiler rejects
+cross-OS imports.
 
-| Module | Description |
-|--------|-------------|
-| `ext.neptune.xfield` | XField ops, `xx_dot_step`, `xb_dot_step` |
-| `ext.neptune.kernel` | Neptune kernel interface |
-| `ext.neptune.proof` | Recursive proof composition |
+### Implemented
 
-Importing any `ext.<os>.*` module binds the program to that OS — the
-compiler rejects cross-OS imports.
+| Module | Description | OS doc |
+|--------|-------------|--------|
+| `ext.neptune.kernel` | Transaction kernel MAST authentication | [neptune.md](os/neptune.md) |
+| `ext.neptune.utxo` | UTXO structure authentication | [neptune.md](os/neptune.md) |
+| `ext.neptune.xfield` | Extension field arithmetic intrinsics | [neptune.md](os/neptune.md) |
+| `ext.neptune.proof` | Recursive STARK verification | [neptune.md](os/neptune.md) |
+| `ext.neptune.recursive` | Low-level recursive proof primitives | [neptune.md](os/neptune.md) |
+| `ext.neptune.registry` | On-chain definition registry (5 ops) | [neptune.md](os/neptune.md) |
 
-See [targets.md Part II](targets.md) for the full OS registry and available
-`ext.*` bindings per OS.
+### Designed (not yet implemented)
+
+| OS | Modules | OS doc |
+|----|---------|--------|
+| Ethereum | `ext.ethereum.` storage, account, transfer, call, event, block, tx, precompile | [ethereum.md](os/ethereum.md) |
+| Solana | `ext.solana.` account, pda, cpi, transfer, system, log, clock, rent | [solana.md](os/solana.md) |
+| Starknet | `ext.starknet.` storage, account, call, event, messaging, crypto | [starknet.md](os/starknet.md) |
+| Sui | `ext.sui.` object, transfer, dynamic_field, tx, coin, event | [sui.md](os/sui.md) |
+
+See each OS doc for the full API reference. See [targets.md Part II](targets.md)
+for the complete OS registry (25 OSes).
 
 ---
 
