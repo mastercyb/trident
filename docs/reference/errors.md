@@ -44,7 +44,7 @@ at least one diagnostic entry.
 
 ### Completeness claim
 
-156 diagnostics cover every user-violable "must"/"cannot"/"only" constraint
+165 diagnostics cover every user-violable "must"/"cannot"/"only" constraint
 in the language reference (language.md, provable.md, grammar.md, patterns.md),
 targets.md, and ir.md. The derivation was audited by scanning all reference
 documents for prohibition keywords and cross-referencing each against the
@@ -57,8 +57,8 @@ catalog.
 | Category | File | Total | Impl | Planned |
 |----------|------|------:|-----:|--------:|
 | Lexer | [lexer.md](errors/lexer.md) | 20 | 7 | 13 |
-| Parser | [parser.md](errors/parser.md) | 26 | 8 | 18 |
-| Type | [types.md](errors/types.md) | 34 | 24 | 10 |
+| Parser | [parser.md](errors/parser.md) | 29 | 8 | 21 |
+| Type | [types.md](errors/types.md) | 40 | 24 | 16 |
 | Control flow | [control-flow.md](errors/control-flow.md) | 8 | 6 | 2 |
 | Size generics | [size-generics.md](errors/size-generics.md) | 6 | 4 | 2 |
 | Events | [events.md](errors/events.md) | 7 | 5 | 2 |
@@ -69,7 +69,7 @@ catalog.
 | Inline assembly | [assembly.md](errors/assembly.md) | 2 | 0 | 2 |
 | Warnings | [warnings.md](errors/warnings.md) | 7 | 3 | 4 |
 | Hints | [hints.md](errors/hints.md) | 5 | 4 | 1 |
-| **Total** | | **156** | **71** | **85** |
+| **Total** | | **165** | **71** | **94** |
 
 ---
 

@@ -72,7 +72,7 @@ Arithmetic groups are named by **interpretation**: how the value is treated.
 | **Memory** (2) | `ReadMem(u32)` `WriteMem(u32)` | Address on stack, popped after access |
 | **Assertions** (1) | `Assert(u32)` | Assert N elements are nonzero |
 | **Hash** (1) | `Hash { width: u32 }` | Hash N elements into a digest |
-| **Events** (2) | `Reveal { name, tag, field_count }` `Seal { name, tag, field_count }` | `Reveal` = fields in the clear; `Seal` = hashed, only digest visible |
+| **Events** (2) | `Reveal { name, tag, field_count }` `Seal { name, tag, field_count }` | `Reveal` = fields in the clear; `Seal` = hashed, only digest visible. `Seal` is a Tier 1 op but emits Tier 2 sponge ops internally — programs using `seal` require a Tier 2 target |
 | **Storage** (2) | `ReadStorage { width }` `WriteStorage { width }` | Persistent state access |
 
 ### Tier 2 — Provable (7)
@@ -266,8 +266,8 @@ semantics, it doesn't belong in the IR.
 
 ### TIRBuilder
 
-[`TIRBuilder`](../../src/tir/builder/mod.rs:37) walks the type-checked AST and
-produces `Vec<TIROp>` via [`StackManager`](../../src/stack.rs:58) with
+[`TIRBuilder`](../../src/tir/builder/mod.rs) walks the type-checked AST and
+produces `Vec<TIROp>` via [`StackManager`](../../src/stack.rs) with
 automatic LRU spill/reload.
 
 ```rust
@@ -284,13 +284,13 @@ TIRBuilder::new(target_config)
 Five pre-scan passes (return widths, generics, intrinsics, structs/constants,
 event tags), then emission: functions, then monomorphized generic instances.
 
-Dispatch: [`build_stmt`](../../src/tir/builder/stmt.rs:24) →
-[`build_expr`](../../src/tir/builder/expr.rs:11) →
-[`build_call`](../../src/tir/builder/call.rs:12) (~40 intrinsics + user calls).
+Dispatch: [`build_stmt`](../../src/tir/builder/stmt.rs) →
+[`build_expr`](../../src/tir/builder/expr.rs) →
+[`build_call`](../../src/tir/builder/call.rs) (~40 intrinsics + user calls).
 
 ### Stack Management
 
-[`StackManager`](../../src/stack.rs:58) tracks values by name, width,
+[`StackManager`](../../src/stack.rs) tracks values by name, width,
 and LRU timestamp. Overflow spills to RAM automatically. The string
 round-trip (StackManager → strings → parse back to TIROp) is legacy
 from the pre-IR emitter. Future cleanup: emit TIROp directly.

@@ -216,17 +216,27 @@ RISC-V.
 
 #### Builtins — Tier 1 (Universal)
 
-All Tier 1 builtins compile to every VM. The table below shows only VMs
-where the mapping is non-obvious.
+All Tier 1 builtins compile to every VM. The Hash column shows each VM's
+hash function with rate R and digest width D.
 
-| VM | I/O | Field | U32 | Assert | RAM |
-|----|-----|-------|-----|--------|-----|
-| Nock | scry | jets | jets | crash | tree edit |
-| RISC Zero | journal | yes | yes | yes | yes |
-| AVM (Leo) | yes | native | yes | yes | yes |
-| Aztec (Noir) | yes | native | yes | yes | yes |
-| EVM | yes | yes | yes | revert | yes |
-| All others | yes | yes | yes | yes | yes |
+| VM | I/O | Field | U32 | Assert | RAM | Hash |
+|----|-----|-------|-----|--------|-----|------|
+| Triton VM | yes | yes | yes | yes | yes | Tip5 (R=10, D=5) |
+| Miden VM | yes | yes | yes | yes | yes | Rescue (R=8, D=4) |
+| Nock | scry | jets | jets | crash | tree edit | Tip5 (R=10, D=5) |
+| SP1 | yes | yes | yes | yes | yes | Poseidon2 (R=8, D=8) |
+| OpenVM | yes | yes | yes | yes | yes | Poseidon2 (R=8, D=8) |
+| RISC Zero | journal | yes | yes | yes | yes | SHA-256 (R=16, D=8) |
+| Jolt | yes | yes | yes | yes | yes | Poseidon2 (R=8, D=8) |
+| Cairo VM | yes | yes | yes | yes | yes | Pedersen (R=2, D=1) |
+| AVM (Leo) | yes | native | yes | yes | yes | Poseidon (R=4, D=1) |
+| Aztec (Noir) | yes | native | yes | yes | yes | Poseidon2 (R=4, D=1) |
+| EVM | yes | yes | yes | revert | yes | Keccak-256 (R=4, D=8) |
+| All others | yes | yes | yes | yes | yes | varies |
+
+`hash()` is Tier 1 — every VM has a hash function. R = hash rate (fields
+per absorption), D = digest width (fields per digest). The hash function
+and its parameters are VM-specific (see VM Registry above).
 
 Tier 1 builtins map to different primitives depending on the VM: I/O
 becomes host function calls on virtual machines, stdio on native targets.
@@ -237,17 +247,18 @@ arithmetic uses software modular reduction on non-provable targets.
 
 Tier 2 builtins require a proof-capable VM. `--` = not available.
 
-| VM | Witness | Hash | Merkle | XField |
-|----|---------|------|--------|--------|
-| Triton VM | yes | Tip5 R=10 D=5 | native | yes |
-| Miden VM | yes | Rescue R=8 D=4 | emulated | -- |
-| Nock | Nock 11 | Tip5 R=10 D=5 | jets | yes |
-| RISC Zero | yes | SHA-256 | -- | quartic |
-| AVM (Leo) | yes | Poseidon | -- | -- |
-| Aztec (Noir) | yes | Poseidon2 | -- | -- |
+| VM | Witness | Sponge | Merkle | XField |
+|----|---------|--------|--------|--------|
+| Triton VM | yes | native | native | yes |
+| Miden VM | yes | native | emulated | -- |
+| Nock | Nock 11 | jets | jets | yes |
+| RISC Zero | yes | -- | -- | quartic |
+| AVM (Leo) | yes | -- | -- | -- |
+| Aztec (Noir) | yes | -- | -- | -- |
 | All others | -- | -- | -- | -- |
 
-R = hash rate (fields per absorption). D = digest width (fields per digest).
+Sponge = incremental hashing via `sponge_init`/`sponge_absorb`/`sponge_squeeze`.
+Not to be confused with `hash()` which is Tier 1 (see above).
 
 ---
 

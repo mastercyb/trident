@@ -13,7 +13,7 @@ Name:      Trident
 Extension: .tri
 Paradigm:  Imperative, bounded, first-order, no heap, no recursion
 Domain:    Zero-knowledge provable computation
-Targets:   Triton VM, Miden VM, SP1, OpenVM, Cairo (see targets.md)
+Targets:   20 VMs — provable (Triton, Miden, Nock, SP1, OpenVM, RISC Zero, Jolt, Cairo, Leo, Aztec), blockchain (EVM, WASM, eBPF, MoveVM, TVM, CKB-VM, PolkaVM), native (x86-64, ARM64, RISC-V). See targets.md
 Compiler:  trident build <file.tri>
 All arithmetic is modular (mod p where p depends on the target).
 There is no subtraction operator — use sub(a, b).
