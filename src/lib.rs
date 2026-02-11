@@ -46,7 +46,7 @@ use std::path::Path;
 
 use ast::FileKind;
 use codegen::ir::builder::IRBuilder;
-use codegen::ir::lower::{Lowering, TritonLowering};
+use codegen::ir::lower::create_lowering;
 use diagnostic::{render_diagnostics, Diagnostic};
 use lexer::Lexer;
 use linker::{link, ModuleTasm};
@@ -127,7 +127,7 @@ pub fn compile_with_options(
         .with_mono_instances(exports.mono_instances)
         .with_call_resolutions(exports.call_resolutions)
         .build_file(&file);
-    let lowering = TritonLowering::new();
+    let lowering = create_lowering(&options.target_config.name);
     let tasm = lowering.lower(&ir).join("\n");
     Ok(tasm)
 }
@@ -265,7 +265,7 @@ pub fn compile_project_with_options(
             .with_mono_instances(mono)
             .with_call_resolutions(call_res)
             .build_file(file);
-        let lowering = TritonLowering::new();
+        let lowering = create_lowering(&options.target_config.name);
         let tasm = lowering.lower(&ir).join("\n");
         tasm_modules.push(ModuleTasm {
             module_name: file.name.node.clone(),

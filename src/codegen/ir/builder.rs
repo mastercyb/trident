@@ -819,18 +819,20 @@ impl IRBuilder {
                     .cloned()
                     .unwrap_or_default();
 
-                // Push tag and write it.
-                self.ops.push(IROp::Push(tag));
-                self.ops.push(IROp::WriteIo(1));
-
-                // Emit each field in declaration order, write one at a time.
+                // Push each field in declaration order onto the stack.
                 for def_name in &decl_order {
                     if let Some((_name, val)) = fields.iter().find(|(n, _)| n.node == *def_name) {
                         self.build_expr(&val.node);
-                        self.stack.pop(); // consumed by write_io
-                        self.ops.push(IROp::WriteIo(1));
+                        self.stack.pop(); // consumed by emit
                     }
                 }
+
+                // Emit abstract event op — lowering decides the output format.
+                self.ops.push(IROp::EmitEvent {
+                    name: event_name.node.clone(),
+                    tag,
+                    field_count: decl_order.len() as u32,
+                });
             }
 
             Stmt::Asm {
@@ -886,30 +888,24 @@ impl IRBuilder {
                     .get(&event_name.node)
                     .cloned()
                     .unwrap_or_default();
-                let num_fields = decl_order.len();
+                let field_count = decl_order.len() as u32;
 
-                // Build 10-element hash input: tag, field0, field1, ..., 0-padding.
-                let padding = 9usize.saturating_sub(num_fields);
-                for _ in 0..padding {
-                    self.ops.push(IROp::Push(0));
-                }
-
-                // Push fields in reverse declaration order.
+                // Push fields in reverse declaration order (so first declared
+                // field ends up on top after all pushes — matching Triton's
+                // hash input convention).
                 for def_name in decl_order.iter().rev() {
                     if let Some((_name, val)) = fields.iter().find(|(n, _)| n.node == *def_name) {
                         self.build_expr(&val.node);
-                        self.stack.pop(); // consumed by hash
+                        self.stack.pop(); // consumed by seal
                     }
                 }
 
-                // Push tag.
-                self.ops.push(IROp::Push(tag));
-
-                // Hash: consumes 10, produces 5 (Digest).
-                self.ops.push(IROp::Hash);
-
-                // Write the 5-element digest commitment.
-                self.ops.push(IROp::WriteIo(5));
+                // Emit abstract SealEvent — lowering handles padding, hashing, output.
+                self.ops.push(IROp::SealEvent {
+                    name: event_name.node.clone(),
+                    tag,
+                    field_count,
+                });
             }
         }
     }
@@ -1569,7 +1565,7 @@ impl IRBuilder {
             }
             "assert_digest" => {
                 self.ops.push(IROp::AssertVector);
-                self.ops.push(IROp::Pop(5));
+                self.ops.push(IROp::Pop(self.target_config.digest_width));
                 self.push_temp(0);
             }
 
@@ -1618,8 +1614,8 @@ impl IRBuilder {
 
             // ── Hash operations ──
             "hash" => {
-                self.ops.push(IROp::Hash);
-                self.push_temp(5);
+                self.ops.push(IROp::HashDigest);
+                self.push_temp(self.target_config.digest_width);
             }
             "sponge_init" => {
                 self.ops.push(IROp::SpongeInit);
@@ -1630,7 +1626,7 @@ impl IRBuilder {
                 self.push_temp(0);
             }
             "sponge_squeeze" => {
-                self.emit_and_push(IROp::SpongeSqueeze, 10);
+                self.emit_and_push(IROp::SpongeSqueeze, self.target_config.hash_rate);
             }
             "sponge_absorb_mem" => {
                 self.ops.push(IROp::SpongeAbsorbMem);
@@ -1647,23 +1643,19 @@ impl IRBuilder {
 
             // ── RAM ──
             "ram_read" => {
-                self.ops.push(IROp::ReadMem(1));
-                self.ops.push(IROp::Pop(1));
+                self.ops.push(IROp::StorageRead { width: 1 });
                 self.push_temp(1);
             }
             "ram_write" => {
-                self.ops.push(IROp::WriteMem(1));
-                self.ops.push(IROp::Pop(1));
+                self.ops.push(IROp::StorageWrite { width: 1 });
                 self.push_temp(0);
             }
             "ram_read_block" => {
-                self.ops.push(IROp::ReadMem(5));
-                self.ops.push(IROp::Pop(1));
+                self.ops.push(IROp::StorageRead { width: 5 });
                 self.push_temp(5);
             }
             "ram_write_block" => {
-                self.ops.push(IROp::WriteMem(5));
-                self.ops.push(IROp::Pop(1));
+                self.ops.push(IROp::StorageWrite { width: 5 });
                 self.push_temp(0);
             }
 

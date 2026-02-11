@@ -65,6 +65,35 @@ pub enum IROp {
     Assert,
     AssertVector,
 
+    // ── Abstract operations (target-independent) ──
+    /// Emit an observable event. Fields are on the stack (topmost = first field).
+    /// Lowering maps to target-native events (Triton: write_io, EVM: LOG, etc.).
+    EmitEvent {
+        name: String,
+        tag: u64,
+        field_count: u32,
+    },
+    /// Emit a sealed (hashed) event commitment. ZK targets only.
+    /// Fields are on the stack (topmost = first field).
+    SealEvent {
+        name: String,
+        tag: u64,
+        field_count: u32,
+    },
+    /// Read from persistent storage. Key is on the stack.
+    /// Produces `width` elements. Lowering maps to target-native storage.
+    StorageRead {
+        width: u32,
+    },
+    /// Write to persistent storage. Key and value(s) are on the stack.
+    /// Lowering maps to target-native storage.
+    StorageWrite {
+        width: u32,
+    },
+    /// Compute a cryptographic hash digest. Inputs on stack per target config.
+    /// Produces `digest_width` elements (from TargetConfig).
+    HashDigest,
+
     // ── Control flow (flat) ──
     Call(String),
     Return,
@@ -149,6 +178,15 @@ impl fmt::Display for IROp {
             IROp::MerkleStepMem => write!(f, "merkle_step_mem"),
             IROp::Assert => write!(f, "assert"),
             IROp::AssertVector => write!(f, "assert_vector"),
+            IROp::EmitEvent {
+                name, field_count, ..
+            } => write!(f, "emit_event {}({})", name, field_count),
+            IROp::SealEvent {
+                name, field_count, ..
+            } => write!(f, "seal_event {}({})", name, field_count),
+            IROp::StorageRead { width } => write!(f, "storage_read {}", width),
+            IROp::StorageWrite { width } => write!(f, "storage_write {}", width),
+            IROp::HashDigest => write!(f, "hash_digest"),
             IROp::Call(label) => write!(f, "call {}", label),
             IROp::Return => write!(f, "return"),
             IROp::Halt => write!(f, "halt"),
@@ -267,6 +305,19 @@ mod tests {
             IROp::MerkleStepMem,
             IROp::Assert,
             IROp::AssertVector,
+            IROp::EmitEvent {
+                name: "Transfer".into(),
+                tag: 0,
+                field_count: 2,
+            },
+            IROp::SealEvent {
+                name: "Nullifier".into(),
+                tag: 1,
+                field_count: 1,
+            },
+            IROp::StorageRead { width: 1 },
+            IROp::StorageWrite { width: 1 },
+            IROp::HashDigest,
             IROp::Call("f".into()),
             IROp::Return,
             IROp::Halt,
