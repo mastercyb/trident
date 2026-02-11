@@ -15,15 +15,35 @@ use std::fmt;
 /// Structural ops (`IfElse`, `IfOnly`, `Loop`) carry nested bodies so each
 /// backend can choose its own control-flow lowering strategy.
 #[derive(Debug, Clone)]
+/// 53 variants in three tiers:
+///
+/// **Tier 1 — Core instructions** (1:1 with stack machine ops, universal)
+///   Stack (5), Arithmetic (12), I/O (3), Memory (2), Assertions (2) = 24
+///
+/// **Tier 2 — Abstract operations** (semantic intent; each backend expands)
+///   Hash (6), Merkle (2), Events (2), Storage (2) = 12
+///
+/// **Tier 3 — Structure & control flow**
+///   Control flow (6), Program structure (5), Passthrough (2) = 13
+///
+/// **Target-specific** (not universal; Triton-native extension field) = 4
+///
+/// Total: 24 + 12 + 13 + 4 = 53 variants
 pub enum IROp {
-    // ── Stack ──
+    // ═══════════════════════════════════════════════════════════════
+    // Tier 1 — Core instructions
+    // 1:1 with stack machine primitives. Every backend maps these
+    // directly to native instructions.
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── Stack (5) ──
     Push(u64),
     PushNegOne,
     Pop(u32),
     Dup(u32),
     Swap(u32),
 
-    // ── Arithmetic ──
+    // ── Arithmetic (12) ──
     Add,
     Mul,
     Eq,
@@ -37,35 +57,40 @@ pub enum IROp {
     Pow,
     PopCount,
 
-    // ── Extension field (target-specific; native on Triton, unsupported elsewhere) ──
-    XbMul,
-    XInvert,
-    XxDotStep,
-    XbDotStep,
-
-    // ── I/O ──
+    // ── I/O (3) ──
     ReadIo(u32),
     WriteIo(u32),
     Divine(u32),
 
-    // ── Memory ──
+    // ── Memory (2) ──
     ReadMem(u32),
     WriteMem(u32),
 
-    // ── Crypto ──
+    // ── Assertions (2) ──
+    Assert,
+    AssertVector,
+
+    // ═══════════════════════════════════════════════════════════════
+    // Tier 2 — Abstract operations
+    // Semantic intent that each backend expands to its own native
+    // pattern. The IR says *what*, the lowering decides *how*.
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── Hash (6) ──
     Hash,
     SpongeInit,
     SpongeAbsorb,
     SpongeSqueeze,
     SpongeAbsorbMem,
+    /// Compute a cryptographic hash digest. Inputs on stack per target config.
+    /// Produces `digest_width` elements (from TargetConfig).
+    HashDigest,
+
+    // ── Merkle (2) ──
     MerkleStep,
     MerkleStepMem,
 
-    // ── Assertions ──
-    Assert,
-    AssertVector,
-
-    // ── Abstract operations (target-independent) ──
+    // ── Events (2) ──
     /// Emit an observable event. Fields are on the stack (topmost = first field).
     /// Lowering maps to target-native events (Triton: write_io, EVM: LOG, etc.).
     EmitEvent {
@@ -80,6 +105,8 @@ pub enum IROp {
         tag: u64,
         field_count: u32,
     },
+
+    // ── Storage (2) ──
     /// Read from persistent storage. Key is on the stack.
     /// Produces `width` elements. Lowering maps to target-native storage.
     StorageRead {
@@ -90,16 +117,19 @@ pub enum IROp {
     StorageWrite {
         width: u32,
     },
-    /// Compute a cryptographic hash digest. Inputs on stack per target config.
-    /// Produces `digest_width` elements (from TargetConfig).
-    HashDigest,
 
-    // ── Control flow (flat) ──
+    // ═══════════════════════════════════════════════════════════════
+    // Tier 3 — Structure & control flow
+    // Program organization and control flow. Structural ops carry
+    // nested bodies so each backend chooses its own lowering strategy.
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── Control flow — flat (3) ──
     Call(String),
     Return,
     Halt,
 
-    // ── Control flow (structural) ──
+    // ── Control flow — structural (3) ──
     /// Conditional branch with both then and else bodies.
     /// Condition bool has already been consumed from the stack.
     IfElse {
@@ -116,7 +146,7 @@ pub enum IROp {
         body: Vec<IROp>,
     },
 
-    // ── Program structure ──
+    // ── Program structure (5) ──
     /// Label definition.
     Label(String),
     /// Function start (label name).
@@ -128,7 +158,7 @@ pub enum IROp {
     /// Blank line in output.
     BlankLine,
 
-    // ── Passthrough ──
+    // ── Passthrough (2) ──
     /// Comment text (without prefix — lowering adds target-specific prefix).
     Comment(String),
     /// Inline assembly passed through verbatim with declared stack effect.
@@ -136,6 +166,18 @@ pub enum IROp {
         lines: Vec<String>,
         effect: i32,
     },
+
+    // ═══════════════════════════════════════════════════════════════
+    // Target-specific (not part of the universal core)
+    // Triton VM cubic extension field. Native on Triton, no equivalent
+    // on other backends. Programs using these are Triton-specific.
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── Extension field — Triton-only (4) ──
+    XbMul,
+    XInvert,
+    XxDotStep,
+    XbDotStep,
 }
 
 // ─── Display ──────────────────────────────────────────────────────

@@ -74,113 +74,86 @@ src/codegen/ir/                    ← backward-compatible re-exports only
 
 ## IROp: The Operation Set
 
-`IROp` is an enum with ~50 variants. The core ops are target-independent — no
-`skiz`, `recurse`, `if.true`, or `proc` in the IR. A small number of
-target-specific ops exist but are clearly separated.
+`IROp` is an enum with **53 variants** organized in three tiers plus a
+target-specific section. No target instructions (`skiz`, `recurse`, `if.true`,
+`proc`) appear in the IR.
 
-### Core operations (universal across all backends)
+### Tier 1 — Core instructions (24 variants)
 
-**Stack:**
-```
-Push(u64)       PushNegOne       Pop(u32)       Dup(u32)       Swap(u32)
-```
+1:1 with stack machine primitives. Every backend maps these directly to
+native instructions.
 
-Stack indices count from top (0 = TOS). Depth must stay within
-[`TargetConfig.stack_depth`](../src/tools/target.rs:20) (16 for Triton).
+| Group | Variants | Notes |
+|-------|----------|-------|
+| **Stack** (5) | `Push(u64)` `PushNegOne` `Pop(u32)` `Dup(u32)` `Swap(u32)` | Indices from top (0 = TOS). Depth ≤ [`stack_depth`](../src/tools/target.rs:20) |
+| **Arithmetic** (12) | `Add` `Mul` `Eq` `Lt` `And` `Xor` `DivMod` `Invert` `Split` `Log2` `Pow` `PopCount` | Native field. `DivMod` → 2 values; `Split` → 2 u32 limbs |
+| **I/O** (3) | `ReadIo(u32)` `WriteIo(u32)` `Divine(u32)` | Public I/O and non-deterministic witness |
+| **Memory** (2) | `ReadMem(u32)` `WriteMem(u32)` | Address on stack, popped after access |
+| **Assertions** (2) | `Assert` `AssertVector` | Single element or word-width check |
 
-**Arithmetic:**
-```
-Add   Mul   Eq   Lt   And   Xor   DivMod   Invert   Split   Log2   Pow   PopCount
-```
+### Tier 2 — Abstract operations (12 variants)
 
-All operate over the target's native field. `DivMod` produces 2 values;
-`Split` produces 2 u32 limbs.
+Semantic intent that each backend expands to its own native pattern. The IR
+says **what**, the lowering decides **how**.
 
-**I/O:**
-```
-ReadIo(u32)     WriteIo(u32)     Divine(u32)
-```
+| Group | Variants | Intent |
+|-------|----------|--------|
+| **Hash** (6) | `Hash` `SpongeInit` `SpongeAbsorb` `SpongeSqueeze` `SpongeAbsorbMem` `HashDigest` | Cryptographic hashing and incremental sponge |
+| **Merkle** (2) | `MerkleStep` `MerkleStepMem` | Merkle tree verification |
+| **Events** (2) | `EmitEvent { name, tag, field_count }` `SealEvent { name, tag, field_count }` | Observable events and hash-sealed commitments |
+| **Storage** (2) | `StorageRead { width }` `StorageWrite { width }` | Persistent state access |
 
-Public input/output and non-deterministic witness. Backend-specific semantics
-(Triton: native I/O; EVM: calldata/returndata; WASM: host calls).
+How backends expand abstract ops:
 
-**Memory:**
-```
-ReadMem(u32)     WriteMem(u32)
-```
-
-Address on stack, popped after access.
-
-**Cryptographic:**
-```
-Hash   SpongeInit   SpongeAbsorb   SpongeSqueeze   SpongeAbsorbMem
-MerkleStep   MerkleStepMem   Assert   AssertVector
-```
-
-### Target-specific operations (not part of the universal core)
-
-**Extension field** — Triton VM cubic extension (width=3). These are native
-Triton instructions with no equivalent on other backends. Miden lowering emits
-them as comments. Future backends would need emulation or should reject
-programs that use them.
-
-```
-XbMul   XInvert   XxDotStep   XbDotStep
-```
-
-These ops exist in the IR because Trident's type system exposes `XField` as a
-first-class type and the `*x` operator lowers to `XbMul`. Programs using
-extension field arithmetic are inherently Triton-specific unless a backend
-provides its own emulation.
-
-> **Design note:** A cleaner future design would lower these through the
-> abstract op mechanism (like `EmitEvent`) or gate them behind target
-> capability checks at the type-checker level, so non-Triton backends reject
-> `XField` programs at compile time rather than emitting dead comments.
-
-### Abstract operations
-
-These are the key to target independence. They express **intent** without
-prescribing **mechanism**:
-
-| Op | Intent | Triton | Miden | EVM (future) |
-|----|--------|--------|-------|-------------|
-| `EmitEvent { name, tag, field_count }` | Observable event | `push tag; write_io 1` per field | comment + `drop` | `LOG` + topic hash |
-| `SealEvent { name, tag, field_count }` | Hash-sealed commitment | pad + `hash` + `write_io 5` | pad + `hperm` + `drop` | keccak + emit |
-| `StorageRead { width }` | Persistent read | `read_mem` + `pop 1` | `mem_load` | `SLOAD` |
-| `StorageWrite { width }` | Persistent write | `write_mem` + `pop 1` | `mem_store` | `SSTORE` |
-| `HashDigest` | Cryptographic hash | `hash` | `hperm` | `KECCAK256` |
+| Op | Triton | Miden | EVM (future) |
+|----|--------|-------|-------------|
+| `EmitEvent` | `push tag; write_io 1` per field | comment + `drop` | `LOG` + topic hash |
+| `SealEvent` | pad + `hash` + `write_io 5` | pad + `hperm` + `drop` | keccak + emit |
+| `StorageRead` | `read_mem` + `pop 1` | `mem_load` | `SLOAD` |
+| `StorageWrite` | `write_mem` + `pop 1` | `mem_store` | `SSTORE` |
+| `HashDigest` | `hash` | `hperm` | `KECCAK256` |
 
 Programs use `emit`, `seal`, `ram_read`, `hash` — the IR keeps them abstract,
 and each backend maps them to its native primitives.
 
-### Structural control flow
+### Tier 3 — Structure & control flow (13 variants)
 
-```rust
-IfElse { then_body: Vec<IROp>, else_body: Vec<IROp> }
-IfOnly { then_body: Vec<IROp> }
-Loop   { label: String, body: Vec<IROp> }
-```
+Program organization and control flow. Structural ops carry nested bodies so
+each backend chooses its own lowering strategy.
 
-Bodies are nested `Vec<IROp>`, not flat jumps. Each backend chooses its own
-lowering strategy:
+| Group | Variants | Notes |
+|-------|----------|-------|
+| **Control flow — flat** (3) | `Call(String)` `Return` `Halt` | |
+| **Control flow — structural** (3) | `IfElse { then_body, else_body }` `IfOnly { then_body }` `Loop { label, body }` | Bodies are nested `Vec<IROp>`, not flat jumps |
+| **Program structure** (5) | `Label` `FnStart` `FnEnd` `Preamble` `BlankLine` | |
+| **Passthrough** (2) | `Comment(String)` `RawAsm { lines, effect }` | `RawAsm` passes inline assembly verbatim |
+
+Each backend lowers structural ops differently:
 
 - **Triton**: extracts bodies into deferred subroutines, emits `skiz` + `call`
 - **Miden**: emits inline `if.true / else / end`
 - **RISC-V**: could emit conditional branches to labels
 
 The condition/counter is already consumed from the stack when the structural op
-executes.
+executes. Target filtering (`asm(triton) { }`) happens before IR building.
 
-### Program structure and passthrough
+### Target-specific (4 variants, outside the universal core)
+
+**Extension field** — Triton VM cubic extension (width=3). Native Triton
+instructions with no equivalent on other backends. Miden lowering emits
+them as comments.
 
 ```
-Label(String)      FnStart(String)     FnEnd        Preamble(String)
-BlankLine          Comment(String)     RawAsm { lines, effect }
+XbMul   XInvert   XxDotStep   XbDotStep
 ```
 
-`RawAsm` passes inline assembly verbatim. Target filtering (`asm(triton) { }`)
-happens before IR building.
+These exist because Trident's type system exposes `XField` as a first-class
+type and `*x` lowers to `XbMul`. Programs using extension field arithmetic
+are Triton-specific unless a backend provides its own emulation.
+
+> **Design note:** A cleaner future design would lower these through the
+> abstract op mechanism (like `EmitEvent`) or gate them behind target
+> capability checks at the type-checker level.
 
 ---
 
