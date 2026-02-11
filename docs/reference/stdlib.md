@@ -38,24 +38,16 @@ compiler emits a clear error.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `read(key)` | `Field -> Field` | Read one field element at key |
-| `write(key, value)` | `(Field, Field) -> ()` | Write one field element at key |
-| `read_n(key, width)` | `(Field, U32) -> [Field; N]` | Read N elements at key |
-| `write_n(key, values)` | `(Field, [Field; N]) -> ()` | Write N elements at key |
-| `exists(key)` | `Field -> Bool` | Check if key has been written |
+| `read(key)` | `(key: Field) -> Field` | Read one field element at key |
+| `write(key, value)` | `(key: Field, value: Field) -> ()` | Write one field element at key |
+| `read_n(key, width)` | `(key: Field, width: U32) -> [Field; N]` | Read N elements starting at key |
+| `write_n(key, values)` | `(key: Field, values: [Field; N]) -> ()` | Write N elements starting at key |
+| `exists(key)` | `(key: Field) -> Bool` | Check if key has been written |
 
-**Lowering by OS family:**
+**Supported:** Account, Stateless, Object, UTXO, Process.
+**Compile error:** Journal (no persistent state).
 
-| OS family | `state.read(key)` compiles to | Examples |
-|-----------|-------------------------------|----------|
-| Account | Storage read (SLOAD, storage_var) | Ethereum, Starknet, Near, Cosmos, Ton, Polkadot |
-| Stateless | Account data read (derived index) | Solana |
-| Object | Dynamic field borrow | Sui, Aptos |
-| UTXO | `divine()` + `merkle_authenticate(key, root)` | Neptune, Nockchain, Nervos |
-| Journal | **Compile error** — no persistent state | SP1, RISC Zero, OpenVM |
-| Process | File/environment read | Linux, macOS, WASI |
-
-For UTXO chains, the compiler auto-generates the divine-and-authenticate
+On UTXO chains, the compiler auto-generates the divine-and-authenticate
 pattern: divine the value, hash it, Merkle-prove against the state root.
 The developer writes `state.read(key)` — the proof machinery is invisible.
 
@@ -63,19 +55,11 @@ The developer writes `state.read(key)` — the proof machinery is invisible.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `id()` | `-> Digest` | Identity of the current caller |
-| `verify(expected)` | `Digest -> Bool` | Assert caller matches expected |
+| `id()` | `() -> Digest` | Identity of the current caller |
+| `verify(expected)` | `(expected: Digest) -> Bool` | Check caller matches expected |
 
-**Lowering by OS family:**
-
-| OS family | `caller.id()` compiles to | Examples |
-|-----------|---------------------------|----------|
-| Account (EVM) | `msg.sender` (padded to Digest) | Ethereum |
-| Account (Stark) | `get_caller_address` | Starknet |
-| Stateless | First signer account key | Solana |
-| Object | `tx_context::sender` | Sui, Aptos |
-| UTXO | **Compile error** — no caller; use `std.os.auth` | Neptune |
-| Process | `getuid()` | Linux, macOS |
+**Supported:** Account, Stateless, Object, Process.
+**Compile error:** UTXO (no caller concept — use `std.os.auth`), Journal (no identity).
 
 Returns `Digest` — the universal identity container. A 20-byte EVM address,
 a 32-byte Solana pubkey, and a 251-bit Starknet felt all fit in a Digest.
@@ -84,64 +68,47 @@ a 32-byte Solana pubkey, and a 251-bit Starknet felt all fit in a Digest.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `verify(credential)` | `Digest -> Bool` | Assert operation is authorized |
+| `verify(credential)` | `(credential: Digest) -> ()` | Assert operation is authorized; crash if not |
 
-**Lowering by OS family:**
+**Supported:** Account, Stateless, Object, UTXO, Process.
+**Compile error:** Journal (no identity).
 
-| OS family | `auth.verify(cred)` compiles to | Examples |
-|-----------|--------------------------------|----------|
-| Account | `assert(caller == cred)` | Ethereum, Starknet, Near |
-| Stateless | `assert(is_signer(find(cred)))` | Solana |
-| Object | `assert(tx.sender == cred)` | Sui, Aptos |
-| UTXO | `divine()` + `hash()` + `assert_eq(hash, cred)` | Neptune, Nockchain |
-| Process | `assert(uid == cred)` | Linux, macOS |
-
-This is the only auth mechanism that works on every OS. On account chains,
-it checks the caller address. On UTXO chains, it checks a hash preimage.
-Same source code, different mechanism.
+`auth.verify` is an assertion — it succeeds silently or crashes the VM.
+On account chains, it checks the caller address. On UTXO chains, it checks
+a hash preimage (divine the secret, hash it, assert the digest matches).
+Same source code, different mechanism. This is the only auth mechanism that
+works on every OS with identity.
 
 ### `std.os.transfer` — Portable value movement
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `send(to, amount)` | `(Digest, Field) -> ()` | Transfer native value |
-| `balance(account)` | `Digest -> Field` | Query account balance |
+| `send(to, amount)` | `(to: Digest, amount: Field) -> ()` | Transfer native value |
+| `balance(account)` | `(account: Digest) -> Field` | Query account balance |
 
-**Lowering by OS family:**
-
-| OS family | `transfer.send(to, amount)` compiles to | Examples |
-|-----------|----------------------------------------|----------|
-| Account | Native transfer (CALL with value) | Ethereum, Starknet |
-| Stateless | System program transfer | Solana |
-| Object | `coin::split` + `transfer::send` | Sui, Aptos |
-| UTXO | Emit output UTXO in kernel | Neptune, Nockchain |
-| Journal | **Compile error** — no value | SP1, RISC Zero |
-| Process | **Compile error** — no value | Linux, macOS |
+**Supported:** Account, Stateless, Object, UTXO.
+**Compile error:** Journal (no value), Process (no native value).
 
 ### `std.os.time` — Portable clock
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `now()` | `-> Field` | Current timestamp |
-| `block_height()` | `-> Field` | Current block/slot number |
+| `now()` | `() -> Field` | Current timestamp |
+| `block_height()` | `() -> Field` | Current block/slot number |
 
-**Lowering by OS family:**
+**Supported:** All OS families.
 
-| OS family | `time.now()` compiles to | Examples |
-|-----------|--------------------------|----------|
-| Account (EVM) | `block.timestamp` | Ethereum |
-| Account (Stark) | `get_block_timestamp` | Starknet |
-| Stateless | `Clock::unix_timestamp` | Solana |
-| Object | `epoch_timestamp_ms` | Sui |
-| UTXO | `kernel.authenticate_timestamp(root)` | Neptune |
-| Process | `clock_gettime` | Linux, macOS |
+On blockchain OSes, `now()` returns block/slot timestamp. On traditional
+OSes, it returns wall-clock time. On journal targets, it returns the
+timestamp provided as public input.
 
 ### `std.os.event` — Events (already universal)
 
-`reveal` and `seal` are already portable. They compile to the TIR ops
+`reveal` and `seal` are the event mechanism. They compile to the TIR ops
 `Reveal` and `Seal`, which each backend lowers to its native event
 mechanism (LOG on EVM, sol_log on Solana, announcements on Neptune).
-No additional module needed.
+No additional `std.os.event` module needed — events use language-level
+`reveal`/`seal` statements directly.
 
 ### The three-tier model
 
@@ -154,6 +121,9 @@ ext.<os>.*     S2 — OS-native             One specific OS
 Programs can mix all three tiers. `std.*` for math and crypto. `std.os.*`
 for portable state, auth, and events. `ext.<os>.*` when OS-native features
 are needed (PDAs, object ownership, L1/L2 messaging, CPI, etc.).
+
+For per-OS lowering details (what each `std.os.*` function compiles to on
+each specific OS), see [targets.md — `std.os.*` Lowering](targets.md).
 
 ---
 

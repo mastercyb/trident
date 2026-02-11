@@ -171,6 +171,24 @@ the compiler emits only the commitment hash as a LOG topic.
 
 ---
 
+## Portable Alternative (`std.os.*`)
+
+Programs that don't need Ethereum-specific features can use `std.os.*`
+instead of `ext.ethereum.*` for cross-chain portability:
+
+| `ext.ethereum.*` (this OS only) | `std.os.*` (any OS) |
+|---------------------------------|---------------------|
+| `ext.ethereum.storage.read(slot)` | `std.os.state.read(key)` → SLOAD |
+| `ext.ethereum.account.caller()` | `std.os.caller.id()` → msg.sender (padded to Digest) |
+| `ext.ethereum.transfer.send(to, amt)` | `std.os.transfer.send(to, amt)` → CALL with value |
+| `ext.ethereum.block.timestamp()` | `std.os.time.now()` → block.timestamp |
+
+Use `ext.ethereum.*` when you need: precompiles, delegatecall, specific
+LOG topics, storage maps, or other EVM-specific features. See
+[stdlib.md](../stdlib.md) for the full `std.os.*` API.
+
+---
+
 ## Ecosystem Mapping
 
 | Solidity concept | Trident equivalent |

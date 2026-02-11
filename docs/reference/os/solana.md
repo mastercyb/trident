@@ -184,6 +184,24 @@ ext.solana.log.data(bytes)
 
 ---
 
+## Portable Alternative (`std.os.*`)
+
+Programs that don't need Solana-specific features can use `std.os.*`
+instead of `ext.solana.*` for cross-chain portability:
+
+| `ext.solana.*` (this OS only) | `std.os.*` (any OS) |
+|-------------------------------|---------------------|
+| `ext.solana.account.data(idx, off)` | `std.os.state.read(key)` → account data read |
+| `ext.solana.account.key(0)` + `is_signer` | `std.os.caller.id()` → first signer key |
+| `ext.solana.transfer.lamports(from, to, amt)` | `std.os.transfer.send(to, amt)` → system transfer |
+| `ext.solana.clock.unix_timestamp()` | `std.os.time.now()` → Clock sysvar |
+
+Use `ext.solana.*` when you need: PDAs, CPI, specific account indices,
+rent exemption checks, or other Solana-specific features. See
+[stdlib.md](../stdlib.md) for the full `std.os.*` API.
+
+---
+
 ## Ecosystem Mapping
 
 | Solana/Anchor concept | Trident equivalent |

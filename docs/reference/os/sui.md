@@ -188,6 +188,24 @@ hash as event data.
 
 ---
 
+## Portable Alternative (`std.os.*`)
+
+Programs that don't need Sui-specific features can use `std.os.*`
+instead of `ext.sui.*` for cross-chain portability:
+
+| `ext.sui.*` (this OS only) | `std.os.*` (any OS) |
+|----------------------------|---------------------|
+| `ext.sui.dynamic_field.borrow(id, key)` | `std.os.state.read(key)` → dynamic_field.borrow |
+| `ext.sui.tx.sender()` | `std.os.caller.id()` → tx_context::sender |
+| `ext.sui.coin.split()` + `ext.sui.transfer.public_send()` | `std.os.transfer.send(to, amt)` → split + public_transfer |
+| `ext.sui.tx.epoch_timestamp_ms()` | `std.os.time.now()` → epoch_timestamp_ms |
+
+Use `ext.sui.*` when you need: object ownership (owned/shared/frozen),
+dynamic fields, capability pattern, or other Sui-specific features. See
+[stdlib.md](../stdlib.md) for the full `std.os.*` API.
+
+---
+
 ## Ecosystem Mapping
 
 | Move/Sui concept | Trident equivalent |

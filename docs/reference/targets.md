@@ -373,23 +373,28 @@ correct lowering strategy. See [stdlib.md](stdlib.md) for full API specs.
 | Account (EVM) | Ethereum | `msg.sender` (padded to Digest) |
 | Account (Cairo) | Starknet | `get_caller_address` |
 | Account (WASM) | Near, Cosmos | `predecessor_account_id` / `info.sender` |
+| Account (other) | Ton, Polkadot, Miden | OS-native caller address |
 | Stateless | Solana | `account.key(0)` (first signer) |
 | Object | Sui, Aptos | `tx_context::sender` |
-| Process | Linux, macOS | `getuid()` (padded to Digest) |
-| UTXO | Neptune, Nockchain, Nervos | **Compile error** — no caller; use `std.os.auth` |
-| Journal | Boundless, Succinct | **Compile error** — no identity |
+| Process | Linux, macOS, WASI, Android | `getuid()` (padded to Digest) |
+| UTXO | Neptune, Nockchain, Nervos, Aleo, Aztec | **Compile error** — no caller; use `std.os.auth` |
+| Journal | Boundless, Succinct, OpenVM network | **Compile error** — no identity |
 
 #### `std.os.auth` — Authorization
+
+`auth.verify(cred)` is an assertion — succeeds silently or crashes the VM.
 
 | OS family | OSes | `auth.verify(cred)` lowers to |
 |-----------|------|-------------------------------|
 | Account (EVM) | Ethereum | `assert(msg.sender == cred)` |
 | Account (Cairo) | Starknet | `assert(get_caller_address() == cred)` |
+| Account (WASM) | Near, Cosmos | `assert(predecessor == cred)` / `assert(sender == cred)` |
+| Account (other) | Ton, Polkadot, Miden | `assert(caller == cred)` |
 | Stateless | Solana | `assert(is_signer(find_account(cred)))` |
 | Object | Sui, Aptos | `assert(tx.sender() == cred)` |
-| UTXO | Neptune, Nockchain | `divine()` + `hash()` + `assert_eq(hash, cred)` |
-| Process | Linux, macOS | `assert(getuid() == cred)` |
-| Journal | Boundless, Succinct | **Compile error** — no identity |
+| UTXO | Neptune, Nockchain, Nervos, Aleo, Aztec | `divine()` + `hash()` + `assert_eq(hash, cred)` |
+| Process | Linux, macOS, WASI, Android | `assert(getuid() == cred)` |
+| Journal | Boundless, Succinct, OpenVM network | **Compile error** — no identity |
 
 #### `std.os.transfer` — Value Movement
 
@@ -397,11 +402,13 @@ correct lowering strategy. See [stdlib.md](stdlib.md) for full API specs.
 |-----------|------|---------------------------------------|
 | Account (EVM) | Ethereum | `CALL(to, amount, "")` |
 | Account (Cairo) | Starknet | `transfer(to, amount)` syscall |
+| Account (WASM) | Near, Cosmos | `Promise::transfer` / `BankMsg::Send` |
+| Account (other) | Ton, Polkadot | OS-native transfer message |
 | Stateless | Solana | `system_program::transfer(signer, to, amount)` |
-| Object | Sui | `coin::split` + `transfer::public_transfer` |
-| UTXO | Neptune | Emit output UTXO (amount in coin state) |
-| Process | Linux, macOS, WASI | **Compile error** — no native value |
-| Journal | Boundless, Succinct | **Compile error** — no native value |
+| Object | Sui, Aptos | `coin::split` + `transfer::public_transfer` |
+| UTXO | Neptune, Nockchain, Nervos, Aleo, Aztec | Emit output UTXO/note (amount in coin state) |
+| Process | Linux, macOS, WASI, Browser, Android | **Compile error** — no native value |
+| Journal | Boundless, Succinct, OpenVM network | **Compile error** — no native value |
 
 #### `std.os.time` — Clock
 
@@ -409,11 +416,14 @@ correct lowering strategy. See [stdlib.md](stdlib.md) for full API specs.
 |-----------|------|------------------------|
 | Account (EVM) | Ethereum | `block.timestamp` |
 | Account (Cairo) | Starknet | `get_block_timestamp` |
+| Account (WASM) | Near, Cosmos | `env.block.time` |
+| Account (other) | Ton, Polkadot | OS-native block time |
 | Stateless | Solana | `Clock::unix_timestamp` |
-| Object | Sui | `tx_context::epoch_timestamp_ms` |
-| UTXO | Neptune | `kernel.authenticate_timestamp(root)` |
-| Process | Linux, macOS | `clock_gettime(CLOCK_REALTIME)` |
+| Object | Sui, Aptos | `tx_context::epoch_timestamp_ms` |
+| UTXO | Neptune, Nockchain | `kernel.authenticate_timestamp(root)` |
+| Process | Linux, macOS, Android | `clock_gettime(CLOCK_REALTIME)` |
 | WASI/Browser | WASI, Browser | `wall_clock.now()` / `Date.now()` |
+| Journal | Boundless, Succinct, OpenVM network | Timestamp from public input |
 
 #### OS TOML `[runtime]` Fields
 

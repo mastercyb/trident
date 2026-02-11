@@ -397,10 +397,10 @@ just like builtins do.
 
 | Module | Key functions | Available when |
 |--------|---------------|----------------|
-| `std.os.state` | `read(key)`, `write(key, value)`, `exists(key)` | Target has persistent state |
-| `std.os.caller` | `id() -> Digest`, `verify(expected)` | Target has caller concept |
-| `std.os.auth` | `verify(credential) -> Bool` | Target has identity |
-| `std.os.transfer` | `send(to, amount)`, `balance(account)` | Target has native value |
+| `std.os.state` | `read(key: Field) -> Field`, `write(key, value)`, `exists(key)` | Target has persistent state |
+| `std.os.caller` | `id() -> Digest`, `verify(expected: Digest) -> Bool` | Target has caller concept |
+| `std.os.auth` | `verify(credential: Digest) -> ()` (assertion) | Target has identity |
+| `std.os.transfer` | `send(to: Digest, amount: Field)`, `balance(account: Digest) -> Field` | Target has native value |
 | `std.os.time` | `now() -> Field`, `block_height() -> Field` | All targets |
 
 These sit between `std.*` (pure computation, all targets) and `ext.<os>.*`
@@ -409,8 +409,8 @@ to any OS that supports the required concepts. The compiler emits clear
 errors when targeting an OS that lacks a concept (e.g., `std.os.caller.id()`
 on UTXO chains, `std.os.transfer.send()` on journal targets).
 
-For full API specifications and per-OS lowering tables, see
-[stdlib.md](stdlib.md) and [targets.md](targets.md).
+For full API specifications, see [stdlib.md](stdlib.md). For per-OS lowering
+tables, see [targets.md](targets.md).
 
 ---
 

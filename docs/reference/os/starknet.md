@@ -199,6 +199,24 @@ of the event data as a key.
 
 ---
 
+## Portable Alternative (`std.os.*`)
+
+Programs that don't need Starknet-specific features can use `std.os.*`
+instead of `ext.starknet.*` for cross-chain portability:
+
+| `ext.starknet.*` (this OS only) | `std.os.*` (any OS) |
+|---------------------------------|---------------------|
+| `ext.starknet.storage.read(addr)` | `std.os.state.read(key)` → storage_var read |
+| `ext.starknet.account.caller()` | `std.os.caller.id()` → get_caller_address |
+| `ext.starknet.call.invoke(addr, sel, args)` | No portable equivalent (cross-contract is OS-specific) |
+| `ext.starknet.messaging.send_to_l1(to, data)` | No portable equivalent (L1/L2 messaging is OS-specific) |
+
+Use `ext.starknet.*` when you need: L1/L2 messaging, library calls,
+Pedersen-addressed storage vars, or other Starknet-specific features. See
+[stdlib.md](../stdlib.md) for the full `std.os.*` API.
+
+---
+
 ## Ecosystem Mapping
 
 | Cairo/Starknet concept | Trident equivalent |

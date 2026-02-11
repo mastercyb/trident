@@ -61,6 +61,10 @@ Every OS, regardless of model, must address six concerns. The compiler's
 job is **runtime binding** -- translating these concerns to OS-native
 primitives via `ext.<os>.*` modules.
 
+The tables below describe **OS-native patterns** (the `ext.*` layer — S2).
+For the portable `std.os.*` layer (S1) that abstracts these patterns, see
+[Standard Library — Portable OS Layer](../reference/stdlib.md).
+
 ### 1. Entry Points -- How Programs Start
 
 | OS family | Entry point | Example |
@@ -262,6 +266,7 @@ layer cannot express what you need.
 | `std.os.auth` | Is this operation authorized | Journal targets (no identity) |
 | `std.os.transfer` | Move value between accounts | Journal + process targets (no value) |
 | `std.os.time` | Current time / block height | -- (all OSes have time) |
+| `std.os.event` | Observable side effects | -- (uses `reveal`/`seal` directly) |
 
 The compiler emits a clear error when a `std.os.*` function targets an OS
 that doesn't support the concept. For example, `std.os.caller.id()` on
