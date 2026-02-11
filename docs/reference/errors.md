@@ -43,7 +43,7 @@ at least one diagnostic entry.
 ### Completeness claim
 
 156 diagnostics cover every user-violable "must"/"cannot"/"only" constraint
-in language.md (Sections 1-22), targets.md, and ir.md. The derivation was
+in language.md (Sections 1-20), targets.md, and ir.md. The derivation was
 audited by scanning all three documents for prohibition keywords and
 cross-referencing each against the catalog.
 

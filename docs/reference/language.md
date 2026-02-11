@@ -552,7 +552,7 @@ fn foo(x: Field) -> Field {
 | `ram_write_block(addr, vals)` | Write D words |
 
 For hash, sponge, Merkle, and extension field builtins, see
-[Part II: Provable Extensions](#part-ii--provable-extensions-tier-2).
+[Part II: Provable Computation](#part-ii--provable-computation-tier-2).
 
 ---
 
@@ -635,7 +635,44 @@ the compiler's stack model.
 
 ---
 
-## 10. Type Checking Rules
+## 10. Events
+
+Events are structured data output — the universal communication mechanism.
+On provable targets, events are how programs talk to the chain. On conventional
+targets, they're structured logging (like `console.log`).
+
+### Declaration
+
+Events are declared at module scope (see [Section 3](#3-declarations)):
+
+```
+event Transfer { from: Digest, to: Digest, amount: Field }
+```
+
+Fields must be `Field`-width types. Maximum 9 fields.
+
+### Reveal (Public Output)
+
+```
+reveal Transfer { from: sender, to: receiver, amount: value }
+```
+
+Each field is written to public output. The verifier sees all data.
+`reveal` is Tier 1 — it works on every target.
+
+### Seal (Committed Secret)
+
+```
+seal Transfer { from: sender, to: receiver, amount: value }
+```
+
+Fields are hashed via the sponge construction. Only the commitment digest is
+written to public output. The verifier sees the commitment, not the data.
+`seal` requires sponge support (Tier 2).
+
+---
+
+## 11. Type Checking Rules
 
 - No implicit conversions between any types
 - No recursion — the compiler rejects call cycles across all modules
@@ -649,49 +686,18 @@ the compiler's stack model.
 
 ---
 
-# Part II — Provable Extensions (Tier 2)
+# Part II — Provable Computation (Tier 2)
 
-Hash, Merkle, sponge, events, and extension field operations. These require
-a provable target with native coprocessor support: **Triton VM** or **Miden VM**.
+Proof-capable targets only. No meaningful equivalent on conventional machines.
 
-Programs using any Part II feature cannot compile for Tier 1-only targets
-(SP1, OpenVM, Cairo). See [targets.md](targets.md) for tier compatibility.
-
----
-
-## 11. Provable Types
-
-### XField — Extension Field Element
-
-| Type | Width | Description |
-|------|------:|-------------|
-| `XField` | E | Extension field element, E = extension degree |
-
-`XField` is only available on targets with extension field support (currently
-Triton VM, degree 3). On all other targets, `xfield_width = 0` and using
-`XField` is a compile error.
-
-| Type | Width | Notes |
-|------|-------|-------|
-| `XField` | E | E = `xfield_width` from target config (0 = unavailable) |
-
-See [targets.md](targets.md) for per-target XField availability.
+Three capabilities: cryptographic hashing (sponge + Merkle), non-deterministic
+witness input, and extension field arithmetic. Programs using any Part II
+feature cannot compile for Tier 1-only targets (SP1, OpenVM, Cairo).
+See [targets.md](targets.md) for tier compatibility.
 
 ---
 
-## 12. Provable Operators
-
-### Scalar Multiplication
-
-| Operator | Operand types | Result type | Description |
-|----------|---------------|-------------|-------------|
-| `a *. s` | XField, Field | XField | Scalar multiplication |
-
-Only available on XField-capable targets (currently Triton VM).
-
----
-
-## 13. Hash and Sponge Builtins
+## 12. Hash and Sponge
 
 These builtins require a target with native hash coprocessor support. The
 argument counts (rate R, digest width D) are target-dependent. On Triton VM:
@@ -703,7 +709,7 @@ R = 10, D = 5. On Miden: R = 8, D = 4. See [targets.md](targets.md).
 |-----------|-------------|
 | `hash(fields: Field x R) -> Digest` | Hash R field elements into a Digest |
 
-### Sponge Construction
+### Sponge
 
 | Signature | Description |
 |-----------|-------------|
@@ -717,7 +723,7 @@ Initialize, absorb in chunks, squeeze the result.
 
 ---
 
-## 14. Merkle Builtins
+## 13. Merkle Authentication
 
 | Signature | Description |
 |-----------|-------------|
@@ -740,55 +746,33 @@ pub fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
 
 ---
 
-## 15. Events
+## 14. Extension Field
 
-Events provide structured data output during proof execution.
+The extension field extends `Field` to degree E (E = 3 on Triton VM).
+Only available on targets where `xfield_width > 0`.
 
-### Declaration
+### Type
 
-Events are declared at module scope (see [Section 3](#3-declarations)):
+| Type | Width | Description |
+|------|------:|-------------|
+| `XField` | E | Extension field element (E = `xfield_width` from target config) |
 
-```
-event Transfer { from: Digest, to: Digest, amount: Field }
-```
+### Operator
 
-Fields must be `Field`-width types. Maximum 9 fields.
+| Operator | Operand types | Result type | Description |
+|----------|---------------|-------------|-------------|
+| `a *. s` | XField, Field | XField | Scalar multiplication |
 
-### Reveal (Public Output)
-
-```
-reveal Transfer { from: sender, to: receiver, amount: value }
-```
-
-Each field is written to public output. The verifier sees all data.
-
-### Seal (Committed Secret)
-
-```
-seal Transfer { from: sender, to: receiver, amount: value }
-```
-
-Fields are hashed via the sponge construction. Only the commitment digest is
-written to public output. The verifier sees the commitment, not the data.
-
-`seal` requires sponge support (Tier 2). `reveal` writes to public I/O and
-is conceptually Tier 1, but is grouped here because events are the provable
-communication mechanism.
-
----
-
-## 16. Extension Field Builtins
-
-Available only on XField-capable targets (currently Triton VM).
+### Builtins
 
 | Signature | Description |
 |-----------|-------------|
-| `xfield(x0, ..., xE) -> XField` | Construct XField (E = extension degree) |
-| `xinvert(a: XField) -> XField` | XField inverse |
+| `xfield(x0, ..., xE) -> XField` | Construct from E base field elements |
+| `xinvert(a: XField) -> XField` | Multiplicative inverse |
 | `xx_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)` | XField dot product step |
 | `xb_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)` | Mixed dot product step |
 
-These are the building blocks for inner product arguments and FRI
+The dot-step builtins are building blocks for inner product arguments and FRI
 verification — the core of recursive proof composition.
 
 ---
@@ -799,7 +783,7 @@ Proofs that verify other proofs. **Triton VM only.**
 
 ---
 
-## 17. Proof Composition
+## 15. Proof Composition
 
 Tier 3 enables a program to verify another program's proof inside its own
 execution. This is STARK-in-STARK recursion: the verifier circuit runs as
@@ -831,7 +815,7 @@ compile for any other target.
 
 ---
 
-## 18. Standard Library
+## 16. Standard Library
 
 ### Universal Modules (`std.*`)
 
@@ -861,7 +845,7 @@ rejects cross-target imports.
 
 ---
 
-## 19. CLI Reference
+## 17. CLI Reference
 
 ```bash
 # Build
@@ -903,7 +887,7 @@ trident lsp                             # Start LSP server
 
 ---
 
-## 20. Grammar (EBNF)
+## 18. Grammar (EBNF)
 
 ```ebnf
 (* Top-level *)
@@ -996,7 +980,7 @@ comment       = "//" .* NEWLINE ;
 
 ---
 
-## 21. Permanent Exclusions
+## 19. Permanent Exclusions
 
 These are design decisions, not roadmap items.
 
@@ -1019,7 +1003,7 @@ These are design decisions, not roadmap items.
 
 ---
 
-## 22. Common Patterns
+## 20. Common Patterns
 
 ### Read-Compute-Write (Universal)
 
