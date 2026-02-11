@@ -10,6 +10,7 @@ pub mod pkgmgmt;
 pub mod stack;
 pub mod tir;
 pub mod tools;
+pub mod tree;
 pub mod typecheck;
 pub mod verify;
 

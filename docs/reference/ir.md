@@ -14,9 +14,11 @@ TypeChecker
   ▼
 TIRBuilder → Vec<TIROp>              ← 54 ops, target-independent
   │
-  ├─→ StackLow       → Vec<String>   ← stack targets (Triton, Miden, EVM)
+  ├─→ StackLow       → Vec<String>   ← stack targets (Triton, Miden)
   │
   ├─→ LIR → RegLow   → Vec<u8>      ← register targets (x86-64, ARM64, RISC-V)
+  │
+  ├─→ TreeLow        → Noun → bytes  ← tree targets (Nock)
   │
   └─→ KIR → KernelLow → String       ← GPU targets (CUDA, Metal, Vulkan)
         │
@@ -106,7 +108,7 @@ that use ops above the target's capability.
 
 ---
 
-## Part II: Three Lowering Paths
+## Part II: Four Lowering Paths
 
 ### Stack targets — TIR → StackLowering → assembly text
 
@@ -137,6 +139,29 @@ pub trait RegisterLowering {
 LIR converts TIR's stack semantics to three-address form with virtual
 registers (`Reg(u32)`) and flat control flow (`Branch`/`Jump`/`LabelDef`).
 Same 4-tier structure, register-addressed. See [`src/lir/`](../src/lir/).
+
+### Tree targets — TIR → TreeLowering → Noun
+
+For combinator/tree-rewriting VMs: Nock.
+
+```rust
+pub trait TreeLowering {
+    fn target_name(&self) -> &str;
+    fn lower(&self, ops: &[TIROp]) -> Noun;
+    fn serialize(&self, noun: &Noun) -> Vec<u8>;
+}
+```
+
+Tree lowering takes TIR directly (like KernelLowering) and produces
+Nock formulas — recursive tree structures where the program IS data.
+The operand stack becomes a right-nested cons tree (the subject).
+Stack operations become tree construction and axis addressing.
+Control flow maps to Nock 6 (branch) and Nock 7 (compose).
+
+Performance depends on jet matching — lowered formulas must produce
+hashes that match registered jets for all cryptographic operations.
+Without jets, naive tree interpretation would be extremely slow.
+See [`src/tree/`](../src/tree/).
 
 ### GPU targets — TIR → KIR → kernel source
 
@@ -304,6 +329,12 @@ src/lir/                           ← register-based IR
     ├── arm64.rs                   ← ARM64 stub
     └── riscv.rs                   ← RISC-V stub
 
+src/tree/                          ← tree/combinator lowering
+├── mod.rs                         ← module docs
+└── lower/                         ← TIR → Nock formulas
+    ├── mod.rs                     ← TreeLowering trait + Noun type + factory
+    └── nock.rs                    ← Nock VM (Nockchain)
+
 src/kir/                           ← GPU kernel lowering
 ├── mod.rs                         ← module docs
 └── lower/                         ← TIR → kernel source
@@ -333,6 +364,12 @@ src/legacy/                        ← old emitter (deprecated, comparison tests
 1. Create `src/lir/lower/new_target.rs`
 2. Implement `RegisterLowering` — `fn lower(&self, ops: &[LIROp]) -> Vec<u8>`
 3. Register in `create_register_lowering()`
+
+### Tree target
+
+1. Create `src/tree/lower/new_target.rs`
+2. Implement `TreeLowering` — `fn lower(&self, ops: &[TIROp]) -> Noun` + `fn serialize(&self, noun: &Noun) -> Vec<u8>`
+3. Register in `create_tree_lowering()`
 
 ### GPU target
 

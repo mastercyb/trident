@@ -10,6 +10,8 @@ pub enum Arch {
     Stack,
     /// Register machine (Cairo, RISC-V zkVMs): requires lightweight IR.
     Register,
+    /// Tree machine (Nock): combinator-based, subject-formula evaluation.
+    Tree,
 }
 
 /// Describes a non-native field the target can emulate.
@@ -151,7 +153,7 @@ impl TargetConfig {
             format!("unknown target '{}' (looked for '{}')", name, filename),
             Span::dummy(),
         )
-        .with_help("available targets: triton, miden, openvm, sp1, cairo".to_string()))
+        .with_help("available targets: triton, miden, openvm, sp1, cairo, nock".to_string()))
     }
 
     fn parse_toml(content: &str, path: &Path) -> Result<Self, Diagnostic> {
@@ -296,9 +298,10 @@ impl TargetConfig {
         let arch = match architecture.as_str() {
             "stack" => Arch::Stack,
             "register" => Arch::Register,
+            "tree" => Arch::Tree,
             other => {
                 return Err(err(format!(
-                    "unknown architecture '{}' (expected 'stack' or 'register')",
+                    "unknown architecture '{}' (expected 'stack', 'register', or 'tree')",
                     other
                 )))
             }
