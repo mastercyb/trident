@@ -18,7 +18,7 @@
 | Hash rate | 10 field elements |
 | Hash rounds | 7 |
 | Sponge state | 16 field elements (rate 10 + capacity 6) |
-| Data model | Noun = Atom \| Cell (binary tree) |
+| Data model | Noun = Atom or Cell (binary tree) |
 | Word size | 64-bit (tagged union u64) |
 | Memory model | Bidirectional arena (NockStack) |
 | Stack thread | 256 MB |

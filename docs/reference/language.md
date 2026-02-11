@@ -124,15 +124,15 @@ copy on the stack. Structs are flattened to sequential stack/RAM elements.
 All types have a compile-time-known width measured in field elements.
 Widths marked with a variable are resolved from the target configuration.
 
-| Type | Width | Notes |
-|------|-------|-------|
-| `Field` | 1 | |
-| `Bool` | 1 | |
-| `U32` | 1 | |
-| `Digest` | D | D = `digest_width` from target config |
-| `[T; N]` | N * width(T) | |
-| `(T1, T2)` | width(T1) + width(T2) | |
-| `struct` | sum of field widths | |
+| Type | Width |
+|------|-------|
+| `Field` | 1 |
+| `Bool` | 1 |
+| `U32` | 1 |
+| `Digest` | D (`digest_width` from target config) |
+| `[T; N]` | N * width(T) |
+| `(T1, T2)` | width(T1) + width(T2) |
+| `struct` | sum of field widths |
 
 ---
 
