@@ -123,6 +123,15 @@ Long-term, exploratory, not committed.
 - [ ] Verifiable AI/ML inference (fixed-architecture neural networks in Trident)
 - [ ] Provable data pipelines (ETL, aggregation, supply chain verification)
 - [ ] Hardware acceleration backends (FPGA, ASIC, GPU proving)
+- [ ] Self-proving compiler — Trident compiles itself to a provable target,
+      then proves its own compilation correctness. Every `trident build`
+      produces a proof certificate alongside the assembly. The registry
+      already stores content-addressed hashes; add proof certificates
+      alongside and you get trustless package distribution — you don't
+      trust the compiler binary, you verify the proof. The endgame:
+      source → TIR → assembly where each arrow is a proven transformation,
+      chained into a single certificate that says "this assembly correctly
+      implements this source program."
 
 ---
 
