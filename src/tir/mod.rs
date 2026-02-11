@@ -11,117 +11,28 @@ use std::fmt;
 
 // ─── IR Operations ────────────────────────────────────────────────
 
-/// A single IR operation. Flat ops map 1:1 to stack-machine instructions.
-/// Structural ops (`IfElse`, `IfOnly`, `Loop`) carry nested bodies so each
-/// backend can choose its own control-flow lowering strategy.
-#[derive(Debug, Clone)]
-/// 53 variants in three tiers:
+/// 53 TIR operations. Higher tier = narrower target set.
 ///
-/// **Tier 1 — Core instructions** (1:1 with stack machine ops, universal)
-///   Stack (5), Arithmetic (12), I/O (3), Memory (2), Assertions (2) = 24
-///
-/// **Tier 2 — Abstract operations** (semantic intent; each backend expands)
-///   Hash (6), Merkle (2), Events (2), Storage (2) = 12
-///
-/// **Tier 3 — Structure & control flow**
+/// **Tier 0 — Structure** (every program, every target)
 ///   Control flow (6), Program structure (5), Passthrough (2) = 13
 ///
-/// **Recursion extension** (STARK-in-STARK verification; Triton-only for now) = 4
+/// **Tier 1 — Universal** (compiles to every blockchain target)
+///   Stack (5), Arithmetic (12), I/O (3), Memory (2),
+///   Assertions (2), Hash (2), Events (2), Storage (2) = 30
 ///
-/// Total: 24 + 12 + 13 + 4 = 53 variants
+/// **Tier 2 — Provable** (requires a proof-capable target)
+///   Sponge (4), Merkle (2) = 6
+///
+/// **Tier 3 — Recursion** (requires recursive verification capability)
+///   Extension field (2), FRI folding (2) = 4
+///
+/// Total: 13 + 30 + 6 + 4 = 53 variants
+#[derive(Debug, Clone)]
 pub enum TIROp {
     // ═══════════════════════════════════════════════════════════════
-    // Tier 1 — Core instructions
-    // 1:1 with stack machine primitives. Every backend maps these
-    // directly to native instructions.
-    // ═══════════════════════════════════════════════════════════════
-
-    // ── Stack (5) ──
-    Push(u64),
-    PushNegOne,
-    Pop(u32),
-    Dup(u32),
-    Swap(u32),
-
-    // ── Arithmetic (12) ──
-    Add,
-    Mul,
-    Eq,
-    Lt,
-    And,
-    Xor,
-    DivMod,
-    Invert,
-    Split,
-    Log2,
-    Pow,
-    PopCount,
-
-    // ── I/O (3) ──
-    ReadIo(u32),
-    WriteIo(u32),
-    Divine(u32),
-
-    // ── Memory (2) ──
-    ReadMem(u32),
-    WriteMem(u32),
-
-    // ── Assertions (2) ──
-    Assert,
-    AssertVector,
-
-    // ═══════════════════════════════════════════════════════════════
-    // Tier 2 — Abstract operations
-    // Semantic intent that each backend expands to its own native
-    // pattern. The IR says *what*, the lowering decides *how*.
-    // ═══════════════════════════════════════════════════════════════
-
-    // ── Hash (6) ──
-    Hash,
-    SpongeInit,
-    SpongeAbsorb,
-    SpongeSqueeze,
-    SpongeAbsorbMem,
-    /// Compute a cryptographic hash digest. Inputs on stack per target config.
-    /// Produces `digest_width` elements (from TargetConfig).
-    HashDigest,
-
-    // ── Merkle (2) ──
-    MerkleStep,
-    MerkleStepMem,
-
-    // ── Events (2) ──
-    /// Emit an observable event. Fields are on the stack (topmost = first field).
-    /// Lowering maps to target-native events (Triton: write_io, EVM: LOG, etc.).
-    EmitEvent {
-        name: String,
-        tag: u64,
-        field_count: u32,
-    },
-    /// Emit a sealed (hashed) event commitment. ZK targets only.
-    /// Fields are on the stack (topmost = first field).
-    SealEvent {
-        name: String,
-        tag: u64,
-        field_count: u32,
-    },
-
-    // ── Storage (2) ──
-    /// Read from persistent storage. Key is on the stack.
-    /// Produces `width` elements. Lowering maps to target-native storage.
-    StorageRead {
-        width: u32,
-    },
-    /// Write to persistent storage. Key and value(s) are on the stack.
-    /// Lowering maps to target-native storage.
-    StorageWrite {
-        width: u32,
-    },
-
-    // ═══════════════════════════════════════════════════════════════
-    // Tier 3 — Structure & control flow
-    // Program organization and control flow. Structural ops carry
-    // nested bodies so each backend chooses its own lowering strategy.
+    // Tier 0 — Structure
+    // The scaffolding. Present in every program, on every target.
+    // Not blockchain-specific — just computation.
     // ═══════════════════════════════════════════════════════════════
 
     // ── Control flow — flat (3) ──
@@ -168,15 +79,107 @@ pub enum TIROp {
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // Recursion extension — STARK-in-STARK verification primitives
-    // Extension field arithmetic and FRI folding steps required for
-    // recursive proof verification. Currently Triton-only; any backend
-    // that supports recursive verification will need equivalents.
+    // Tier 1 — Universal
+    // Compiles to every blockchain target. Stack primitives, arithmetic,
+    // I/O, memory, hashing, events, storage.
     // ═══════════════════════════════════════════════════════════════
 
-    // ── Recursion — extension field & FRI (4) ──
+    // ── Stack (5) ──
+    Push(u64),
+    PushNegOne,
+    Pop(u32),
+    Dup(u32),
+    Swap(u32),
+
+    // ── Arithmetic (12) ──
+    Add,
+    Mul,
+    Eq,
+    Lt,
+    And,
+    Xor,
+    DivMod,
+    Invert,
+    Split,
+    Log2,
+    Pow,
+    PopCount,
+
+    // ── I/O (3) ──
+    ReadIo(u32),
+    WriteIo(u32),
+    Divine(u32),
+
+    // ── Memory (2) ──
+    ReadMem(u32),
+    WriteMem(u32),
+
+    // ── Assertions (2) ──
+    Assert,
+    AssertVector,
+
+    // ── Hash (2) ──
+    /// Cryptographic hash. Every target has some hash primitive.
+    Hash,
+    /// Compute a hash digest. Inputs on stack per target config.
+    HashDigest,
+
+    // ── Events (2) ──
+    /// Emit an observable event. Fields are on the stack (topmost = first field).
+    /// Lowering maps to target-native events (Triton: write_io, EVM: LOG, etc.).
+    EmitEvent {
+        name: String,
+        tag: u64,
+        field_count: u32,
+    },
+    /// Emit a sealed (hashed) event commitment.
+    /// Fields are on the stack (topmost = first field).
+    SealEvent {
+        name: String,
+        tag: u64,
+        field_count: u32,
+    },
+
+    // ── Storage (2) ──
+    /// Read from persistent storage. Key is on the stack.
+    /// Produces `width` elements. Lowering maps to target-native storage.
+    StorageRead {
+        width: u32,
+    },
+    /// Write to persistent storage. Key and value(s) are on the stack.
+    /// Lowering maps to target-native storage.
+    StorageWrite {
+        width: u32,
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // Tier 2 — Provable
+    // Requires a proof-capable target. Sponge construction and Merkle
+    // authentication have no meaningful equivalent on conventional VMs.
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── Sponge (4) ──
+    SpongeInit,
+    SpongeAbsorb,
+    SpongeSqueeze,
+    SpongeAbsorbMem,
+
+    // ── Merkle (2) ──
+    MerkleStep,
+    MerkleStepMem,
+
+    // ═══════════════════════════════════════════════════════════════
+    // Tier 3 — Recursion
+    // STARK-in-STARK verification primitives. Extension field
+    // arithmetic and FRI folding steps. Currently Triton-only;
+    // any backend with recursive verification will need equivalents.
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── Extension field (2) ──
     ExtMul,
     ExtInvert,
+
+    // ── FRI folding (2) ──
     FriFold,
     FriBaseFold,
 }

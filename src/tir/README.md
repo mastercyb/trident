@@ -6,15 +6,15 @@ The compiler pipeline is: **parse -> typecheck -> TIRBuilder -> Lowering -> asse
 
 ## Structure
 
-- [`mod.rs`](mod.rs) — [`TIROp`](mod.rs:18) enum (~50 variants): core universal ops (stack, arithmetic, I/O, memory, crypto, control flow, abstract events/storage) plus a small set of target-specific ops (extension field). [`Display`](mod.rs:143) impl for debug printing.
+- [`mod.rs`](mod.rs) — [`TIROp`](mod.rs:18) enum (53 variants in 4 tiers): Tier 0 structure, Tier 1 universal (stack, arithmetic, I/O, memory, hash, events, storage), Tier 2 provable (sponge, merkle), Tier 3 recursion (extension field, FRI). [`Display`](mod.rs:186) impl for debug printing.
 - [`builder/`](builder/) — AST-to-IR translation (target-independent). See [builder/README.md](builder/README.md).
 - [`lower/`](lower/) — IR-to-assembly backends (target-specific). See [lower/README.md](lower/README.md).
 
 ## Key design
 
-TIROp uses **structural control flow** — `IfElse`, `IfOnly`, `Loop` carry nested `Vec<TIROp>` bodies so each backend can choose its own lowering strategy without a shared CFG.
+Higher tier = narrower target set. Tier 0 (structure) runs anywhere. Tier 1 (universal) compiles to every blockchain. Tier 2 (provable) requires proof-capable targets. Tier 3 (recursion) requires recursive verification.
 
-Abstract ops (`EmitEvent`, `SealEvent`, `StorageRead/Write`, `HashDigest`) keep the IR target-independent while backends map them to native instructions.
+Structural ops (`IfElse`, `IfOnly`, `Loop`) carry nested `Vec<TIROp>` bodies so each backend can choose its own control-flow lowering strategy. Abstract ops (`EmitEvent`, `StorageRead/Write`, `HashDigest`) keep the TIR target-independent while backends map them to native instructions.
 
 ## Dependencies
 

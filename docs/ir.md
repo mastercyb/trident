@@ -74,52 +74,14 @@ src/codegen/ir/                    ← backward-compatible re-exports only
 
 ## TIROp: The Operation Set
 
-`TIROp` is an enum with **53 variants** organized in three tiers plus a
-target-specific section. No target instructions (`skiz`, `recurse`, `if.true`,
-`proc`) appear in the IR.
+`TIROp` is an enum with **53 variants** in four tiers. Higher tier = narrower
+target set. No target instructions (`skiz`, `recurse`, `if.true`, `proc`)
+appear in the TIR.
 
-### Tier 1 — Core instructions (24 variants)
+### Tier 0 — Structure (13 variants)
 
-1:1 with stack machine primitives. Every backend maps these directly to
-native instructions.
-
-| Group | Variants | Notes |
-|-------|----------|-------|
-| **Stack** (5) | `Push(u64)` `PushNegOne` `Pop(u32)` `Dup(u32)` `Swap(u32)` | Indices from top (0 = TOS). Depth ≤ [`stack_depth`](../src/tools/target.rs:20) |
-| **Arithmetic** (12) | `Add` `Mul` `Eq` `Lt` `And` `Xor` `DivMod` `Invert` `Split` `Log2` `Pow` `PopCount` | Native field. `DivMod` → 2 values; `Split` → 2 u32 limbs |
-| **I/O** (3) | `ReadIo(u32)` `WriteIo(u32)` `Divine(u32)` | Public I/O and non-deterministic witness |
-| **Memory** (2) | `ReadMem(u32)` `WriteMem(u32)` | Address on stack, popped after access |
-| **Assertions** (2) | `Assert` `AssertVector` | Single element or word-width check |
-
-### Tier 2 — Abstract operations (12 variants)
-
-Semantic intent that each backend expands to its own native pattern. The IR
-says **what**, the lowering decides **how**.
-
-| Group | Variants | Intent |
-|-------|----------|--------|
-| **Hash** (6) | `Hash` `SpongeInit` `SpongeAbsorb` `SpongeSqueeze` `SpongeAbsorbMem` `HashDigest` | Cryptographic hashing and incremental sponge |
-| **Merkle** (2) | `MerkleStep` `MerkleStepMem` | Merkle tree verification |
-| **Events** (2) | `EmitEvent { name, tag, field_count }` `SealEvent { name, tag, field_count }` | Observable events and hash-sealed commitments |
-| **Storage** (2) | `StorageRead { width }` `StorageWrite { width }` | Persistent state access |
-
-How backends expand abstract ops:
-
-| Op | Triton | Miden | EVM (future) |
-|----|--------|-------|-------------|
-| `EmitEvent` | `push tag; write_io 1` per field | comment + `drop` | `LOG` + topic hash |
-| `SealEvent` | pad + `hash` + `write_io 5` | pad + `hperm` + `drop` | keccak + emit |
-| `StorageRead` | `read_mem` + `pop 1` | `mem_load` | `SLOAD` |
-| `StorageWrite` | `write_mem` + `pop 1` | `mem_store` | `SSTORE` |
-| `HashDigest` | `hash` | `hperm` | `KECCAK256` |
-
-Programs use `emit`, `seal`, `ram_read`, `hash` — the IR keeps them abstract,
-and each backend maps them to its native primitives.
-
-### Tier 3 — Structure & control flow (13 variants)
-
-Program organization and control flow. Structural ops carry nested bodies so
-each backend chooses its own lowering strategy.
+The scaffolding. Present in every program, on every target. Not
+blockchain-specific — just computation.
 
 | Group | Variants | Notes |
 |-------|----------|-------|
@@ -134,13 +96,49 @@ Each backend lowers structural ops differently:
 - **Miden**: emits inline `if.true / else / end`
 - **RISC-V**: could emit conditional branches to labels
 
-The condition/counter is already consumed from the stack when the structural op
-executes. Target filtering (`asm(triton) { }`) happens before IR building.
+### Tier 1 — Universal (30 variants)
 
-### Recursion extension (4 variants — STARK-in-STARK verification)
+Compiles to every blockchain target. Stack primitives, arithmetic, I/O,
+memory, hashing, events, storage.
 
-Extension field arithmetic and FRI folding steps required for **recursive
-proof verification** — verifying a STARK proof inside another STARK program.
+| Group | Variants | Notes |
+|-------|----------|-------|
+| **Stack** (5) | `Push(u64)` `PushNegOne` `Pop(u32)` `Dup(u32)` `Swap(u32)` | Indices from top (0 = TOS). Depth ≤ [`stack_depth`](../src/tools/target.rs:20) |
+| **Arithmetic** (12) | `Add` `Mul` `Eq` `Lt` `And` `Xor` `DivMod` `Invert` `Split` `Log2` `Pow` `PopCount` | Native field. `DivMod` → 2 values; `Split` → 2 u32 limbs |
+| **I/O** (3) | `ReadIo(u32)` `WriteIo(u32)` `Divine(u32)` | Public I/O and non-deterministic witness |
+| **Memory** (2) | `ReadMem(u32)` `WriteMem(u32)` | Address on stack, popped after access |
+| **Assertions** (2) | `Assert` `AssertVector` | Single element or word-width check |
+| **Hash** (2) | `Hash` `HashDigest` | Every target has some hash primitive |
+| **Events** (2) | `EmitEvent { name, tag, field_count }` `SealEvent { name, tag, field_count }` | Observable events and hash-sealed commitments |
+| **Storage** (2) | `StorageRead { width }` `StorageWrite { width }` | Persistent state access |
+
+How backends expand abstract Tier 1 ops:
+
+| Op | Triton | Miden | EVM (future) |
+|----|--------|-------|-------------|
+| `EmitEvent` | `push tag; write_io 1` per field | comment + `drop` | `LOG` + topic hash |
+| `SealEvent` | pad + `hash` + `write_io 5` | pad + `hperm` + `drop` | keccak + emit |
+| `StorageRead` | `read_mem` + `pop 1` | `mem_load` | `SLOAD` |
+| `StorageWrite` | `write_mem` + `pop 1` | `mem_store` | `SSTORE` |
+| `HashDigest` | `hash` | `hperm` | `KECCAK256` |
+
+### Tier 2 — Provable (6 variants)
+
+Requires a proof-capable target. Sponge construction and Merkle
+authentication have no meaningful equivalent on conventional VMs.
+
+| Group | Variants | Intent |
+|-------|----------|--------|
+| **Sponge** (4) | `SpongeInit` `SpongeAbsorb` `SpongeSqueeze` `SpongeAbsorbMem` | Incremental algebraic hashing for proof systems |
+| **Merkle** (2) | `MerkleStep` `MerkleStepMem` | Merkle tree authentication |
+
+Programs using these ops require `--target` with proof capability.
+The compiler can reject them when targeting conventional chains.
+
+### Tier 3 — Recursion (4 variants)
+
+STARK-in-STARK verification primitives. Extension field arithmetic and FRI
+folding steps required for recursive proof verification.
 
 ```
 ExtMul        — extension field multiply
@@ -156,8 +154,8 @@ use precompile syscalls. The math is universal — only the acceleration
 mechanism differs per backend.
 
 Currently only Triton provides native support. As backends gain recursion
-capabilities, these ops will generalize into abstract operations (like
-`EmitEvent`) where each backend supplies its own implementation.
+capabilities, these ops will generalize into abstract operations where
+each backend supplies its own implementation.
 
 ---
 
