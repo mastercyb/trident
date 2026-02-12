@@ -32,27 +32,7 @@ The fundamental asymmetry: proving is expensive (seconds to minutes), verificati
 
 ## 🛡️ 2. Verification Properties
 
-STARK verification provides three guarantees:
-
-### Completeness
-
-If the prover executed the program correctly, the resulting proof will always verify. A valid computation always produces a valid proof. There are no false negatives.
-
-### Soundness
-
-If the prover cheated -- computed the wrong result, fabricated outputs, or tampered with the execution -- the proof will be rejected with overwhelming probability. With 80 FRI queries, the probability of a forged proof passing verification is less than 2^(-80). There are no practical false positives.
-
-### Zero-Knowledge
-
-The proof reveals nothing beyond what the Claim explicitly states: the program digest, the public inputs, and the public outputs. Secret inputs, intermediate values, memory contents, control flow paths -- all hidden. The verifier learns exactly one thing: the computation was correct.
-
-### No Trusted Setup
-
-Unlike SNARK systems (Groth16, PLONK with KZG), STARK verification requires no trusted setup ceremony. There are no secret parameters, no "toxic waste" to destroy, and no ceremony to compromise. The verifier's challenges are derived from the proof transcript itself via the Fiat-Shamir transform. Anyone can verify the proof system's integrity by reading the specification.
-
-This is the "transparent" in STARK -- Scalable Transparent Argument of Knowledge.
-
-See [How STARK Proofs Work](../explanation/stark-proofs.md), Sections 6 and 9, for the technical foundations of FRI soundness and the transparent setup.
+STARK verification guarantees completeness, soundness, zero-knowledge, and transparency (no trusted setup). See [How STARK Proofs Work](../explanation/stark-proofs.md), Sections 6 and 9, for the technical foundations.
 
 ---
 
@@ -163,35 +143,7 @@ See [Vision](../explanation/vision.md) for the universal compilation architectur
 
 ## 🛡️ 7. Quantum Safety
 
-STARK proofs are secure against quantum computers. This is not a future migration plan -- it is a property of the current system.
-
-### What quantum computers threaten
-
-Shor's algorithm breaks the discrete logarithm problem, which underlies:
-
-- ECDSA (transaction signatures on most blockchains)
-- BN254 and BLS12-381 (elliptic curves used by Groth16 and KZG-based SNARKs)
-- Pasta curves (used by Mina and Aleo)
-
-The break is total and retroactive. Every Groth16 proof ever generated becomes forgeable. Every KZG commitment becomes extractable.
-
-### Why STARKs are immune
-
-STARK verification relies on exactly two primitives:
-
-1. **Hash collision resistance** -- finding collisions in Tip5 is computationally hard. Grover's algorithm provides at most a quadratic speedup, reducing 2^256 security to 2^128. Tip5's 320-bit output provides 160 bits of post-quantum collision resistance, well above the 128-bit security target.
-
-2. **FRI soundness** -- the proximity test correctly rejects data far from any low-degree polynomial. This is a combinatorial property of Reed-Solomon codes, not a number-theoretic assumption. Quantum computers offer no advantage.
-
-No elliptic curves. No pairings. No discrete logarithm. Proofs generated today remain secure against quantum computers whenever they arrive.
-
-| System | Prover Quantum-Safe | Verifier Quantum-Safe |
-|--------|:---:|:---:|
-| Triton VM (Trident's target) | Yes | Yes |
-| SP1, RISC Zero | Yes (FRI) | No (Groth16 wrapping) |
-| Aleo, Mina | No (Pasta curves) | No (Pasta curves) |
-
-See [How STARK Proofs Work](../explanation/stark-proofs.md), Section 10, for the full quantum safety analysis.
+STARK proofs are quantum-safe: security relies on hash collision resistance (Tip5) and FRI soundness, not elliptic curves. See [Provable Computing](../explanation/provable-computing.md) for the full quantum safety analysis and comparison table.
 
 ---
 

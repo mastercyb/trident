@@ -15,8 +15,6 @@ trident build main.tri -o out.tasm  # custom output path
 
 The resulting `.tasm` file is a complete, self-contained program in Triton VM's instruction set. To actually run it, you load the TASM into Triton VM. Trident itself has no `run` subcommand and no built-in interpreter -- it is purely a source-to-assembly compiler.
 
-The separation is deliberate. Triton VM execution produces an algebraic execution trace, which is what makes STARK proof generation possible. A Trident-side interpreter would bypass the trace machinery entirely, making it useless for proving.
-
 ## 📡 The I/O Model
 
 Triton VM programs have exactly two input channels and one output channel. There is no filesystem, no network, no environment variables.

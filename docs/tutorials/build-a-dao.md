@@ -14,27 +14,7 @@ balance, your identity, and your vote -- all hidden, all proven.
 
 ## 💡 The Governance Problem
 
-Every DAO on a transparent chain has the same flaw: everyone sees
-everything. Who voted. How much weight they carry. Which direction
-they chose.
-
-This enables three attacks that undermine governance:
-
-**Vote buying.** If your vote is public, someone can pay you to vote a
-certain way and verify you did. Private voting makes the receipt
-impossible -- the buyer cannot confirm delivery.
-
-**Social coercion.** Peers, employers, protocol teams -- anyone with
-social leverage can watch your vote and retaliate. When votes are hidden,
-coercion has no target.
-
-**Whale tracking.** Large holders are visible on transparent chains.
-Their votes move markets and invite front-running. Private voting hides
-the weight, not just the direction.
-
-Private voting fixes all three. The vote is proven valid -- the voter
-holds real coins, the weight is correct, the vote is counted exactly
-once -- without revealing anything about who cast it.
+On transparent chains, votes are public -- enabling vote buying, social coercion, and whale tracking. Private voting fixes all three: the vote is proven valid without revealing who cast it or in which direction.
 
 ---
 
@@ -271,40 +251,7 @@ update.
 
 ## 🧩 The Full Circle
 
-You started Chapter 1 with four lines:
-
-```trident
-let lock_hash: Digest = pub_read5()
-let secret: Field = divine()
-let computed: Digest = hash(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-assert_digest(computed, lock_hash)
-```
-
-Divine the secret. Hash it. Assert it matches. The verifier confirms
-without seeing.
-
-Six chapters later, you have built:
-
-- A private coin with five operations -- pay, lock, update, mint, burn
-  (Chapter 2)
-- A name service with ownership and resolver (Chapter 3)
-- A non-custodial AMM with hidden reserves (Chapter 4)
-- A sealed-bid auction with fair price discovery (Chapter 5)
-- Private governance where no one sees who voted (this chapter)
-
-Every single one is those same four lines with more context.
-
-The coin's `pay` operation: divine your auth key, hash it, assert it
-matches the account commitment. The name's `update` operation: divine
-your ownership key, hash it, assert it matches. The AMM's invariant
-check: divine the reserve position, compute the product, assert it
-holds. The auction's bid: divine the price, hash it, assert it matches
-the sealed commitment. The vote: divine your balance and identity, hash
-them into a leaf, assert the leaf exists in the tree.
-
-`divine()`. `hash()`. `assert()`.
-
-The secret changes. The context grows. The primitive never does.
+Six chapters. Six programs. One primitive: `divine()`, `hash()`, `assert()`. Every program -- coin, name, strategy, auction, vote -- is the Chapter 1 pattern with more context. The secret changes. The primitive never does.
 
 ---
 

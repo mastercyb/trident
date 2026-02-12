@@ -11,9 +11,6 @@ real system.
 
 ## 📦 What "Deployment" Means for ZK Programs
 
-If you are coming from smart contract development, "deploy" means sending
-bytecode to a chain and receiving an address. ZK programs work differently.
-
 A Trident program compiles to a `.tasm` file -- a sequence of Triton VM
 instructions. That file **is** the deployable artifact. There is no on-chain
 deployment transaction, no contract address, no ABI registry. Instead:

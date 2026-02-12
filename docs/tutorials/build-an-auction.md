@@ -21,29 +21,7 @@ price.
 
 ## 🧠 Why Vickrey
 
-A Vickrey auction is sealed-bid, second-price. Every bidder submits one
-bid in a sealed envelope. The highest bidder wins but pays the
-second-highest price. This has a remarkable property: **your dominant
-strategy is to bid exactly what the name is worth to you.**
-
-Why? If you bid below your true value, you risk losing to someone who
-values it less. If you bid above, you risk winning and paying more than
-it is worth. Bidding truthfully is always optimal, regardless of what
-anyone else does. This is called *incentive compatibility* -- the
-mechanism makes honesty the best strategy.
-
-ENS originally used a Vickrey auction for name sales. They moved away
-from it. The reason was not that Vickrey is wrong -- it is that
-commit-reveal on a transparent chain is imperfect. Commitments are
-visible on-chain. Sophisticated actors can infer bid ranges from
-gas patterns and timing. All bids are revealed in the reveal phase,
-leaking information for future auctions. MEV bots can manipulate
-reveal ordering.
-
-With ZK, none of these problems exist. Bid amounts are `divine()` --
-they never appear anywhere. Only the winner proves their bid exceeds
-the second price. Losing bids remain secret forever. The mechanism
-that was abandoned on transparent chains becomes perfect here.
+Sealed-bid, second-price: every bidder submits one secret bid. The highest bidder wins but pays the second-highest price. Your dominant strategy is to bid your true value -- bidding higher risks overpaying, bidding lower risks losing. With ZK, bids are genuinely hidden: `divine()` values that never leave the prover's machine.
 
 ---
 
@@ -256,52 +234,7 @@ name changed hands. No intermediary. No escrow. No trust.
 
 ## 💡 What Makes This Impossible Without ZK
 
-On Ethereum, ENS tried Vickrey auctions and abandoned them. The problems
-are fundamental to transparent execution:
-
-**Commit-reveal is imperfect.** Commitments are visible on-chain. A
-sophisticated actor can watch the mempool, count the number of commits,
-observe gas patterns, and infer information about bid distributions.
-If only two people commit, you know the second price is the lower of
-two bids -- the anonymity set is tiny.
-
-**All bids are revealed.** In the reveal phase, every bidder must publish
-their bid in plaintext. The entire market learns what every participant
-was willing to pay. This information feeds into future auctions, giving
-sophisticated actors an edge in valuation.
-
-**MEV extracts value.** Bots can reorder reveal transactions. They can
-front-run the reveal phase. They can grief bidders by submitting fake
-commitments to manipulate the perceived competition.
-
-**The result: ENS switched to a simple ascending auction.** Not because
-ascending auctions are better in theory -- they are worse -- but because
-the transparent execution environment made Vickrey unworkable in
-practice.
-
-With Trident, every one of these problems vanishes:
-
-**Bid amounts are `divine()`.** They exist only in the prover's memory.
-There is no on-chain data to analyze, no gas pattern to decode, no
-mempool to watch. The commitment is a hash. The preimage is invisible.
-
-**Only the winner proves.** Losing bidders never execute the reveal
-program. Their bids are not just encrypted -- they are never computed
-outside the bidder's machine. There is nothing to decrypt, nothing to
-reveal, nothing to subpoena.
-
-**No MEV surface.** The reveal proof is a STARK. It is valid or it is
-not. There is no ordering dependency. There is no front-running
-opportunity. The proof is a mathematical fact, and mathematical facts
-do not care about transaction ordering.
-
-**The losing bids stay secret forever.** Not until the reveal phase. Not
-until the auction ends. Not until the blockchain is archived. Forever.
-The data never existed in any public form.
-
-The mechanism that failed on transparent chains works perfectly here. ZK
-does not just improve Vickrey -- it makes Vickrey possible for the first
-time in an adversarial, permissionless environment.
+On transparent chains, commit-reveal leaks information: commitment counts, gas patterns, and the full reveal phase expose all bids. With Trident, bid amounts are `divine()` -- they exist only in the prover's memory. Only the winner proves. Losing bids stay secret forever.
 
 ---
 

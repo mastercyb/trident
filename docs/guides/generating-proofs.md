@@ -239,30 +239,7 @@ capability is real and functional today.
 
 ## 📊 7. Proof Size and Performance
 
-**Proof size.** STARK proofs are approximately 100 KB. This is larger than
-SNARK proofs (which are typically under 1 KB) but comes with two important
-advantages: STARKs require **no trusted setup** (no ceremony, no toxic waste)
-and are **quantum-safe** (security relies on hash functions, not elliptic curve
-assumptions).
-
-**Proving time.** Scales with the padded height of the execution trace. A
-program whose tallest table has 1,000 rows (padded to 1,024) proves in
-seconds. A program with 1,000,000 rows (padded to 1,048,576) takes
-proportionally longer. The exact relationship depends on hardware, but the
-scaling is roughly linear in padded height.
-
-**Verification time.** Constant with respect to program complexity --
-milliseconds regardless of whether the original computation took seconds or
-hours. This asymmetry between proving cost and verification cost is the
-fundamental property that makes the system useful.
-
-**Memory.** The prover must hold the entire execution trace and its polynomial
-representation in memory. For large programs, this can be substantial. Reducing
-the padded height reduces memory proportionally.
-
-For the full mathematical details -- why proofs are this size, why verification
-is fast, why no trusted setup is needed -- see
-[How STARK Proofs Work](../explanation/stark-proofs.md).
+STARK proofs are ~100 KB, verification takes milliseconds regardless of computation size, and proving scales linearly with padded height. See [How STARK Proofs Work](../explanation/stark-proofs.md) for size/performance details and STARK vs SNARK comparisons.
 
 ---
 
