@@ -571,7 +571,7 @@ itself.
 
 ---
 
-## 🔗 8. Links
+## 🔗 8. See Also
 
 - [Tutorial](../tutorials/tutorial.md) -- Getting started with Trident, including first use of `trident hash` and `trident ucm`
 - [Formal Verification](formal-verification.md) -- How verification works, including how results are cached by content hash

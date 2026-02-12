@@ -928,16 +928,16 @@ trident build examples/coin/coin.tri --hotspots
 
 ### 5. Full Walkthrough
 
-Read the [Tutorial](tutorial.md) for a complete step-by-step guide covering
+Read the [Tutorial](../tutorials/tutorial.md) for a complete step-by-step guide covering
 types, functions, modules, I/O, hashing, events, testing, and cost analysis.
 
 ---
 
-## 🔗 Further Reading
+## 🔗 See Also
 
 ### Trident documentation
 
-- [Tutorial](tutorial.md) -- Step-by-step Trident developer guide
+- [Tutorial](../tutorials/tutorial.md) -- Step-by-step Trident developer guide
 - [Language Reference](../reference/language.md) -- Quick lookup: types, operators, builtins, grammar
 - [Target Reference](../reference/targets.md) -- OS model, integration tracking, how-to-add checklists
 - [Deploying a Program](../guides/deploying-a-program.md) -- Neptune UTXO scripts, lock/type scripts, multi-target deployment

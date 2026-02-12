@@ -194,7 +194,7 @@ event Transfer { from: Digest, to: Digest, amount: Field }
 
 Events are declared at module scope. Fields must be `Field`-width types.
 Maximum 9 fields. Events are emitted with `reveal` (public) or `seal`
-(committed) — see [Part II: Events](#15-events).
+(committed) — see [Part II: Events](#10-events).
 
 ### Constants
 

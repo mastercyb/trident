@@ -788,7 +788,7 @@ end-to-end proving and verification.
 
 ---
 
-## 🔗 Links
+## 🔗 See Also
 
 - [Tutorial](../tutorials/tutorial.md) — Getting started, including `asm(triton)` blocks
 - [Language Reference](../reference/language.md) — Complete syntax and semantics

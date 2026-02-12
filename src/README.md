@@ -34,7 +34,7 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 | [`common/`](common/) | 314 | Shared infrastructure: [source spans](common/span.rs), [diagnostics](common/diagnostic.rs), [type definitions](common/types.rs) |
 | [`frontend/`](frontend/) | 4,392 | [Lexer](frontend/lexer.rs), [parser](frontend/parser.rs), [token definitions](frontend/lexeme.rs), [pretty-printer/formatter](frontend/format.rs) |
 | [`typecheck/`](typecheck/) | 3,004 | [Type checker](typecheck/mod.rs) with borrow analysis, generics, and [builtin registration](typecheck/builtins.rs) |
-| [`legacy/`](legacy/) | 4,189 | Old AST-to-assembly [emitter](legacy/emitter.rs), [backend trait](legacy/backend/) (deprecated) |
+| [`legacy/`](legacy/) | 4,189 | Old AST-to-assembly [emitter](legacy/emitter/), [backend trait](legacy/backend/) (deprecated) |
 | [`stack.rs`](stack.rs) | — | LRU [stack manager](stack.rs) with automatic RAM spill/reload |
 | [`linker.rs`](linker.rs) | — | Multi-module [linker](linker.rs) for cross-module calls |
 | [`legacy/backend/`](legacy/backend/) | 802 | [`StackBackend`](legacy/backend/mod.rs) trait + five targets: [Triton](legacy/backend/triton.rs), [Miden](legacy/backend/miden.rs), [OpenVM](legacy/backend/openvm.rs), [SP1](legacy/backend/sp1.rs), [Cairo](legacy/backend/cairo.rs) |
@@ -59,7 +59,7 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 
 **Type Checking** ([`typecheck/`](typecheck/)). The [type checker](typecheck/mod.rs) validates types, resolves generics via monomorphization, performs borrow/move analysis, and registers builtin function signatures ([`builtins.rs`](typecheck/builtins.rs)). Diagnostics are emitted for type mismatches, undefined variables, unused bindings, and borrow violations.
 
-**Legacy Code Generation** ([`legacy/`](legacy/)). The old [emitter](legacy/emitter.rs) walks the typed AST and produces target assembly by calling methods on a [`StackBackend`](legacy/backend/mod.rs) trait. Each target ([Triton](legacy/backend/triton.rs), [Miden](legacy/backend/miden.rs), [OpenVM](legacy/backend/openvm.rs), [SP1](legacy/backend/sp1.rs), [Cairo](legacy/backend/cairo.rs)) implements this trait in its own file. Deprecated — kept only for comparison tests against the new TIR pipeline. The [stack manager](stack.rs) tracks operand positions with automatic RAM spill/reload. The [linker](linker.rs) resolves cross-module calls.
+**Legacy Code Generation** ([`legacy/`](legacy/)). The old [emitter](legacy/emitter/) walks the typed AST and produces target assembly by calling methods on a [`StackBackend`](legacy/backend/mod.rs) trait. Each target ([Triton](legacy/backend/triton.rs), [Miden](legacy/backend/miden.rs), [OpenVM](legacy/backend/openvm.rs), [SP1](legacy/backend/sp1.rs), [Cairo](legacy/backend/cairo.rs)) implements this trait in its own file. Deprecated — kept only for comparison tests against the new TIR pipeline. The [stack manager](stack.rs) tracks operand positions with automatic RAM spill/reload. The [linker](linker.rs) resolves cross-module calls.
 
 **Cost Analysis** ([`cost/`](cost/)). The [analyzer](cost/analyzer.rs) walks the AST and sums per-instruction costs using a target-specific [`CostModel`](cost/model/mod.rs). The [report module](cost/report.rs) formats results, generates optimization hints, and provides JSON serialization for `--compare` workflows.
 
@@ -83,4 +83,4 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 - Code generation output validation per backend
 - Cost model accuracy checks
 - LSP protocol compliance
-- CLI integration tests (20 subprocess tests in [`tests/cli_tests.rs`](../tests/cli_tests.rs))
+- CLI integration tests (20 subprocess tests, formerly in `tests/cli_tests.rs` -- now removed)

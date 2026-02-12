@@ -310,8 +310,7 @@ Only if using the legacy emitter pipeline. New VMs should prefer L3.
 - [VM Reference](vm.md) — VM registry, lowering paths, tier/type/builtin tables, cost models
 - [OS Reference](os.md) — OS concepts, `os.*` gold standard, extensions
 - [Standard Library](stdlib.md) — `std.*` modules
-- [Language Reference](language.md) — Types, operators, builtins, grammar
-- [Language Reference](language.md) — Types, operators, builtins, sponge, Merkle, extension field
+- [Language Reference](language.md) — Types, operators, builtins, grammar, sponge, Merkle, extension field, proof composition
 - [IR Reference](ir.md) — 54 operations, 4 tiers, lowering paths
 - [CLI Reference](cli.md) — Compiler commands and flags
 - [Error Catalog](errors.md) — All compiler error messages explained

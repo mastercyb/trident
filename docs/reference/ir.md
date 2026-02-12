@@ -382,9 +382,8 @@ src/legacy/                        ← old emitter (deprecated, comparison tests
 
 ## 🔗 See Also
 
-- [Language Reference](language.md) — Types, operators, builtins, grammar
+- [Language Reference](language.md) — Types, operators, builtins, grammar, sponge, Merkle, extension field, proof composition
 - [Target Reference](targets.md) — OS model, integration tracking, how-to-add checklists
-- [Language Reference](language.md) — Types, operators, builtins, sponge, Merkle, extension field
 - [CLI Reference](cli.md) — Compiler commands and flags
 - [Error Catalog](errors.md) — All compiler error messages explained
 

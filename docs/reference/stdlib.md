@@ -202,8 +202,7 @@ fn process(sender: Digest, receiver: Digest, value: Field) {
 ## 🔗 See Also
 
 - [OS Reference](os.md) — `os.*` portable layer, neuron/signal/token model, extensions
-- [Language Reference](language.md) — Core language (types, operators, statements)
-- [Language Reference](language.md) — Types, operators, builtins, sponge, Merkle, proof composition
+- [Language Reference](language.md) — Types, operators, builtins, grammar, sponge, Merkle, extension field, proof composition
 - [VM Reference](vm.md) — VM registry, tier/type/builtin tables
 - [CLI Reference](cli.md) — Compiler commands and flags
 - [Grammar](grammar.md) — EBNF grammar

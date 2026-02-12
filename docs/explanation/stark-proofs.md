@@ -873,7 +873,7 @@ Cross-reference: [vision.md](vision.md) "Recursive STARK Verification",
 
 ---
 
-## 🔗 13. Further Reading
+## 🔗 13. See Also
 
 ### Academic papers
 

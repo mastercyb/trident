@@ -45,8 +45,8 @@ The legacy module translates a type-checked AST into target assembly for stack-m
 | File | LOC | Role |
 |------|-----|------|
 | [emitter/](emitter/) | 2,035 | AST walker — the core of code generation (see below) |
-| [stack.rs](stack.rs) | 474 | LRU-based stack manager with automatic RAM spill/reload |
-| [linker.rs](linker.rs) | 134 | Multi-module linker with label mangling |
+| [stack.rs](../stack.rs) | 474 | LRU-based stack manager with automatic RAM spill/reload |
+| [linker.rs](../linker.rs) | 134 | Multi-module linker with label mangling |
 | [backend/](backend/) | 703 | StackBackend trait + 5 target implementations |
 
 ### Emitter Modules
@@ -81,7 +81,7 @@ Key responsibilities:
 
 ## Stack Manager
 
-[stack.rs](stack.rs) implements an LRU-based operand stack model. Stack-machine VMs have a fixed operand stack depth (typically 16 elements). When the program has more live variables than slots, the manager automatically:
+[stack.rs](../stack.rs) implements an LRU-based operand stack model. Stack-machine VMs have a fixed operand stack depth (typically 16 elements). When the program has more live variables than slots, the manager automatically:
 
 1. Identifies the **least-recently-used** named variable
 2. **Spills** it to RAM using target-specific instructions (via `SpillFormatter`)
@@ -91,7 +91,7 @@ The manager tracks named variables and anonymous temporaries separately — temp
 
 ## Linker
 
-[linker.rs](linker.rs) combines multiple module outputs into a single program. Each module's labels are mangled with a module prefix (`crypto.sponge` → `crypto_sponge__`) to avoid collisions. The linker:
+[linker.rs](../linker.rs) combines multiple module outputs into a single program. Each module's labels are mangled with a module prefix (`crypto.sponge` → `crypto_sponge__`) to avoid collisions. The linker:
 
 1. Emits the entry point (`call modname__main` + `halt`)
 2. Concatenates each module's assembly with mangled labels

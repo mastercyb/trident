@@ -427,8 +427,7 @@ See each OS doc for the full API reference.
 - [Target Reference](targets.md) — OS model, integration tracking, how-to-add checklists
 - [VM Reference](vm.md) — VM registry, lowering paths, tier/type/builtin tables, cost models
 - [Standard Library](stdlib.md) — `std.*` modules
-- [Language Reference](language.md) — Types, operators, builtins, grammar
-- [Language Reference](language.md) — Types, operators, builtins, sponge, Merkle, extension field
+- [Language Reference](language.md) — Types, operators, builtins, grammar, sponge, Merkle, extension field, proof composition
 - Per-OS docs: `os/<os>/README.md`
 
 ---

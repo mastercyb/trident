@@ -1,6 +1,6 @@
 # Backends
 
-This directory implements the `StackBackend` trait and its five target-specific implementations. The trait is the single abstraction boundary between Trident's target-independent code generation logic (the [Emitter](../emitter.rs)) and the instruction sets of individual stack-machine VMs.
+This directory implements the `StackBackend` trait and its five target-specific implementations. The trait is the single abstraction boundary between Trident's target-independent code generation logic (the [Emitter](../emitter/)) and the instruction sets of individual stack-machine VMs.
 
 ## StackBackend Trait
 

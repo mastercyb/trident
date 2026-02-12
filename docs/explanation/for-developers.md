@@ -614,11 +614,11 @@ target that supports the same feature set.
 
 ---
 
-## 🔗 13. Further Reading
+## 🔗 13. See Also
 
 ### Trident documentation
 
-- [Tutorial](tutorial.md) -- Step-by-step guide: types, functions, modules,
+- [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide: types, functions, modules,
   I/O, hashing, events, testing, cost analysis
 - [Language Reference](../reference/language.md) -- Quick lookup: types, operators,
   builtins, grammar, CLI flags

@@ -540,7 +540,7 @@ checking currently requires manual unrolling or relies on the synthesizer.
 
 ---
 
-## 🔗 Links
+## 🔗 See Also
 
 - [Tutorial](../tutorials/tutorial.md) -- getting started with Trident programs
 - [Language Reference](../reference/language.md) -- complete syntax and type reference, including `#[pure]` and specification annotations
