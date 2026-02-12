@@ -672,17 +672,7 @@ and the timeline uncertain. STARK proofs are already post-quantum by
 construction. The proofs generated today will remain secure against quantum
 computers whenever they arrive.
 
-| System | Prover Quantum-Safe | Verifier Quantum-Safe | Migration Path |
-|--------|:---:|:---:|---|
-| StarkWare/Stwo | Yes (Circle STARKs) | Yes (native STARK) | None needed |
-| SP1 | Yes (FRI) | **No** (Groth16/BN254) | Fundamental redesign |
-| RISC Zero | Yes (0STARK) | **No** (Groth16/BN254) | Fundamental redesign |
-| Aleo | **No** (Pasta curves) | **No** (Pasta curves) | Complete crypto migration |
-| Mina | **No** (Pasta curves) | **No** (Pasta curves) | Complete crypto migration |
-| **Triton VM** | **Yes** (FRI + Tip5) | **Yes** (native STARK) | **None needed** |
-
-Cross-reference: [vision.md](vision.md) "Quantum Safety Is Not Optional" for
-the full argument and comparison table.
+See [Comparative Analysis](provable-computing.md#-42-quantum-safety) for the full quantum safety comparison across all ZK systems. Summary: Triton VM uses FRI + Tip5 — no elliptic curves. Both prover and verifier are quantum-safe. No migration needed.
 
 ---
 
@@ -775,17 +765,7 @@ included automatically in the compiler's cost estimates.
 
 ### Hash performance across systems
 
-The cost of a single hash operation varies dramatically across ZK systems:
-
-| System | Hash function | Cost per hash | Relative cost |
-|--------|--------------|---------------|:---:|
-| Triton VM | Tip5 (native) | 1 cc + 6 hash rows | **1x** |
-| StarkWare | Poseidon (native) | ~5-10 cc | ~5-10x |
-| SP1 | SHA-256 (software) | ~3,000+ cc | ~3,000x |
-| RISC Zero | SHA-256 (accelerated) | ~1,000 cc | ~1,000x |
-
-For hash-heavy workloads -- Merkle tree operations, sponge hashing, content
-addressing -- this difference dominates total proving cost.
+See [Comparative Analysis](provable-computing.md#44-hash-performance-critical-for-graph-operations) for hash cost benchmarks. Triton VM's Tip5 costs 1 clock cycle + 6 hash rows -- 1,000-3,000x cheaper than general-purpose VMs.
 
 Cross-reference: [vm.md](../reference/vm.md) for the complete cost model,
 [optimization.md](../guides/optimization.md) for cost reduction strategies.

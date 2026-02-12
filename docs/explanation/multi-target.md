@@ -794,8 +794,7 @@ end-to-end proving and verification.
 - [Language Reference](../reference/language.md) — Complete syntax and semantics
 - [IR Reference](../reference/ir.md) — Full lowering architecture
 - [Target Reference](../reference/targets.md) — OS model, integration tracking, how-to-add checklists
-- [OS Abstraction](os-abstraction.md) — How Trident abstracts over 25 operating systems
-- [Programming Model](programming-model.md) — Bounded execution, cost transparency, auditability
+- [Programming Model](programming-model.md) — Execution model, OS abstraction, six concerns
 - [Content-Addressed Code](content-addressing.md) — How target-independent hashing works
 - [Comparative Analysis](provable-computing.md) — Proving cost estimation and zkVM comparison
 - [Compiling a Program](../guides/compiling-a-program.md) — `--target` flag and build pipeline

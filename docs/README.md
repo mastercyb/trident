@@ -64,8 +64,7 @@ Per-target documentation lives alongside its config:
 |----------|-------------|
 | [Vision](explanation/vision.md) | Why Trident exists |
 | [Multi-Target Compilation](explanation/multi-target.md) | One source, every chain |
-| [OS Abstraction](explanation/os-abstraction.md) | How Trident abstracts over 25 operating systems |
-| [Programming Model](explanation/programming-model.md) | Execution model and stack semantics |
+| [Programming Model](explanation/programming-model.md) | Execution model, OS abstraction, six concerns |
 | [How STARK Proofs Work](explanation/stark-proofs.md) | From traces to quantum-safe proofs |
 | [Provable Computing](explanation/provable-computing.md) | Comparative analysis of ZK systems |
 | [Formal Verification](explanation/formal-verification.md) | Symbolic execution, SMT, invariant synthesis |

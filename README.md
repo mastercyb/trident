@@ -321,11 +321,10 @@ Full index: [docs/README.md](docs/README.md)
 
 - [Vision](docs/explanation/vision.md) — Why Trident exists and why it matters
 - [Multi-Target Compilation](docs/explanation/multi-target.md) — One source, every chain
-- [Programming Model](docs/explanation/programming-model.md) — Execution model and stack semantics
+- [Programming Model](docs/explanation/programming-model.md) — Execution model, OS abstraction, six concerns
 - [How STARK Proofs Work](docs/explanation/stark-proofs.md) — From traces to quantum-safe proofs
 - [Formal Verification](docs/explanation/formal-verification.md) — Symbolic execution and correctness proofs
 - [Content-Addressed Code](docs/explanation/content-addressing.md) — Code identity by computation
-- [OS Abstraction](docs/explanation/os-abstraction.md) — How Trident abstracts over 25 operating systems
 - [Comparative Analysis](docs/explanation/provable-computing.md) — Trident vs every other ZK system
 - [Gold Standard](docs/explanation/gold-standard.md) — Token standards (TSP-1, TSP-2) and capability library (PLUMB framework)
 

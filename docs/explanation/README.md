@@ -13,8 +13,7 @@ it does, for readers who want the full picture.
 |----------|-------------|
 | [Vision](vision.md) | Why Trident exists |
 | [Multi-Target Compilation](multi-target.md) | One source, every chain |
-| [OS Abstraction](os-abstraction.md) | How Trident abstracts over 25 operating systems |
-| [Programming Model](programming-model.md) | Execution model and stack semantics |
+| [Programming Model](programming-model.md) | Execution model, OS abstraction, six concerns |
 
 ## 🔐 Provable Computation
 

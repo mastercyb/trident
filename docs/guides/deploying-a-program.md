@@ -241,10 +241,7 @@ produces no proof at all (the VM crashes on assertion failure).
 trident build main.tri --costs
 ```
 
-The `--costs` flag prints a breakdown across all six Triton VM tables
-(Processor, Hash, U32, Op Stack, RAM, Jump Stack). The padded height -- the
-next power of two of the tallest table -- determines actual STARK proving time
-and memory. Understand this number before deploying.
+Proving cost depends on six Triton VM execution tables. See [Optimization Guide](optimization.md) for the full table model and reduction strategies. The padded height -- the next power of two of the tallest table -- determines actual STARK proving time and memory. Understand this number before deploying.
 
 ```bash
 trident build main.tri --hotspots    # Top cost contributors

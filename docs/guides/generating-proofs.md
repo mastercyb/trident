@@ -91,18 +91,7 @@ for the full execution model.
 
 ## ⚡ 3. Understanding Proving Cost
 
-Proving time and memory are determined by one number: the **padded height**.
-
-Triton VM records the execution trace across six tables (Processor, Hash, U32,
-Op Stack, RAM, Jump Stack). Each table grows independently depending on what
-instructions the program executes. The prover must pad all tables to the same
-height -- the next power of 2 of the *tallest* table. This padded height
-dominates proving cost: time scales roughly linearly with it, and memory
-scales similarly.
-
-This has a critical practical consequence: **only the tallest table matters.**
-Reducing a table that is already shorter than the tallest has zero effect on
-proving time. Reducing the tallest table is the only optimization that counts.
+Proving time and memory are determined by one number: the **padded height** -- the next power of 2 above the tallest of Triton VM's six execution tables. Only the tallest table matters; reducing a shorter table has zero effect on proving time. See [Optimization Guide](optimization.md) for the full table model, padded height mechanics, and reduction strategies.
 
 ### Measuring Cost with Trident
 

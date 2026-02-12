@@ -168,7 +168,7 @@ Catches type errors, undefined variables, arity mismatches, and unreachable code
 trident build main.tri --costs
 ```
 
-Prints a table showing proving cost across all six Triton VM constraint tables (Processor, Hash, U32, Op Stack, RAM, Jump Stack). The padded height -- the next power of two of the tallest table -- determines actual STARK proving cost.
+Prints a table showing proving cost across all six Triton VM constraint tables. See [Optimization Guide](optimization.md) for the full table model and reduction strategies. The padded height -- the next power of two of the tallest table -- determines actual STARK proving cost.
 
 ### Per-Line Annotations
 

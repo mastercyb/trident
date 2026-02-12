@@ -173,16 +173,7 @@ Trident can estimate proving cost statically -- without executing the program. T
 
 ### The Six Triton VM Tables
 
-When targeting Triton VM, proving cost is determined by [six execution tables](../explanation/stark-proofs.md). The STARK prover must pad the tallest table to the next power of two, so proving cost is dominated by whichever table is tallest:
-
-| Table | Grows With |
-|-------|-----------|
-| **Processor** | Every instruction executed (loop iterations, function calls) |
-| **Hash** | Every `hash` / `tip5` call (6 rows per hash permutation) |
-| **U32** | Range checks and bitwise operations (`as_u32`, `split`, `&`, `^`) |
-| **Op Stack** | Stack underflow handling (deep variable access, large structs) |
-| **RAM** | Memory reads and writes (array indexing, struct fields, spilling) |
-| **Jump Stack** | Function calls and returns, if/else branches |
+Proving cost depends on six Triton VM execution tables. See [Optimization Guide](optimization.md) for the full table model and reduction strategies.
 
 ### Cost Flags
 
