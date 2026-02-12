@@ -1,4 +1,4 @@
-# Triton VM
+# TRITON
 
 [← Target Reference](../targets.md)
 

@@ -1,4 +1,4 @@
-# MoveVM
+# MOVEVM
 
 [← Target Reference](../targets.md)
 

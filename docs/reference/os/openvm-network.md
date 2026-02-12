@@ -1,6 +1,6 @@
 # OpenVM Network — Operating System
 
-[← Target Reference](../targets.md) | VM: [OpenVM](../vm/openvm.md)
+[← Target Reference](../targets.md) | VM: [OPENVM](../vm/openvm.md)
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Parameter | Value |
 |---|---|
-| VM | OpenVM |
+| VM | OPENVM |
 | Runtime binding | `ext.openvm.*` |
 | Account model | Journal I/O |
 | Storage model | No persistent storage |
@@ -22,7 +22,7 @@
 
 ## Notes
 
-OpenVM is a modular zkVM framework with configurable extensions. Programs
+OPENVM is a modular zkVM framework with configurable extensions. Programs
 execute in a zero-knowledge proving environment — there is no persistent
 on-chain storage in the traditional sense. Instead, programs read inputs
 and produce outputs via a journal mechanism.
@@ -35,5 +35,5 @@ of the verifiable proof.
 Cost is measured in cycles — the number of VM execution steps, which
 directly determines proof generation time and size.
 
-For OpenVM details (instruction set, lowering path, bytecode format),
+For OPENVM details (instruction set, lowering path, bytecode format),
 see [openvm.md](../vm/openvm.md).

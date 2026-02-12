@@ -1,8 +1,8 @@
 # Sui
 
-[← Target Reference](../targets.md) | VM: [MoveVM](../vm/movevm.md)
+[← Target Reference](../targets.md) | VM: [MOVEVM](../vm/movevm.md)
 
-Sui is the object-centric blockchain powered by MoveVM. Trident compiles
+Sui is the object-centric blockchain powered by MOVEVM. Trident compiles
 to Move bytecode (`.mv`) and links against `ext.sui.*` for Sui-specific
 runtime bindings. Sui's unique contribution is the object model -- state
 is organized as objects with explicit ownership, enabling parallel
@@ -14,7 +14,7 @@ execution without global locks.
 
 | Parameter | Value |
 |---|---|
-| VM | MoveVM |
+| VM | MOVEVM |
 | Runtime binding | `ext.sui.*` |
 | Account model | Object-centric (ownership graph) |
 | Storage model | Object store |

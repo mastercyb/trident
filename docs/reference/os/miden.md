@@ -1,6 +1,6 @@
 # Polygon Miden
 
-[← Target Reference](../targets.md) | VM: [Miden VM](../vm/miden.md)
+[← Target Reference](../targets.md) | VM: [MIDEN](../vm/miden.md)
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Parameter | Value |
 |---|---|
-| VM | Miden VM |
+| VM | MIDEN |
 | Runtime binding | `ext.miden.*` |
 | Account model | Account |
 | Storage model | Merkle-authenticated |

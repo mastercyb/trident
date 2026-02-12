@@ -3,7 +3,7 @@
 
 [target]
 name = "aztec"
-display_name = "Aztec (Noir)"
+display_name = "AZTEC"
 architecture = "circuit"
 output_extension = ".acir"
 

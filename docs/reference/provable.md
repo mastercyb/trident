@@ -8,7 +8,7 @@ Proof-capable targets only. No meaningful equivalent on non-provable targets.
 
 Two capabilities: incremental algebraic hashing (sponge + Merkle) and
 extension field arithmetic. Programs using any Tier 2 feature cannot compile
-for Tier 1-only targets (SP1, OpenVM, Cairo).
+for Tier 1-only targets (SP1, OPENVM, CAIRO).
 See [targets.md](targets.md) for tier compatibility.
 
 Note: `hash()` is Tier 1 (universal) and documented in
@@ -20,7 +20,7 @@ Note: `hash()` is Tier 1 (universal) and documented in
 
 The sponge API enables incremental hashing of data larger than R fields.
 Initialize, absorb in chunks, squeeze the result. The rate R is
-target-dependent: 10 on Triton VM, 8 on Miden.
+target-dependent: 10 on TRITON, 8 on MIDEN.
 
 | Signature | IR op | Description |
 |-----------|-------|-------------|
@@ -56,7 +56,7 @@ pub fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
 
 ## Extension Field
 
-The extension field extends `Field` to degree E (E = 3 on Triton VM and Nock).
+The extension field extends `Field` to degree E (E = 3 on TRITON and NOCK).
 Only available on targets where `xfield_width > 0`.
 
 ### Type
@@ -89,7 +89,7 @@ Note: The `*.` operator (scalar multiply) maps to `ExtMul` in the IR.
 
 ## Proof Composition (Tier 3)
 
-Proofs that verify other proofs. **Triton VM and Nock only.**
+Proofs that verify other proofs. **TRITON and NOCK only.**
 
 Tier 3 enables a program to verify another program's proof inside its own
 execution. This is STARK-in-STARK recursion: the verifier circuit runs as
@@ -111,7 +111,7 @@ Tier 3 uses the extension field builtins above plus dedicated IR operations:
 
 See [ir.md Part I, Tier 3](ir.md) for the full list of 5 recursive operations.
 
-Only Triton VM and Nock support Tier 3. Programs using proof composition
+Only TRITON and NOCK support Tier 3. Programs using proof composition
 cannot compile for any other target.
 
 ---

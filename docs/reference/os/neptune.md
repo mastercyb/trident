@@ -1,9 +1,9 @@
 # Neptune
 
-[← Target Reference](../targets.md) | VM: [Triton VM](../vm/triton.md)
+[← Target Reference](../targets.md) | VM: [TRITON](../vm/triton.md)
 
-Neptune is the provable blockchain powered by Triton VM. Programs produce
-STARK proofs of correct execution. Same bytecode output as bare Triton VM
+Neptune is the provable blockchain powered by TRITON. Programs produce
+STARK proofs of correct execution. Same bytecode output as bare TRITON
 (`.tasm`), but with OS-level runtime bindings for UTXOs, transaction
 kernels, and recursive proof composition.
 
@@ -13,7 +13,7 @@ kernels, and recursive proof composition.
 
 | Parameter | Value |
 |---|---|
-| VM | Triton VM |
+| VM | TRITON |
 | Runtime binding | `ext.neptune.*` |
 | Account model | UTXO |
 | Storage model | Merkle-authenticated |
@@ -191,7 +191,7 @@ reveal Transfer { from: sender, to: receiver, amount: value }
 seal Transfer { from: sender, to: receiver, amount: value }
 ```
 
-`seal` requires Tier 2 sponge support (native on Triton VM).
+`seal` requires Tier 2 sponge support (native on TRITON).
 
 Announcements are used for UTXO notifications:
 - `message[0]` = key type flag (79 = Generation, 80 = Symmetric)

@@ -1,6 +1,6 @@
 # Nervos CKB — Operating System
 
-[← Target Reference](../targets.md) | VM: [CKB-VM](../vm/ckb.md)
+[← Target Reference](../targets.md) | VM: [CKB](../vm/ckb.md)
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Parameter | Value |
 |---|---|
-| VM | CKB-VM |
+| VM | CKB |
 | Runtime binding | `ext.nervos.*` |
 | Account model | Cell (UTXO-like: lock scripts + type scripts) |
 | Storage model | Cell-based |
@@ -29,11 +29,11 @@ consume a cell; type scripts enforce invariants on cell data transformations.
 
 This model provides strong isolation between contracts and enables off-chain
 computation patterns — scripts only need to verify state transitions, not
-compute them. CKB-VM executes RISC-V instructions directly, so any language
+compute them. CKB executes RISC-V instructions directly, so any language
 that compiles to RISC-V can target Nervos.
 
 Cost is measured in cycles, corresponding to the number of RISC-V instructions
 executed plus syscall overhead.
 
-For CKB-VM details (instruction set, lowering path, bytecode format),
+For CKB details (instruction set, lowering path, bytecode format),
 see [ckb.md](../vm/ckb.md).

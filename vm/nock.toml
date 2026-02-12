@@ -3,7 +3,7 @@
 
 [target]
 name = "nock"
-display_name = "Nock"
+display_name = "NOCK"
 architecture = "tree"
 output_extension = ".jam"
 

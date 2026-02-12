@@ -1,4 +1,4 @@
-# AVM (Aleo Virtual Machine) / Leo
+# AVM — Aleo Virtual Machine
 
 [← Target Reference](../targets.md)
 

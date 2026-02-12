@@ -3,7 +3,7 @@
 
 [target]
 name = "jolt"
-display_name = "Jolt"
+display_name = "JOLT"
 architecture = "register"
 output_extension = ".elf"
 

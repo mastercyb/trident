@@ -1,6 +1,6 @@
 # Aleo
 
-[← Target Reference](../targets.md) | VM: [AVM/Leo](../vm/leo.md)
+[← Target Reference](../targets.md) | VM: [AVM](../vm/avm.md)
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Parameter | Value |
 |---|---|
-| VM | AVM/Leo |
+| VM | AVM |
 | Runtime binding | `ext.aleo.*` |
 | Account model | Record (UTXO-like private state) |
 | Storage model | On-chain mapping (public) |
@@ -25,4 +25,4 @@
 
 Privacy-first L1 — programs execute off-chain and produce proofs verified on-chain.
 
-For VM details, see [leo.md](../vm/leo.md).
+For VM details, see [avm.md](../vm/avm.md).

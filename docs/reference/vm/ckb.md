@@ -1,4 +1,4 @@
-# CKB-VM
+# CKB
 
 [← Target Reference](../targets.md)
 
@@ -21,8 +21,8 @@ compressed). Programs are compiled to Linux-style ELF binaries and loaded
 directly by the VM. Any RISC-V toolchain can produce CKB contracts.
 
 Maximum runtime memory is 4 MB in 4 KB pages. Contract size limit: 1 MB
-compressed. Shares `RiscVLowering` with SP1, OpenVM, RISC Zero, Jolt,
-PolkaVM, and RISC-V native.
+compressed. Shares `RiscVLowering` with SP1, OPENVM, RISCZERO, JOLT,
+POLKAVM, and RISCV.
 
 See [os/nervos.md](../os/nervos.md) for the Nervos CKB OS runtime.
 

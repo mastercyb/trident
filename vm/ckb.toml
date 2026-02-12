@@ -3,7 +3,7 @@
 
 [target]
 name = "ckb"
-display_name = "CKB-VM"
+display_name = "CKB"
 architecture = "register"
 output_extension = ".elf"
 

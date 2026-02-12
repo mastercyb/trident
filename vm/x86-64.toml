@@ -3,7 +3,7 @@
 
 [target]
 name = "x86-64"
-display_name = "x86-64"
+display_name = "X86-64"
 architecture = "register"
 output_extension = ".elf"
 

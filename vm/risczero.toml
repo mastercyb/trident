@@ -3,7 +3,7 @@
 
 [target]
 name = "risczero"
-display_name = "RISC Zero"
+display_name = "RISCZERO"
 architecture = "register"
 output_extension = ".elf"
 

@@ -4,7 +4,7 @@
 [os]
 name = "solana"
 display_name = "Solana"
-vm = "svm"
+vm = "sbpf"
 
 [runtime]
 binding_prefix = "ext.solana"

@@ -1,9 +1,9 @@
-# eBPF / SVM target configuration
-# https://solana.com/docs/programs
+# SBPF — Solana Berkeley Packet Filter
+# https://github.com/anza-xyz/sbpf
 
 [target]
-name = "svm"
-display_name = "eBPF (SVM)"
+name = "sbpf"
+display_name = "SBPF"
 architecture = "register"
 output_extension = ".so"
 
@@ -33,4 +33,4 @@ lowering = "none"
 lowering_path = "none"
 cost_model = false
 tests = false
-notes = "Planned: specialized BpfLowering."
+notes = "Planned: specialized SbpfLowering."

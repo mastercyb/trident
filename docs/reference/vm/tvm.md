@@ -21,8 +21,8 @@ cells (tree-structured data). TVM operates on a cell-based data model: all
 data is trees of cells (up to 1023 bits + 4 references each). This is
 distinct from both byte-addressed memory and field-element stacks.
 
-Stack-based architecture shares the `StackLowering` path with Triton VM
-and Miden VM, adapted for TVM's wider word size and cell model. The compiler
+Stack-based architecture shares the `StackLowering` path with TRITON
+and MIDEN, adapted for TVM's wider word size and cell model. The compiler
 manages cell serialization/deserialization automatically.
 
 Gas costs are per-opcode with additional charges for cell creation, storage,

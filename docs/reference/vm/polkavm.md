@@ -1,4 +1,4 @@
-# PolkaVM
+# POLKAVM
 
 [← Target Reference](../targets.md)
 
@@ -25,8 +25,8 @@ Cost model is multi-dimensional: **ref_time** measures computation time,
 are metered independently.
 
 System precompiles: Blake2b hashing, sr25519 signature verification,
-contract lifecycle management. Shares `RiscVLowering` with SP1, OpenVM,
-RISC Zero, Jolt, CKB-VM, and RISC-V native.
+contract lifecycle management. Shares `RiscVLowering` with SP1, OPENVM,
+RISCZERO, JOLT, CKB, and RISCV.
 
 See [os/polkadot.md](../os/polkadot.md) for the Polkadot OS runtime.
 

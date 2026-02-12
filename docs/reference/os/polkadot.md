@@ -1,6 +1,6 @@
 # Polkadot — Operating System
 
-[← Target Reference](../targets.md) | VM: [PolkaVM](../vm/polkavm.md)
+[← Target Reference](../targets.md) | VM: [POLKAVM](../vm/polkavm.md)
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Parameter | Value |
 |---|---|
-| VM | PolkaVM |
+| VM | POLKAVM |
 | Runtime binding | `ext.polkadot.*` |
 | Account model | Account |
 | Storage model | Key-value |
@@ -31,9 +31,9 @@ XCM (Cross-Consensus Messaging) enables native cross-chain communication
 between parachains, the relay chain, and external bridges — without
 third-party intermediaries.
 
-Language-agnostic — any code compiling to RISC-V can target PolkaVM. This
+Language-agnostic — any code compiling to RISC-V can target POLKAVM. This
 opens Polkadot smart contract development beyond Rust/ink! to any language
 with a RISC-V backend.
 
-For PolkaVM details (instruction set, lowering path, bytecode format),
+For POLKAVM details (instruction set, lowering path, bytecode format),
 see [polkavm.md](../vm/polkavm.md).

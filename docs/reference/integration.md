@@ -16,9 +16,9 @@ Last updated: 2025-05 (compiler v0.5).
 |-------|------|----------|---------|
 | L0 | Declared | `vm/<vm>.toml` exists | All 20 VMs |
 | L1 | Documented | `docs/reference/vm/<vm>.md` exists | All 20 VMs |
-| L2 | Scaffold | Legacy `StackBackend` in `src/legacy/backend/` | SP1, OpenVM, Cairo |
+| L2 | Scaffold | Legacy `StackBackend` in `src/legacy/backend/` | SP1, OPENVM, CAIRO |
 | L3 | Lowering | New-pipeline lowering trait in `src/tir/lower/`, `src/tree/lower/`, or `src/lir/lower/` | Triton, Miden, Nock, x86-64 |
-| L4 | Costed | `CostModel` in `src/cost/model/` | Triton, Miden, SP1, OpenVM, Cairo |
+| L4 | Costed | `CostModel` in `src/cost/model/` | TRITON, MIDEN, SP1, OPENVM, CAIRO |
 | L5 | Tested | End-to-end compilation tests pass | Triton, Miden |
 
 L2 and L3 are not cumulative. Some VMs skip L2 and go straight to L3
@@ -54,13 +54,13 @@ describe what artifacts exist.
 | evm | Y | Y | -- | -- | -- | -- | none | Planned: specialized EvmLowering. |
 | wasm | Y | Y | -- | -- | -- | -- | none | Planned: specialized WasmLowering. |
 | tvm | Y | Y | -- | -- | -- | -- | none | TON VM. Planned: StackLowering. |
-| svm | Y | Y | -- | -- | -- | -- | none | Solana eBPF. Planned: BpfLowering. |
+| sbpf | Y | Y | -- | -- | -- | -- | none | Solana SBPF. Planned: SbpfLowering. |
 | movevm | Y | Y | -- | -- | -- | -- | none | Planned: MoveLowering. |
-| leo | Y | Y | -- | -- | -- | -- | none | Aleo snarkVM. |
-| aztec | Y | Y | -- | -- | -- | -- | none | Noir/ACIR. Planned: AcirLowering. |
+| avm | Y | Y | -- | -- | -- | -- | none | Aleo Virtual Machine. |
+| aztec | Y | Y | -- | -- | -- | -- | none | AZTEC/ACIR. Planned: AcirLowering. |
 | risczero | Y | Y | -- | -- | -- | -- | none | RISC-V zkVM. |
 | jolt | Y | Y | -- | -- | -- | -- | none | Lookup-based zkVM. |
-| ckb | Y | Y | -- | -- | -- | -- | none | CKB-VM (RISC-V). |
+| ckb | Y | Y | -- | -- | -- | -- | none | CKB (RISC-V). |
 | polkavm | Y | Y | -- | -- | -- | -- | none | Polkadot RISC-V. |
 
 ### Lowering Path Summary
@@ -87,11 +87,11 @@ KernelLowering.
 |----|:--:|:--:|:--:|:--:|-----|:------------:|-------|
 | neptune | Y | Y | Y | -- | triton | 6 | kernel, proof, recursive, registry, utxo, xfield |
 | ethereum | Y | Y | -- | -- | evm | 0 | Account model. Deep doc. |
-| solana | Y | Y | -- | -- | svm | 0 | Account model. Deep doc. |
+| solana | Y | Y | -- | -- | sbpf | 0 | Account model. Deep doc. |
 | starknet | Y | Y | -- | -- | cairo | 0 | Account model. Deep doc. |
 | sui | Y | Y | -- | -- | movevm | 0 | Object model. Deep doc. |
 | miden | Y | Y | -- | -- | miden | 0 | Account + note model. |
-| aleo | Y | Y | -- | -- | leo | 0 | Record/UTXO model. |
+| aleo | Y | Y | -- | -- | avm | 0 | Record/UTXO model. |
 | aptos | Y | Y | -- | -- | movevm | 0 | Account model (Move). |
 | arbitrum | Y | Y | -- | -- | wasm | 0 | EVM L2 (Stylus WASM). |
 | aztec | Y | Y | -- | -- | aztec | 0 | Private L2 (Noir). |

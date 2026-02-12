@@ -123,7 +123,7 @@ error: builtin 'xfield' is not available on target 'miden'
   help: extension field builtins require XField support (currently: triton, nock)
 ```
 
-**Spec:** provable.md Extension Field, targets.md (XField builtins = Triton VM, Nock).
+**Spec:** provable.md Extension Field, targets.md (XField builtins = TRITON, NOCK).
 
 ---
 
@@ -144,11 +144,11 @@ different target is a hard error.
 ### Tier 3 on non-Triton target **(planned)**
 
 ```
-error: recursive proof verification (Tier 3) is only available on Triton VM and Nock
-  help: ProofBlock, FriVerify, and extension field folding require Triton VM or Nock
+error: recursive proof verification (Tier 3) is only available on TRITON and NOCK
+  help: ProofBlock, FriVerify, and extension field folding require TRITON or NOCK
 ```
 
-**Spec:** ir.md (Tier 3 = Triton VM, Nock), targets.md tier compatibility.
+**Spec:** ir.md (Tier 3 = TRITON, NOCK), targets.md tier compatibility.
 
 ---
 
@@ -169,7 +169,7 @@ identify which program's proof is being verified recursively.
 
 ```
 error: hash() requires 10 field arguments on target 'triton', got 8
-  help: hash rate R = 10 for Triton VM; see targets.md for per-target rates
+  help: hash rate R = 10 for TRITON; see targets.md for per-target rates
 ```
 
 The number of arguments to `hash()` must match the target's hash rate R.
@@ -182,7 +182,7 @@ The number of arguments to `hash()` must match the target's hash rate R.
 
 ```
 error: sponge_absorb() requires 10 field arguments on target 'triton', got 5
-  help: sponge rate R = 10 for Triton VM; see targets.md for per-target rates
+  help: sponge rate R = 10 for TRITON; see targets.md for per-target rates
 ```
 
 **Spec:** provable.md Sponge (sponge_absorb takes R elements).

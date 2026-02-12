@@ -1,6 +1,6 @@
 [target]
 name = "openvm"
-display_name = "OpenVM"
+display_name = "OPENVM"
 architecture = "register"
 output_extension = ".S"
 

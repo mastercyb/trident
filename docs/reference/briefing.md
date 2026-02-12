@@ -13,7 +13,7 @@ Name:      Trident
 Extension: .tri
 Paradigm:  Imperative, bounded, first-order, no heap, no recursion
 Domain:    Zero-knowledge provable computation
-Targets:   20 VMs — provable (Triton, Miden, Nock, SP1, OpenVM, RISC Zero, Jolt, Cairo, Leo, Aztec), blockchain (EVM, WASM, eBPF, MoveVM, TVM, CKB-VM, PolkaVM), native (x86-64, ARM64, RISC-V). See targets.md
+Targets:   20 VMs — provable (TRITON, MIDEN, NOCK, SP1, OPENVM, RISCZERO, JOLT, CAIRO, AVM, AZTEC), blockchain (EVM, WASM, SBPF, MOVEVM, TVM, CKB, POLKAVM), native (X86-64, ARM64, RISCV). See targets.md
 Compiler:  trident build <file.tri>
 All arithmetic is modular (mod p where p depends on the target).
 There is no subtraction operator — use sub(a, b).
@@ -65,7 +65,7 @@ XField      E elems     Extension field, E = extension degree (3 on Triton, 0 = 
 ```
 
 Digest is universal — every target has a hash function and produces digests.
-The width D varies by target (5 on Triton, 4 on Miden, 8 on SP1/OpenVM, 1 on Cairo).
+The width D varies by target (5 on TRITON, 4 on MIDEN, 8 on SP1/OPENVM, 1 on CAIRO).
 XField is Tier 2 only. See [targets.md](targets.md).
 
 NO: enums, sum types, references, pointers, strings, floats, Option, Result.

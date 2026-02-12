@@ -1,6 +1,6 @@
 # Boundless
 
-[← Target Reference](../targets.md) | VM: [RISC Zero](../vm/risczero.md)
+[← Target Reference](../targets.md) | VM: [RISCZERO](../vm/risczero.md)
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Parameter | Value |
 |---|---|
-| VM | RISC Zero |
+| VM | RISCZERO |
 | Runtime binding | `ext.boundless.*` |
 | Account model | Journal I/O |
 | Storage model | No persistent storage |
@@ -23,6 +23,6 @@
 
 ## Notes
 
-Boundless is RISC Zero's proving network — proofs verify on any chain with a Groth16 verifier.
+Boundless is RISCZERO's proving network — proofs verify on any chain with a Groth16 verifier.
 
 For VM details, see [risczero.md](../vm/risczero.md).

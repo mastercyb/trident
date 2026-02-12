@@ -7,7 +7,7 @@
 ```bash
 # Build
 trident build <file>                    # Compile to target assembly
-trident build <file> --target neptune   # OS target → derives Triton VM
+trident build <file> --target neptune   # OS target → derives TRITON
 trident build <file> --target ethereum  # OS target → derives EVM
 trident build <file> --target linux     # OS target → derives x86-64
 trident build <file> --target triton    # Bare VM target (no OS)

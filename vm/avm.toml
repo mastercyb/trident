@@ -1,9 +1,9 @@
-# AVM (Aleo VM) / Leo target configuration
-# https://www.leo-lang.org/
+# AVM — Aleo Virtual Machine
+# https://developer.aleo.org/concepts/advanced/overview/
 
 [target]
-name = "leo"
-display_name = "AVM (Leo)"
+name = "avm"
+display_name = "AVM"
 architecture = "register"
 output_extension = ".aleo"
 

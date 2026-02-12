@@ -1,4 +1,4 @@
-# OpenVM
+# OPENVM
 
 [← Target Reference](../targets.md)
 
@@ -18,7 +18,7 @@
 | Stack depth | 32 (register file) |
 | Output format | `.S` (RISC-V assembly) |
 | Cost model | Cycles |
-| OS | OpenVM network |
+| OS | OpenVM Network |
 
 Same field as Triton/Miden, different hash and architecture. RISC-V backend
 with cycle-based cost model.

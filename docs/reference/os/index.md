@@ -8,39 +8,39 @@
 
 | OS | VM | Runtime binding | Doc |
 |----|----|-----------------|-----|
-| Neptune | Triton VM | `ext.neptune.*` | [neptune.md](neptune.md) |
-| Polygon Miden | Miden VM | `ext.miden.*` | [miden.md](miden.md) |
-| Nockchain | Nock | `ext.nockchain.*` | [nockchain.md](nockchain.md) |
-| Starknet | Cairo VM | `ext.starknet.*` | [starknet.md](starknet.md) |
-| Boundless | RISC Zero | `ext.boundless.*` | [boundless.md](boundless.md) |
+| Neptune | TRITON | `ext.neptune.*` | [neptune.md](neptune.md) |
+| Polygon Miden | MIDEN | `ext.miden.*` | [miden.md](miden.md) |
+| Nockchain | NOCK | `ext.nockchain.*` | [nockchain.md](nockchain.md) |
+| Starknet | CAIRO | `ext.starknet.*` | [starknet.md](starknet.md) |
+| Boundless | RISCZERO | `ext.boundless.*` | [boundless.md](boundless.md) |
 | Succinct | SP1 | `ext.succinct.*` | [succinct.md](succinct.md) |
-| OpenVM network | OpenVM | `ext.openvm.*` | [openvm-network.md](openvm-network.md) |
-| Aleo | AVM (Leo) | `ext.aleo.*` | [aleo.md](aleo.md) |
-| Aztec | Aztec (Noir) | `ext.aztec.*` | [aztec.md](aztec.md) |
+| OpenVM Network | OPENVM | `ext.openvm.*` | [openvm-network.md](openvm-network.md) |
+| Aleo | AVM | `ext.aleo.*` | [aleo.md](aleo.md) |
+| Aztec | AZTEC | `ext.aztec.*` | [aztec.md](aztec.md) |
 
 ## Blockchain
 
 | OS | VM | Runtime binding | Doc |
 |----|----|-----------------|-----|
 | Ethereum | EVM | `ext.ethereum.*` | [ethereum.md](ethereum.md) |
-| Solana | eBPF (SVM) | `ext.solana.*` | [solana.md](solana.md) |
+| Solana | SBPF | `ext.solana.*` | [solana.md](solana.md) |
 | Near Protocol | WASM | `ext.near.*` | [near.md](near.md) |
 | Cosmos (100+ chains) | WASM | `ext.cosmwasm.*` | [cosmwasm.md](cosmwasm.md) |
 | Arbitrum | WASM + EVM | `ext.arbitrum.*` | [arbitrum.md](arbitrum.md) |
 | Internet Computer | WASM | `ext.icp.*` | [icp.md](icp.md) |
-| Sui | MoveVM | `ext.sui.*` | [sui.md](sui.md) |
-| Aptos | MoveVM | `ext.aptos.*` | [aptos.md](aptos.md) |
+| Sui | MOVEVM | `ext.sui.*` | [sui.md](sui.md) |
+| Aptos | MOVEVM | `ext.aptos.*` | [aptos.md](aptos.md) |
 | Ton | TVM | `ext.ton.*` | [ton.md](ton.md) |
-| Nervos CKB | CKB-VM | `ext.nervos.*` | [nervos.md](nervos.md) |
-| Polkadot | PolkaVM | `ext.polkadot.*` | [polkadot.md](polkadot.md) |
+| Nervos CKB | CKB | `ext.nervos.*` | [nervos.md](nervos.md) |
+| Polkadot | POLKAVM | `ext.polkadot.*` | [polkadot.md](polkadot.md) |
 
 ## Traditional
 
 | OS | VM | Runtime binding | Doc |
 |----|----|-----------------|-----|
-| Linux | x86-64 / ARM64 / RISC-V | `ext.linux.*` | [linux.md](linux.md) |
-| macOS | ARM64 / x86-64 | `ext.macos.*` | [macos.md](macos.md) |
-| Android | ARM64 / x86-64 | `ext.android.*` | [android.md](android.md) |
+| Linux | X86-64 / ARM64 / RISCV | `ext.linux.*` | [linux.md](linux.md) |
+| macOS | ARM64 / X86-64 | `ext.macos.*` | [macos.md](macos.md) |
+| Android | ARM64 / X86-64 | `ext.android.*` | [android.md](android.md) |
 | WASI | WASM | `ext.wasi.*` | [wasi.md](wasi.md) |
 | Browser | WASM | `ext.browser.*` | [browser.md](browser.md) |
 

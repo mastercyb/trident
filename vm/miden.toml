@@ -1,6 +1,6 @@
 [target]
 name = "miden"
-display_name = "Miden VM"
+display_name = "MIDEN"
 architecture = "stack"
 output_extension = ".masm"
 

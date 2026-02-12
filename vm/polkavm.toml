@@ -3,7 +3,7 @@
 
 [target]
 name = "polkavm"
-display_name = "PolkaVM"
+display_name = "POLKAVM"
 architecture = "register"
 output_extension = ".pvm"
 

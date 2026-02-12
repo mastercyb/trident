@@ -1,4 +1,4 @@
-# Miden VM
+# MIDEN
 
 [← Target Reference](../targets.md)
 

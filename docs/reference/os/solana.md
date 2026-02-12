@@ -1,10 +1,10 @@
 # Solana
 
-[← Target Reference](../targets.md) | VM: [eBPF (SVM)](../vm/svm.md)
+[← Target Reference](../targets.md) | VM: [SBPF](../vm/sbpf.md)
 
-Solana is the high-performance blockchain powered by the Sealevel VM (SVM).
-Trident compiles to eBPF bytecode (`.so`) and links against `ext.solana.*`
-for Solana-specific runtime bindings. Programs are stateless -- all state
+Solana is the high-performance blockchain powered by SBPF (Solana Berkeley
+Packet Filter). Trident compiles to SBPF bytecode (`.so`) and links against
+`ext.solana.*` for Solana-specific runtime bindings. Programs are stateless -- all state
 lives in accounts passed into each transaction.
 
 ---
@@ -13,7 +13,7 @@ lives in accounts passed into each transaction.
 
 | Parameter | Value |
 |---|---|
-| VM | eBPF (SVM) |
+| VM | SBPF |
 | Runtime binding | `ext.solana.*` |
 | Account model | Stateless programs (state in passed accounts) |
 | Storage model | Account-based |
@@ -268,6 +268,6 @@ validates account ownership and signer status before execution begins.
 Compute unit budget: 200K default per instruction, 1.4M max per transaction.
 The compiler reports cost in compute units via `--costs`.
 
-For VM details, see [svm.md](../vm/svm.md).
+For VM details, see [sbpf.md](../vm/sbpf.md).
 For mental model migration from Anchor/Rust, see
 [For Blockchain Devs](../../tutorials/for-blockchain-devs.md).

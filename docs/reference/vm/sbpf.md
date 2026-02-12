@@ -1,4 +1,4 @@
-# eBPF / SVM (Solana Virtual Machine)
+# SBPF — Solana Berkeley Packet Filter
 
 [← Target Reference](../targets.md)
 

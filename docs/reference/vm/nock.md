@@ -49,7 +49,7 @@ The subject is the data; the formula is the program. Both are nouns (binary tree
 
 ## Field Alignment
 
-Nockchain uses the same Goldilocks field as Triton VM and Miden VM:
+Nockchain uses the same Goldilocks field as TRITON and MIDEN:
 
 | Type | Definition | Width |
 |------|-----------|-------|

@@ -1,4 +1,4 @@
-# RISC-V (native)
+# RISCV
 
 [← Target Reference](../targets.md)
 
@@ -19,7 +19,7 @@
 | Cost model | Wall-clock time (no proof cost) |
 | OS | Linux |
 
-Same `RiscVLowering` as SP1/OpenVM but targeting bare-metal RISC-V, not a
+Same `RiscVLowering` as SP1/OPENVM but targeting bare-metal RISCV, not a
 zkVM. Useful for embedded execution, Linux servers, or cross-compilation
 testing.
 

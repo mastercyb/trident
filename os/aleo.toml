@@ -4,7 +4,7 @@
 [os]
 name = "aleo"
 display_name = "Aleo"
-vm = "leo"
+vm = "avm"
 
 [runtime]
 binding_prefix = "ext.aleo"

@@ -317,8 +317,8 @@ src/tir/                           ← stack-based IR (canonical)
 │   └── tests.rs                   ← builder tests
 └── lower/                         ← TIR → assembly text
     ├── mod.rs                     ← StackLowering trait + factory
-    ├── triton.rs                  ← Triton VM (TASM)
-    ├── miden.rs                   ← Miden VM (MASM)
+    ├── triton.rs                  ← TRITON (TASM)
+    ├── miden.rs                   ← MIDEN (MASM)
     └── tests.rs                   ← lowering tests
 
 src/lir/                           ← register-based IR

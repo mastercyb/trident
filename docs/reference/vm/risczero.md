@@ -1,4 +1,4 @@
-# RISC Zero
+# RISCZERO
 
 [← Target Reference](../targets.md)
 
@@ -26,8 +26,8 @@ Continuations split long computations into segments proved independently,
 enabling unbounded program execution. SHA-256 is hardware-accelerated with
 a dedicated coprocessor — 30x faster than SP1 for hash-heavy workloads.
 
-Shares `RiscVLowering` with SP1, OpenVM, Jolt, CKB-VM, PolkaVM, and RISC-V
-native. The 31-bit BabyBear field means field elements hold less data than
+Shares `RiscVLowering` with SP1, OPENVM, JOLT, CKB, POLKAVM, and RISCV.
+The 31-bit BabyBear field means field elements hold less data than
 on Goldilocks targets — similar constraint to SP1's Mersenne31.
 
 See [os/boundless.md](../os/boundless.md) for the Boundless OS runtime.

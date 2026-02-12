@@ -1,6 +1,6 @@
 # Aptos — Operating System
 
-[← Target Reference](../targets.md) | VM: [MoveVM](../vm/movevm.md)
+[← Target Reference](../targets.md) | VM: [MOVEVM](../vm/movevm.md)
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Parameter | Value |
 |---|---|
-| VM | MoveVM |
+| VM | MOVEVM |
 | Runtime binding | `ext.aptos.*` |
 | Account model | Account-centric (resources) |
 | Storage model | Resource storage |
@@ -37,5 +37,5 @@ The Move type system on Aptos enforces module-level encapsulation —
 resources can only be created, moved, or destroyed by the module that
 defines them.
 
-For MoveVM details (instruction set, lowering path, bytecode format),
+For MOVEVM details (instruction set, lowering path, bytecode format),
 see [movevm.md](../vm/movevm.md).

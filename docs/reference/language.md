@@ -13,7 +13,7 @@ to EVM, WASM, and native x86-64. Write once. Prove anywhere.
 # Part I — Universal Language (Tier 0 + Tier 1)
 
 Everything here works on every target. A program that uses only Part I
-features compiles for Triton VM, Miden VM, SP1, OpenVM, Cairo, and any
+features compiles for TRITON, MIDEN, SP1, OPENVM, CAIRO, and any
 future target.
 
 ---
@@ -100,7 +100,7 @@ field arithmetic abstractly; the target implements it concretely.
 
 `Digest` is universal — every target has a hash function and produces digests.
 It is a content identifier: the fixed-width fingerprint of arbitrary data. The
-width D varies by target (5 on Triton, 4 on Miden, 8 on SP1/OpenVM, 1 on Cairo).
+width D varies by target (5 on TRITON, 4 on MIDEN, 8 on SP1/OPENVM, 1 on CAIRO).
 
 No implicit conversions. `Field` and `U32` do not auto-convert. Use `as_field()`
 and `as_u32()` (the latter inserts a range check).
@@ -384,7 +384,7 @@ fn foo(x: Field) -> Field {
 
 `hash()` is the Tier 1 hash operation — available on every target. The rate R
 and digest width D are target-dependent. The user-facing function name varies
-by target: `std.crypto.hash.tip5()` on Triton VM, with other targets providing
+by target: `std.crypto.hash.tip5()` on TRITON, with other targets providing
 their native hash function. All compile to the `Hash` TIR operation internally.
 See [targets.md](targets.md) for per-VM hash functions.
 
@@ -483,7 +483,7 @@ asm { dup 0 add }                   // zero net stack effect (default)
 asm(+1) { push 42 }                // pushes 1 element
 asm(-2) { pop 1 pop 1 }            // pops 2 elements
 asm(triton)(+1) { push 42 }        // target-tagged + effect
-asm(miden) { dup.0 add }           // Miden VM assembly
+asm(miden) { dup.0 add }           // MIDEN assembly
 ```
 
 Target-tagged blocks are skipped when compiling for a different target.

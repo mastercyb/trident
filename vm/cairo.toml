@@ -1,6 +1,6 @@
 [target]
 name = "cairo"
-display_name = "Cairo"
+display_name = "CAIRO"
 architecture = "register"
 output_extension = ".sierra"
 

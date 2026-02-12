@@ -3,7 +3,7 @@
 
 [target]
 name = "movevm"
-display_name = "MoveVM"
+display_name = "MOVEVM"
 architecture = "register"
 output_extension = ".mv"
 

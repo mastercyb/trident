@@ -1,4 +1,4 @@
-# Jolt
+# JOLT
 
 [← Target Reference](../targets.md)
 
@@ -19,15 +19,15 @@
 | Cost model | Cycles |
 
 Sumcheck-based SNARK zkVM from a16z. Fundamentally different proof system
-from STARK-based VMs (SP1, RISC Zero): uses multivariate polynomials and
+from STARK-based VMs (SP1, RISCZERO): uses multivariate polynomials and
 lookup tables ("Just One Lookup Table") with the sum-check protocol.
 
-2x faster than RISC Zero/SP1 in some benchmarks. Twist and Shout memory
+2x faster than RISCZERO/SP1 in some benchmarks. Twist and Shout memory
 checking achieves 6x speedup. Highly extensible via "Inlines" — custom
 operations added without full precompile overhead.
 
 Standard RISC-V RV32I instruction set. Shares `RiscVLowering` with SP1,
-OpenVM, RISC Zero, CKB-VM, PolkaVM, and RISC-V native.
+OPENVM, RISCZERO, CKB, POLKAVM, and RISCV.
 
 ## OS
 
