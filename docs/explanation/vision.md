@@ -628,7 +628,8 @@ The numbers are growing. The foundation is solid. The rest is building.
 - [OS Reference](../reference/os.md) -- The os.* portable API and per-OS lowering tables
 - [IR Reference](../reference/ir.md) -- 54 TIR operations, 4 lowering paths, pipeline architecture
 - [Programming Model](programming-model.md) -- How Triton VM execution works
-- [Universal Execution](universal-execution.md) -- Write once, deploy to every blockchain
+- [Multi-Target Compilation](multi-target.md) -- Write once, deploy to every blockchain
+- [OS Abstraction](os-abstraction.md) -- How Trident abstracts over 25 operating systems
 - [Gold Standard](gold-standard.md) -- Neptune financial primitives: PLUMB, TSP-1, TSP-2, TIDE
 - [Optimization Guide](../guides/optimization.md) -- Cost reduction strategies and table management
 - [Comparative Analysis](provable-computing.md) -- Triton VM vs. every other ZK system

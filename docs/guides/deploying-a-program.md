@@ -165,7 +165,7 @@ trident build program.tri --target miden -o program.masm
 ```
 
 For the full multi-target design, see [Vision](../explanation/vision.md) and
-[Universal Design](../explanation/universal-design.md).
+[Multi-Target Compilation](../explanation/multi-target.md).
 
 ---
 

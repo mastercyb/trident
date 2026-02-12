@@ -8,7 +8,7 @@ the only quantum-safe, STARK-native virtual machine in production — powering
 [Neptune Cash](https://neptune.cash/), the only blockchain that satisfies
 all four requirements: quantum-safe, private, programmable, and mineable.
 
-The compiler is designed for [multi-target compilation](docs/explanation/universal-execution.md):
+The compiler is designed for [multi-target compilation](docs/explanation/multi-target.md):
 the same source will compile to Miden, Cairo, RISC-V zkVMs, EVM, WASM, and
 Nock as those backends ship. Write once, prove anywhere.
 
@@ -64,7 +64,7 @@ counterexample. See [Formal Verification](docs/explanation/formal-verification.m
 identity derived from its normalized AST. Audit certificates travel with
 the code. See [Content-Addressed Code](docs/explanation/content-addressing.md).
 
-**Multi-target by design.** The [universal compilation architecture](docs/explanation/universal-design.md)
+**Multi-target by design.** The [universal compilation architecture](docs/explanation/multi-target.md)
 compiles through TIR to 4 lowering paths: stack machines (Triton, Miden),
 register machines (x86-64, ARM64, RISC-V), tree machines (Nock), and GPU
 kernels (CUDA, Metal). 20 VM targets, 25 OS targets are
@@ -320,12 +320,12 @@ Full index: [docs/README.md](docs/README.md)
 ### Explanation (understanding-oriented)
 
 - [Vision](docs/explanation/vision.md) — Why Trident exists and why it matters
-- [Universal Execution](docs/explanation/universal-execution.md) — One source, every chain
+- [Multi-Target Compilation](docs/explanation/multi-target.md) — One source, every chain
 - [Programming Model](docs/explanation/programming-model.md) — Execution model and stack semantics
 - [How STARK Proofs Work](docs/explanation/stark-proofs.md) — From traces to quantum-safe proofs
 - [Formal Verification](docs/explanation/formal-verification.md) — Symbolic execution and correctness proofs
 - [Content-Addressed Code](docs/explanation/content-addressing.md) — Code identity by computation
-- [Multi-Target Architecture](docs/explanation/universal-design.md) — Compiler design for multiple backends
+- [OS Abstraction](docs/explanation/os-abstraction.md) — How Trident abstracts over 25 operating systems
 - [Comparative Analysis](docs/explanation/provable-computing.md) — Trident vs every other ZK system
 - [Gold Standard](docs/explanation/gold-standard.md) — Neptune financial primitives: PLUMB, TSP-1, TSP-2
 

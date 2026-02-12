@@ -88,7 +88,7 @@ performance, or ecosystem requirements), you recompile -- you do not rewrite.
 The cryptographic guarantees are identical across targets because the same
 source code defines the same computation.
 
-For the full architecture, see the [Universal Design](../explanation/universal-design.md)
+For the full architecture, see the [Multi-Target Compilation](../explanation/multi-target.md)
 document. For backend extension authoring, see the `ext/` directory.
 
 ---
@@ -944,7 +944,7 @@ types, functions, modules, I/O, hashing, events, testing, and cost analysis.
 - [Gold Standard Libraries](../explanation/gold-standard.md) -- Token standards (TSP-1/TSP-2), bridge clients, crypto gadgets
 - [Programming Model](../explanation/programming-model.md) -- How programs run in Triton VM
 - [Optimization Guide](../guides/optimization.md) -- Cost reduction strategies
-- [Universal Design](../explanation/universal-design.md) -- Multi-target architecture: universal core, backend extensions
+- [Multi-Target Compilation](../explanation/multi-target.md) -- Multi-target architecture: universal core, backend extensions
 - [Formal Verification](../explanation/formal-verification.md) -- Prove properties of your contracts, find bugs before deployment
 - [How STARK Proofs Work](../explanation/stark-proofs.md) -- From execution traces to quantum-safe proofs
 - [For Developers](for-developers.md) -- Zero-knowledge from scratch (if you also need the ZK primer)

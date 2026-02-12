@@ -188,7 +188,7 @@ examples (lock contracts, token types).
 
 **Docs** — README, spec (v0.5), tutorial, reference, programming model,
 optimization guide, error catalog, vision, developer guides, lifecycle
-docs, design docs (universal-design, content-addressed, formal-verification).
+docs, design docs (multi-target, content-addressed, formal-verification).
 
 **Security** — Path traversal fix, iterative lexer recovery, parser
 depth limit (256), unreachable variable VM halt, seal padding, target

@@ -433,7 +433,7 @@ trident test .
 - [Optimization Guide](optimization.md) -- Cost reduction strategies for all six tables
 - [Language Reference](../reference/language.md) -- Types, operators, builtins, grammar
 - [Programming Model](../explanation/programming-model.md) -- How programs execute inside Triton VM
-- [Universal Design](../explanation/universal-design.md) -- Multi-target architecture and the `--target` flag
+- [Multi-Target Compilation](../explanation/multi-target.md) -- Multi-target architecture and the `--target` flag
 - [How STARK Proofs Work](../explanation/stark-proofs.md) -- The six tables that determine proving cost
 - [Formal Verification](../explanation/formal-verification.md) -- Verify program properties at compile time
 

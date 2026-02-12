@@ -638,7 +638,7 @@ target that supports the same feature set.
   for all inputs via symbolic execution and SMT
 - [Content-Addressed Code](../explanation/content-addressing.md) -- Poseidon2 hashing, UCM
   codebase manager, verification caching
-- [Universal Design](../explanation/universal-design.md) -- Multi-target architecture,
+- [Multi-Target Compilation](../explanation/multi-target.md) -- Multi-target architecture,
   backend extensions, and the universal core
 - [Vision](../explanation/vision.md) -- Why Trident exists and what you can build with it
 - [Comparative Analysis](../explanation/provable-computing.md) -- Triton VM vs. every other ZK system

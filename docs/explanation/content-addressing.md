@@ -577,6 +577,6 @@ itself.
 - [Formal Verification](formal-verification.md) -- How verification works, including how results are cached by content hash
 - [Language Reference](../reference/language.md) -- Complete language syntax, types, and built-in functions
 - [Deploying a Program](../guides/deploying-a-program.md) -- Deployment by content hash, on-chain registry
-- [Universal Design](universal-design.md) -- Multi-target architecture and how hashes relate to backends
+- [Multi-Target Compilation](multi-target.md) -- Multi-target architecture and how hashes relate to backends
 - [Target Reference](../reference/targets.md) -- OS model, integration tracking, how-to-add checklists
 - [Vision](vision.md) -- The broader vision for content-addressed provable computation
