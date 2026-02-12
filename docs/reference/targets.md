@@ -1,6 +1,6 @@
 # Trident Target Reference
 
-[← Language Reference](language.md) | [IR Reference](ir.md)
+[← Language Reference](language.md) | [VM Reference](vm.md) | [OS Reference](os.md)
 
 Write once. Run anywhere.
 
@@ -59,417 +59,262 @@ there is no OS to bind against.
 
 ---
 
-## Part I — Virtual Machines (CPUs)
+## Integration Levels
 
-A VM defines the instruction set. The compiler's job is instruction
-selection: translate TIR ops to the VM's native instructions. Everything
-in this section is about the CPU — field size, word width, hash function,
-register layout, cost model. OS-specific concerns (storage layout,
-transaction format, account model) belong in Part II.
+### VM Levels (L0 -- L5)
 
-### Lowering Paths
+| Level | Name | Artifact | Example |
+|-------|------|----------|---------|
+| L0 | Declared | `vm/<vm>.toml` exists | All 20 VMs |
+| L1 | Documented | `docs/reference/vm/<vm>.md` exists | All 20 VMs |
+| L2 | Scaffold | Legacy `StackBackend` in `src/legacy/backend/` | SP1, OPENVM, CAIRO |
+| L3 | Lowering | New-pipeline lowering trait in `src/tir/lower/`, `src/tree/lower/`, or `src/lir/lower/` | Triton, Miden, Nock, x86-64 |
+| L4 | Costed | `CostModel` in `src/cost/model/` | TRITON, MIDEN, SP1, OPENVM, CAIRO |
+| L5 | Tested | End-to-end compilation tests pass | Triton, Miden |
 
-Each VM family uses a specific lowering path from TIR to native output.
+L2 and L3 are not cumulative. Some VMs skip L2 and go straight to L3
+(e.g., Nock has TreeLowering but no legacy StackBackend). Levels
+describe what artifacts exist.
 
-#### Stack Machines
+### OS Levels (L0 -- L3)
 
-Push, pop, dup, swap. TIR maps nearly 1:1 to native instructions.
-
-```
-TIR → StackLowering → assembly text → Linker → output
-```
-
-#### Register Machines
-
-Registers or memory-addressed slots. TIR is first converted to LIR
-(register-addressed IR), then lowered to native instructions.
-
-```
-TIR → LIR → RegisterLowering → machine code → Linker → output
-```
-
-The same `RegisterLowering` path serves both provable and native register
-targets. SP1 and native RISC-V share the same `RiscVLowering` — one
-produces code for the zkVM, the other for bare metal.
-
-#### Tree Machines
-
-Combinator expressions on binary trees (nouns). TIR lowers directly to
-tree expressions.
-
-```
-TIR → TreeLowering → Noun → serialized output (.jam)
-```
-
-#### Circuit Machines
-
-Programs compile to arithmetic circuits (gates/constraints) proved
-client-side. No sequential instruction execution.
-
-```
-TIR → AcirLowering → ACIR circuit → prover → proof
-```
-
-#### Specialized Lowering
-
-| Lowering | VM(s) | Notes |
-|----------|-------|-------|
-| `EvmLowering` | EVM | 256-bit stack, unique opcode set |
-| `WasmLowering` | WASM | Standard WASM bytecode |
-| `SbpfLowering` | SBPF | 10-register SBPF bytecode |
-| `MoveLowering` | MOVEVM | Resource-oriented bytecode |
-| `KernelLowering` | CUDA, Metal, Vulkan | GPU data-parallel (planned) |
-
-See [ir.md](ir.md) for the full IR architecture and lowering paths.
+| Level | Name | Artifact | Example |
+|-------|------|----------|---------|
+| L0 | Declared | `os/<os>.toml` exists, `vm` field references a VM | All 25 OSes |
+| L1 | Documented | `docs/reference/os/<os>.md` exists | All 25 OSes |
+| L2 | Bound | `ext/<os>/*.tri` runtime bindings exist | Neptune |
+| L3 | Tested | End-to-end OS-targeted compilation tests pass | None yet |
 
 ---
 
-### VM Registry
+## VM Integration Matrix
 
-Each VM is defined by a `.toml` configuration file in `vm/` specifying
-CPU parameters. `TargetConfig` is the compiler's hardware abstraction layer.
+20 VMs. Checkmarks indicate the level is complete.
 
-20 VMs across three categories:
+| VM | L0 | L1 | L2 | L3 | L4 | L5 | Path | Notes |
+|----|:--:|:--:|:--:|:--:|:--:|:--:|------|-------|
+| triton | Y | Y | Y | Y | Y | Y | tir (StackLowering) | Primary target. 6-table cost model. 30+ lowering tests. |
+| miden | Y | Y | Y | Y | Y | Y | tir (StackLowering) | 4-table cost model. 8+ Miden-specific tests. |
+| nock | Y | Y | -- | Y | -- | -- | tree (TreeLowering) | Jets stubbed. Noun-based lowering. |
+| sp1 | Y | Y | Y | -- | Y | -- | legacy | RISC-V scaffold. CycleCostModel. |
+| openvm | Y | Y | Y | -- | Y | -- | legacy | RISC-V scaffold. CycleCostModel. |
+| cairo | Y | Y | Y | -- | Y | -- | legacy | Sierra scaffold. CairoCostModel. |
+| x86-64 | Y | Y | -- | Y | -- | -- | lir (RegisterLowering) | Native target. todo!() stubs in lowering. |
+| arm64 | Y | Y | -- | Y | -- | -- | lir (RegisterLowering) | Native target. todo!() stubs in lowering. |
+| riscv | Y | Y | -- | Y | -- | -- | lir (RegisterLowering) | Native target. todo!() stubs in lowering. |
+| evm | Y | Y | -- | -- | -- | -- | none | Planned: specialized EvmLowering. |
+| wasm | Y | Y | -- | -- | -- | -- | none | Planned: specialized WasmLowering. |
+| tvm | Y | Y | -- | -- | -- | -- | none | TON VM. Planned: StackLowering. |
+| sbpf | Y | Y | -- | -- | -- | -- | none | Solana SBPF. Planned: SbpfLowering. |
+| movevm | Y | Y | -- | -- | -- | -- | none | Planned: MoveLowering. |
+| avm | Y | Y | -- | -- | -- | -- | none | Aleo Virtual Machine. |
+| aztec | Y | Y | -- | -- | -- | -- | none | AZTEC/ACIR. Planned: AcirLowering. |
+| risczero | Y | Y | -- | -- | -- | -- | none | RISC-V zkVM. |
+| jolt | Y | Y | -- | -- | -- | -- | none | Lookup-based zkVM. |
+| ckb | Y | Y | -- | -- | -- | -- | none | CKB (RISC-V). |
+| polkavm | Y | Y | -- | -- | -- | -- | none | Polkadot RISC-V. |
 
-| VM | Arch | Word | Hash | Tier | Output | Details |
-|----|------|------|------|------|--------|---------|
-| **Provable** | | | | | | |
-| TRITON | Stack | Goldilocks 64-bit | Tip5 | 0-3 | `.tasm` | [triton.md](vm/triton.md) |
-| MIDEN | Stack | Goldilocks 64-bit | Rescue-Prime | 0-2 | `.masm` | [miden.md](vm/miden.md) |
-| NOCK | Tree | Goldilocks 64-bit | Tip5 | 0-3 | `.jam` | [nock.md](vm/nock.md) |
-| SP1 | Register (RISC-V) | Mersenne31 31-bit | Poseidon2 | 0-1 | `.S` | [sp1.md](vm/sp1.md) |
-| OPENVM | Register (RISC-V) | Goldilocks 64-bit | Poseidon2 | 0-1 | `.S` | [openvm.md](vm/openvm.md) |
-| RISCZERO | Register (RISC-V) | BabyBear 31-bit | SHA-256 | 0-1 | ELF | [risczero.md](vm/risczero.md) |
-| JOLT | Register (RISC-V) | BN254 254-bit | Poseidon2 | 0-1 | ELF | [jolt.md](vm/jolt.md) |
-| CAIRO | Register | STARK-252 251-bit | Pedersen | 0-1 | `.sierra` | [cairo.md](vm/cairo.md) |
-| AVM | Register | Aleo 251-bit | Poseidon | 0-1 | `.aleo` | [avm.md](vm/avm.md) |
-| AZTEC | Circuit (ACIR) | BN254 254-bit | Poseidon2 | 0-1 | `.acir` | [aztec.md](vm/aztec.md) |
-| **Non-provable** | | | | | | |
-| EVM | Stack | u256 | Keccak-256 | 0-1 | `.evm` | [evm.md](vm/evm.md) |
-| WASM | Stack | u64 | -- (runtime-dependent) | 0-1 | `.wasm` | [wasm.md](vm/wasm.md) |
-| SBPF | Register | u64 | SHA-256 | 0-1 | `.so` | [sbpf.md](vm/sbpf.md) |
-| MOVEVM | Register/hybrid | u64 | SHA3-256 | 0-1 | `.mv` | [movevm.md](vm/movevm.md) |
-| TVM | Stack | u257 | SHA-256 | 0-1 | `.boc` | [tvm.md](vm/tvm.md) |
-| CKB | Register (RISC-V) | u64 | Blake2b | 0-1 | ELF | [ckb.md](vm/ckb.md) |
-| POLKAVM | Register (RISC-V) | u64 | Blake2b | 0-1 | PVM | [polkavm.md](vm/polkavm.md) |
-| **Native** | | | | | | |
-| X86-64 | Register | u64 | Software | 0-1 | ELF | [x86-64.md](vm/x86-64.md) |
-| ARM64 | Register | u64 | Software | 0-1 | ELF | [arm64.md](vm/arm64.md) |
-| RISCV | Register | u64 | Software | 0-1 | ELF | [riscv.md](vm/riscv.md) |
+### Lowering Path Summary
 
-**Planned**: CUDA, Metal, Vulkan (GPU — `KernelLowering`).
+| Path | Pipeline | VMs | Status |
+|------|----------|-----|--------|
+| **tir** (StackLowering) | TIR -> stack instructions | triton, miden | Production |
+| **tree** (TreeLowering) | TIR -> Noun combinators | nock | Partial (jets stubbed) |
+| **lir** (RegisterLowering) | TIR -> LIR -> register instructions | x86-64, arm64, riscv | Scaffold (todo!() bodies) |
+| **legacy** (StackBackend) | Legacy emitter pipeline | sp1, openvm, cairo | Functional but deprecated |
+| **none** | Not started | 11 VMs | -- |
 
----
-
-### Tier Compatibility
-
-All VMs support **Tier 0** (program structure) and **Tier 1** (universal
-computation). Higher tiers require specific VM capabilities:
-
-| Tier | What it adds | VMs |
-|------|-------------|-----|
-| 0 — Structure | Entry, Call, Return, Const, Let | All 20 VMs |
-| 1 — Universal | Arithmetic, control flow, memory, I/O | All 20 VMs |
-| 2 — Provable | Witness, Sponge, MerkleStep | TRITON, MIDEN, NOCK + partial: RISCZERO (SHA-256), AVM (Poseidon), AZTEC (Poseidon2) |
-| 3 — Recursion | ProofBlock, FriVerify, recursive composition | TRITON, NOCK |
-
-Programs using only Tier 0-1 compile to any VM. Programs using Tier 2+
-require a VM with native coprocessor support for the relevant operations.
+Planned specialized lowering traits (not yet implemented):
+EvmLowering, WasmLowering, BpfLowering, MoveLowering, AcirLowering,
+KernelLowering.
 
 ---
 
-### Type and Builtin Availability
+## OS Integration Matrix
 
-Types, operators, and builtins are tier-gated. Programs using higher-tier
-features cannot target lower-tier VMs. The tables below show only VMs where
-behavior differs. Unlisted VMs (all Tier 0-1 only) behave identically:
-`yes` for Tier 0-1 features, `--` for Tier 2+.
+25 OSes. Each OS references exactly one VM.
 
-#### Types
-
-`Bool` and `U32` are available on every VM (Tier 0). The table below shows
-only the types that differ across VMs.
-
-| VM | `Field` | `Digest` | `XField` |
-|----|---------|----------|----------|
-| TRITON | 64-bit | [Field; 5] | [Field; 3] |
-| MIDEN | 64-bit | [Field; 4] | -- |
-| NOCK | 64-bit | [Field; 5] | [Field; 3] |
-| CAIRO | 251-bit | [Field; 1] | -- |
-| AVM | 251-bit | [Field; 1] | -- |
-| AZTEC | 254-bit | [Field; 1] | -- |
-| EVM | u256 | 32 bytes | -- |
-| TVM | u257 | 32 bytes | -- |
-| All others | u64 | 32 bytes | -- |
-
-`XField` is Tier 2 — only TRITON and NOCK. "All others" = SP1, OPENVM,
-RISCZERO, JOLT, WASM, SBPF, MOVEVM, CKB, POLKAVM, X86-64, ARM64,
-RISCV.
-
-#### Operators
-
-| Operator | Tier | Notes |
-|----------|------|-------|
-| `+` `*` `==` | 1 | All VMs. NOCK: jets. |
-| `<` `&` `^` `/%` | 1 | All VMs. NOCK: jets. |
-| `*.` (extension field multiply) | 2 | TRITON, NOCK only. |
-
-#### Builtins — Tier 1 (Universal)
-
-All Tier 1 builtins compile to every VM. The Hash column shows each VM's
-hash function with rate R and digest width D.
-
-| VM | I/O | Field | U32 | Assert | RAM | Hash |
-|----|-----|-------|-----|--------|-----|------|
-| TRITON | yes | yes | yes | yes | yes | Tip5 (R=10, D=5) |
-| MIDEN | yes | yes | yes | yes | yes | Rescue (R=8, D=4) |
-| NOCK | scry | jets | jets | crash | tree edit | Tip5 (R=10, D=5) |
-| SP1 | yes | yes | yes | yes | yes | Poseidon2 (R=8, D=8) |
-| OPENVM | yes | yes | yes | yes | yes | Poseidon2 (R=8, D=8) |
-| RISCZERO | journal | yes | yes | yes | yes | SHA-256 (R=16, D=8) |
-| JOLT | yes | yes | yes | yes | yes | Poseidon2 (R=8, D=8) |
-| CAIRO | yes | yes | yes | yes | yes | Pedersen (R=2, D=1) |
-| AVM | yes | native | yes | yes | yes | Poseidon (R=4, D=1) |
-| AZTEC | yes | native | yes | yes | yes | Poseidon2 (R=4, D=1) |
-| EVM | yes | yes | yes | revert | yes | Keccak-256 (R=4, D=8) |
-| All others | yes | yes | yes | yes | yes | varies |
-
-`hash()` is Tier 1 — every VM has a hash function. R = hash rate (fields
-per absorption), D = digest width (fields per digest). The hash function
-and its parameters are VM-specific (see VM Registry above).
-
-Tier 1 builtins map to different primitives depending on the VM: I/O
-becomes host function calls on virtual machines, stdio on native targets.
-Assertions become revert on EVM, crash on NOCK, abort on native. Field
-arithmetic uses software modular reduction on non-provable targets.
-
-#### Builtins — Tier 2 (Provable)
-
-Tier 2 builtins require a proof-capable VM. `--` = not available.
-
-| VM | Witness | Sponge | Merkle | XField |
-|----|---------|--------|--------|--------|
-| TRITON | yes | native | native | yes |
-| MIDEN | yes | native | emulated | -- |
-| NOCK | Nock 11 | jets | jets | yes |
-| RISCZERO | yes | -- | -- | quartic |
-| AVM | yes | -- | -- | -- |
-| AZTEC | yes | -- | -- | -- |
-| All others | -- | -- | -- | -- |
-
-Sponge = incremental hashing via `sponge_init`/`sponge_absorb`/`sponge_squeeze`.
-Not to be confused with `hash()` which is Tier 1 (see above).
+| OS | L0 | L1 | L2 | L3 | VM | ext/ modules | Notes |
+|----|:--:|:--:|:--:|:--:|-----|:------------:|-------|
+| neptune | Y | Y | Y | -- | triton | 6 | kernel, proof, recursive, registry, utxo, xfield |
+| ethereum | Y | Y | -- | -- | evm | 0 | Account model. Deep doc. |
+| solana | Y | Y | -- | -- | sbpf | 0 | Account model. Deep doc. |
+| starknet | Y | Y | -- | -- | cairo | 0 | Account model. Deep doc. |
+| sui | Y | Y | -- | -- | movevm | 0 | Object model. Deep doc. |
+| miden | Y | Y | -- | -- | miden | 0 | Account + note model. |
+| aleo | Y | Y | -- | -- | avm | 0 | Record/UTXO model. |
+| aptos | Y | Y | -- | -- | movevm | 0 | Account model (Move). |
+| arbitrum | Y | Y | -- | -- | wasm | 0 | EVM L2 (Stylus WASM). |
+| aztec | Y | Y | -- | -- | aztec | 0 | Private L2 (Noir). |
+| boundless | Y | Y | -- | -- | risczero | 0 | Verifiable compute (journal). |
+| cosmwasm | Y | Y | -- | -- | wasm | 0 | Cosmos WASM contracts. |
+| icp | Y | Y | -- | -- | wasm | 0 | Internet Computer canisters. |
+| near | Y | Y | -- | -- | wasm | 0 | NEAR WASM contracts. |
+| nervos | Y | Y | -- | -- | ckb | 0 | CKB cell model. |
+| nockchain | Y | Y | -- | -- | nock | 0 | Nock combinator chain. |
+| openvm-network | Y | Y | -- | -- | openvm | 0 | Verifiable compute (journal). |
+| polkadot | Y | Y | -- | -- | polkavm | 0 | Polkadot parachains. |
+| succinct | Y | Y | -- | -- | sp1 | 0 | SP1 verifiable compute (journal). |
+| ton | Y | Y | -- | -- | tvm | 0 | TON cell-based contracts. |
+| android | Y | Y | -- | -- | arm64 | 0 | Mobile native (ARM64). |
+| browser | Y | Y | -- | -- | wasm | 0 | Browser WASM runtime. |
+| linux | Y | Y | -- | -- | x86-64 | 0 | POSIX native. |
+| macos | Y | Y | -- | -- | arm64 | 0 | Apple native (ARM64). |
+| wasi | Y | Y | -- | -- | wasm | 0 | WASM System Interface. |
 
 ---
 
-### Cost Model
+## Standard Library Status
 
-Each VM has its own cost model. The compiler reports costs in the VM's
-native units. The Trident cost infrastructure — static analysis,
-per-function annotations, `--costs` flag — works identically across all VMs.
+19 modules in `std/`.
 
-| VM | Cost unit | What determines cost |
-|----|-----------|---------------------|
-| [TRITON](vm/triton.md) | Table rows | Tallest of 6 tables, padded to next power of 2 |
-| [MIDEN](vm/miden.md) | Table rows | Tallest of 4 tables |
-| [NOCK](vm/nock.md) | Nock reductions | Formula evaluation steps (jet calls count as 1) |
-| [SP1](vm/sp1.md) | Cycles | Total cycle count |
-| [OPENVM](vm/openvm.md) | Cycles | Total cycle count |
-| [RISCZERO](vm/risczero.md) | Cycles (segments) | Cycle count, split into segments for parallel proving |
-| [JOLT](vm/jolt.md) | Cycles | Total cycle count (sumcheck-based) |
-| [CAIRO](vm/cairo.md) | Steps + builtins | Step count plus builtin usage |
-| [AVM](vm/avm.md) | Constraints | Constraint count (off-chain); microcredits (on-chain finalize) |
-| [AZTEC](vm/aztec.md) | Gates / Gas | Private: gate count (client-side); Public: gas (sequencer) |
-| [EVM](vm/evm.md) | Gas | Per-opcode cost (arithmetic 3-8, storage 5K-20K) |
-| [WASM](vm/wasm.md) | Gas / Cycles | Per-instruction cost (varies by OS runtime) |
-| [SBPF](vm/sbpf.md) | Compute units | Per-instruction cost (budget 200K default, 1.4M max) |
-| [MOVEVM](vm/movevm.md) | Gas | Per-bytecode-instruction + storage operations |
-| [TVM](vm/tvm.md) | Gas | Per-opcode + cell creation/storage charges |
-| [CKB](vm/ckb.md) | Cycles | Flat per-instruction (1 cycle), higher for branches/mul |
-| [POLKAVM](vm/polkavm.md) | Weight | ref_time (computation) + proof_size (state proof overhead) |
-| [X86-64](vm/x86-64.md) / [ARM64](vm/arm64.md) / [RISCV](vm/riscv.md) | Wall-clock | No proof cost — direct execution |
+| Module | File | Status | Notes |
+|--------|------|--------|-------|
+| std.target | std/target.tri | Hardcoded | Triton-only constants (DIGEST_WIDTH=5, HASH_RATE=10, etc.). Needs target-aware codegen. |
+| std.core.field | std/core/field.tri | Done | Field arithmetic intrinsics (add, mul, sub, neg, inv). |
+| std.core.convert | std/core/convert.tri | Done | Type conversion intrinsics (as_u32, as_field, split). |
+| std.core.u32 | std/core/u32.tri | Done | U32 operations (log2, pow, popcount). |
+| std.core.assert | std/core/assert.tri | Done | Assertion intrinsics (is_true, eq, digest). |
+| std.io.io | std/io/io.tri | Done | Public I/O (read, write, divine). |
+| std.io.mem | std/io/mem.tri | Done | RAM access (read, write, read_block, write_block). |
+| std.io.storage | std/io/storage.tri | Done | Storage wrapper (delegates to mem). |
+| std.crypto.hash | std/crypto/hash.tri | Done | Tip5 hash with sponge API (intrinsics). |
+| std.crypto.merkle | std/crypto/merkle.tri | Done | Merkle tree verification (verify1--4, leaf auth). |
+| std.crypto.auth | std/crypto/auth.tri | Done | Preimage verification, Neptune lock script pattern. |
+| std.crypto.bigint | std/crypto/bigint.tri | Done | 256-bit unsigned integer arithmetic. |
+| std.crypto.sha256 | std/crypto/sha256.tri | Done | SHA-256 implementation. |
+| std.crypto.keccak256 | std/crypto/keccak256.tri | Done | Keccak-f[1600] permutation, 24 rounds. |
+| std.crypto.poseidon2 | std/crypto/poseidon2.tri | Done | Full Poseidon2 (t=8, rate=4, x^7 S-box). |
+| std.crypto.ecdsa | std/crypto/ecdsa.tri | Done | Signature structure, input reading, range validation. |
+| std.crypto.poseidon | std/crypto/poseidon.tri | Placeholder | Dummy round constants, simplified S-box/MDS. NOT cryptographically secure. |
+| std.crypto.ed25519 | std/crypto/ed25519.tri | Stub | point_add/scalar_mul return identity. verify() incomplete. |
+| std.crypto.secp256k1 | std/crypto/secp256k1.tri | Stub | point_add/scalar_mul return identity. verify_ecdsa() unimplemented. |
 
-The cost model is a property of the VM, not the OS. Provable VMs report
-proving cost. Non-provable VMs report execution metering. Native targets
-report wall-clock time. Each VM doc has per-instruction cost tables.
+Summary: 15 done, 1 placeholder, 2 stubs, 1 hardcoded.
 
 ---
 
-## Part II — Operating Systems
+## How to Add a New VM
 
-An OS defines the runtime environment: storage, accounts, syscalls, and
-I/O conventions. The compiler's job is runtime binding — link against
-OS-specific modules (`<os>.ext.*`). Everything in this section is about
-the OS, not the instruction set.
+Step-by-step checklist with exact file paths.
 
-### OS Registry
+### L0 — Declare
 
-25 OSes across provable, blockchain, and traditional runtimes:
+- [ ] Create `vm/<vm>.toml` with all sections:
+  `[target]`, `[field]`, `[stack]`, `[hash]`, `[extension_field]`, `[cost]`, `[status]`
+- [ ] Set `[status] level = 0`
+- [ ] Verify `--target <vm>` resolves (the compiler reads `vm/` at startup)
 
-| OS | VM | Runtime binding | Account / process model | Interop | Details |
-|----|-----|----------------|------------------------|---------|---------|
-| **Provable** | | | | | |
-| Neptune | [TRITON](vm/triton.md) | `neptune.ext.*` | UTXO | -- | [neptune.md](os/neptune.md) |
-| Polygon Miden | [MIDEN](vm/miden.md) | `miden.ext.*` | Account | -- | [miden.md](os/miden.md) |
-| Nockchain | [NOCK](vm/nock.md) | `nockchain.ext.*` | UTXO (Notes) | -- | [nockchain.md](os/nockchain.md) |
-| Starknet | [CAIRO](vm/cairo.md) | `starknet.ext.*` | Account | Ethereum L2 | [starknet.md](os/starknet.md) |
-| Boundless | [RISCZERO](vm/risczero.md) | `boundless.ext.*` | -- | Ethereum verification | [boundless.md](os/boundless.md) |
-| Succinct | [SP1](vm/sp1.md) | `succinct.ext.*` | -- | Ethereum verification | [succinct.md](os/succinct.md) |
-| OpenVM Network | [OPENVM](vm/openvm.md) | `openvm.ext.*` | -- | -- | [openvm-network.md](os/openvm-network.md) |
-| Aleo | [AVM](vm/avm.md) | `aleo.ext.*` | Record (UTXO) | -- | [aleo.md](os/aleo.md) |
-| Aztec | [AZTEC](vm/aztec.md) | `aztec.ext.*` | Note (UTXO) + public | Ethereum L2 | [aztec.md](os/aztec.md) |
-| **Blockchain** | | | | | |
-| Ethereum | [EVM](vm/evm.md) | `ethereum.ext.*` | Account | -- | [ethereum.md](os/ethereum.md) |
-| Solana | [SBPF](vm/sbpf.md) | `solana.ext.*` | Account (stateless programs) | -- | [solana.md](os/solana.md) |
-| Near Protocol | [WASM](vm/wasm.md) | `near.ext.*` | Account (1 contract each) | -- | [near.md](os/near.md) |
-| Cosmos (100+ chains) | [WASM](vm/wasm.md) | `cosmwasm.ext.*` | Account | IBC | [cosmwasm.md](os/cosmwasm.md) |
-| Arbitrum | [WASM](vm/wasm.md) + [EVM](vm/evm.md) | `arbitrum.ext.*` | Account (EVM-compatible) | Ethereum L2 | [arbitrum.md](os/arbitrum.md) |
-| Internet Computer | [WASM](vm/wasm.md) | `icp.ext.*` | Canister | -- | [icp.md](os/icp.md) |
-| Sui | [MOVEVM](vm/movevm.md) | `sui.ext.*` | Object-centric | -- | [sui.md](os/sui.md) |
-| Aptos | [MOVEVM](vm/movevm.md) | `aptos.ext.*` | Account (resources) | -- | [aptos.md](os/aptos.md) |
-| Ton | [TVM](vm/tvm.md) | `ton.ext.*` | Account (cells) | -- | [ton.md](os/ton.md) |
-| Nervos CKB | [CKB](vm/ckb.md) | `nervos.ext.*` | Cell (UTXO-like) | -- | [nervos.md](os/nervos.md) |
-| Polkadot | [POLKAVM](vm/polkavm.md) | `polkadot.ext.*` | Account | XCM | [polkadot.md](os/polkadot.md) |
-| **Traditional** | | | | | |
-| Linux | [X86-64](vm/x86-64.md) / [ARM64](vm/arm64.md) / [RISCV](vm/riscv.md) | `linux.ext.*` | Process | POSIX syscalls | [linux.md](os/linux.md) |
-| macOS | [ARM64](vm/arm64.md) / [X86-64](vm/x86-64.md) | `macos.ext.*` | Process | POSIX + Mach | [macos.md](os/macos.md) |
-| Android | [ARM64](vm/arm64.md) / [X86-64](vm/x86-64.md) | `android.ext.*` | Process (sandboxed) | NDK, JNI | [android.md](os/android.md) |
-| WASI | [WASM](vm/wasm.md) | `wasi.ext.*` | Process (capability) | WASI preview 2 | [wasi.md](os/wasi.md) |
-| Browser | [WASM](vm/wasm.md) | `browser.ext.*` | Event loop | JavaScript, Web APIs | [browser.md](os/browser.md) |
+### L1 — Document
 
-Key observations:
+- [ ] Create `docs/reference/vm/<vm>.md` — include architecture, word size,
+  instruction set summary, cost model parameters, and hash function
+- [ ] Add the VM to the VM Registry table in [vm.md](vm.md)
+- [ ] Update the VM Integration Matrix in this file
+- [ ] Set `[status] level = 1`
 
-- **One VM, many OSes.** WASM powers 6+ OSes (Near, Cosmos, ICP, Arbitrum,
-  WASI, Browser). x86-64 and ARM64 power Linux, macOS, Android. MOVEVM
-  powers Sui and Aptos. Same bytecode output, different `<os>.ext.*` bindings.
-- **RISC-V lowering is shared** across SP1, OPENVM, RISCZERO, JOLT, CKB,
-  POLKAVM, and native RISCV — 7 targets from one `RiscVLowering`.
-- **Arbitrum** supports both WASM (Stylus) and EVM.
+### L2 — Scaffold (optional, legacy path)
 
----
+Only if using the legacy emitter pipeline. New VMs should prefer L3.
 
-### `os.*` Lowering by OS Family
+- [ ] Create `src/legacy/backend/<vm>.rs` implementing `StackBackend`
+- [ ] Register in `src/legacy/backend/mod.rs` factory (`create_backend()`)
+- [ ] Set `[status] level = 2`, `lowering_path = "legacy"`
 
-The portable OS layer (`os.*`) maps intent to OS-native mechanism.
-The compiler reads the `[runtime]` section of the target's OS TOML
-(`account_model`, `storage_model`, `transaction_model`) to select the
-correct lowering strategy. See [stdlib.md](stdlib.md) for full API specs.
+### L3 — Lowering (pick one path)
 
-#### `os.state` — Persistent State
+| Path | Trait | Location | Factory |
+|------|-------|----------|---------|
+| Stack | `StackLowering` | `src/tir/lower/<vm>.rs` | `create_stack_lowering()` in `src/tir/lower/mod.rs` |
+| Register | `RegisterLowering` | `src/lir/lower/<vm>.rs` | `create_register_lowering()` in `src/lir/lower/mod.rs` |
+| Tree | `TreeLowering` | `src/tree/lower/<vm>.rs` | `create_tree_lowering()` in `src/tree/lower/mod.rs` |
+| Specialized | Dedicated trait | Dedicated module | Per-trait factory |
 
-| OS family | OSes | `state.read(key)` lowers to |
-|-----------|------|-----------------------------|
-| Account | Ethereum, Starknet, Near, Cosmos, Ton, Polkadot, Miden | `SLOAD(key)` / storage read syscall |
-| Stateless | Solana | `account.data(derived_index, offset)` |
-| Object | Sui, Aptos | `dynamic_field.borrow(context_object, key)` |
-| UTXO | Neptune, Nockchain, Nervos, Aleo, Aztec | `divine()` + `merkle_authenticate(key, root)` |
-| Process | Linux, macOS, WASI, Browser, Android | File / environment read |
-| Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no persistent state |
+- [ ] Implement the chosen lowering trait
+- [ ] Register in the appropriate factory function
+- [ ] Set `[status] level = 3`, `lowering = "<TraitName>"`, `lowering_path = "<path>"`
 
-#### `os.neuron` — Identity and Authorization
+### L4 — Cost
 
-`neuron.id()` returns the current neuron's identity as a `Digest`.
-`neuron.auth(cred)` is an assertion — succeeds silently or crashes the VM.
+- [ ] Create `src/cost/model/<vm>.rs` implementing `CostModel`
+- [ ] Register in `src/cost/model/mod.rs` factory (`create_cost_model()`)
+- [ ] Set `[status] level = 4`, `cost_model = true`
 
-| OS family | OSes | `neuron.id()` lowers to |
-|-----------|------|-------------------------|
-| Account (EVM) | Ethereum | `msg.sender` (padded to Digest) |
-| Account (Cairo) | Starknet | `get_caller_address` |
-| Account (WASM) | Near, Cosmos | `predecessor_account_id` / `info.sender` |
-| Account (other) | Ton, Polkadot, Miden | OS-native caller address |
-| Stateless | Solana | `account.key(0)` (first signer) |
-| Object | Sui, Aptos | `tx_context::sender` |
-| Process | Linux, macOS, WASI, Android | `getuid()` (padded to Digest) |
-| UTXO | Neptune, Nockchain, Nervos, Aleo, Aztec | **Compile error** — no caller; use `neuron.auth()` |
-| Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no identity |
+### L5 — Test
 
-| OS family | OSes | `neuron.auth(cred)` lowers to |
-|-----------|------|-------------------------------|
-| Account (EVM) | Ethereum | `assert(msg.sender == cred)` |
-| Account (Cairo) | Starknet | `assert(get_caller_address() == cred)` |
-| Account (WASM) | Near, Cosmos | `assert(predecessor == cred)` / `assert(sender == cred)` |
-| Account (other) | Ton, Polkadot, Miden | `assert(caller == cred)` |
-| Stateless | Solana | `assert(is_signer(find_account(cred)))` |
-| Object | Sui, Aptos | `assert(tx.sender() == cred)` |
-| UTXO | Neptune, Nockchain, Nervos, Aleo, Aztec | `divine()` + `hash()` + `assert_eq(hash, cred)` |
-| Process | Linux, macOS, WASI, Android | `assert(getuid() == cred)` |
-| Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no identity |
+- [ ] Add lowering tests (e.g., `src/tir/lower/tests.rs` or equivalent for
+  tree/register paths)
+- [ ] Add end-to-end compilation tests
+- [ ] Verify `cargo test` passes with the new VM
+- [ ] Set `[status] level = 5`, `tests = true`
 
-#### `os.signal` — Communication Between Neurons
+### Finalize
 
-`send(from, to, amount)` — a signal: directed weighted edge from one
-neuron to another. `from` is usually the current neuron but supports
-delegation/proxy patterns (ERC-20 `transferFrom`, UTXO spend on behalf
-of another neuron).
-
-| OS family | OSes | `signal.send(from, to, amount)` lowers to |
-|-----------|------|----------------------------------------------|
-| Account (EVM) | Ethereum | `CALL(to, amount, "")` (self) / `transferFrom(from, to, amount)` (delegated) |
-| Account (Cairo) | Starknet | `transfer(from, to, amount)` syscall |
-| Account (WASM) | Near, Cosmos | `Promise::transfer` / `BankMsg::Send` |
-| Account (other) | Ton, Polkadot | OS-native transfer message |
-| Stateless | Solana | `system_program::transfer(from, to, amount)` |
-| Object | Sui, Aptos | `coin::split` + `transfer::public_transfer` |
-| UTXO | Neptune, Nockchain, Nervos, Aleo, Aztec | Emit output UTXO/note (from = consumed input, to = recipient) |
-| Process | Linux, macOS, WASI, Browser, Android | **Compile error** — no native value |
-| Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no native value |
-
-#### `os.time` — Clock
-
-| OS family | OSes | `time.now()` lowers to |
-|-----------|------|------------------------|
-| Account (EVM) | Ethereum | `block.timestamp` |
-| Account (Cairo) | Starknet | `get_block_timestamp` |
-| Account (WASM) | Near, Cosmos | `env.block.time` |
-| Account (other) | Ton, Polkadot | OS-native block time |
-| Stateless | Solana | `Clock::unix_timestamp` |
-| Object | Sui, Aptos | `tx_context::epoch_timestamp_ms` |
-| UTXO | Neptune, Nockchain | `kernel.authenticate_timestamp(root)` |
-| Process | Linux, macOS, Android | `clock_gettime(CLOCK_REALTIME)` |
-| WASI/Browser | WASI, Browser | `wall_clock.now()` / `Date.now()` |
-| Journal | Boundless, Succinct, OpenVM Network | Timestamp from public input |
-
-#### OS TOML `[runtime]` Fields
-
-The compiler selects lowering strategy from three fields in `os/*.toml`:
-
-| Field | Values | Effect on `os.*` |
-|-------|--------|---------------------|
-| `account_model` | `account`, `stateless`, `object`, `utxo`, `journal`, `process` | Selects neuron/signal lowering |
-| `storage_model` | `key-value`, `account-data`, `object-store`, `merkle-authenticated`, `filesystem`, `none` | Selects state lowering |
-| `transaction_model` | `signed`, `proof-based`, `none` | Selects neuron.auth/signal lowering |
+- [ ] Update `[status]` in `vm/<vm>.toml` to reflect completed level
+- [ ] Update the VM Integration Matrix in this file
 
 ---
 
-## Part III — Adding a Target
+## How to Add a New OS
 
-For detailed step-by-step checklists with exact file paths, integration
-level definitions, and current status matrices, see
-**[Integration Status](integration.md)**.
+### L0 — Declare
 
-Quick summary:
+- [ ] Create `os/<os>.toml` with sections:
+  `[os]`, `[runtime]`, `[cross_chain]`, `[status]`
+- [ ] The `vm` field in `[os]` must reference an existing VM in `vm/`
+- [ ] Set `[status] level = 0`
 
-- **Adding a VM**: Create `vm/<vm>.toml` -> document -> implement lowering
-  -> add cost model -> test. (6 levels, L0--L5.)
-- **Adding an OS**: Create `os/<os>.toml` -> document -> write `<os>/ext/*.tri`
-  bindings -> test. (4 levels, L0--L3.)
+### L1 — Document
 
-No new lowering is needed for an OS — the VM already compiles. Only the
-runtime bindings differ. The extensions directory is keyed by **OS name**
-(not VM name): `neptune/ext/`, `solana/ext/`, `linux/ext/`.
+- [ ] Create `docs/reference/os/<os>.md` — include programming model,
+  state model, `<os>.ext.*` API surface, and deployment patterns
+- [ ] Add the OS to the OS Registry table in [os.md](os.md)
+- [ ] Update the OS Integration Matrix in this file
+- [ ] Set `[status] level = 1`
 
-See [ir.md Part VI](ir.md) for lowering trait interfaces.
+### L2 — Bind
+
+- [ ] Create `ext/<os>/` directory
+- [ ] Write `.tri` binding modules (one per concern: storage, account,
+  transfer, events, etc.)
+- [ ] Each file declares `module <os>.ext.<name>`
+- [ ] Set `[status] level = 2`, `ext_modules = <count>`,
+  `notes = "<comma-separated module names>"`
+
+### L3 — Test
+
+- [ ] Add end-to-end compilation tests targeting this OS
+- [ ] Verify `<os>.ext.*` module resolution works
+- [ ] Set `[status] level = 3`, `tests = true`
+
+### Finalize
+
+- [ ] Update `[status]` in `os/<os>.toml`
+- [ ] Update the OS Integration Matrix in this file
+
+---
+
+## How to Add a std/ Module
+
+1. Create `std/<category>/<name>.tri` with `module std.<category>.<name>`
+2. Implement functions. Use `#[intrinsic]` for VM-native operations.
+3. Determine status: Done, Stub, Placeholder, or Hardcoded.
+4. Update the Standard Library Status table in this file.
+5. If the module is target-specific, document which targets support it
+   in [stdlib.md](stdlib.md).
 
 ---
 
 ## See Also
 
+- [VM Reference](vm.md) — VM registry, lowering paths, tier/type/builtin tables, cost models
+- [OS Reference](os.md) — OS concepts, `os.*` gold standard, extensions
+- [Standard Library](stdlib.md) — `std.*` modules
 - [Language Reference](language.md) — Types, operators, builtins, grammar
 - [Provable Computation](provable.md) — Hash, sponge, Merkle, extension field (Tier 2-3)
 - [IR Reference](ir.md) — 54 operations, 4 tiers, lowering paths
 - [CLI Reference](cli.md) — Compiler commands and flags
 - [Error Catalog](errors.md) — All compiler error messages explained
-- [Standard Library](stdlib.md) — `std.*`, `os.*`, and `<os>.ext.*` modules
 
 ---
 

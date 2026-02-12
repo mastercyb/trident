@@ -362,7 +362,7 @@ error: type-level generics are not supported
   help: only size parameters (integers) are allowed: `fn foo<N>(...)`
 ```
 
-**Spec:** language.md Section 3, patterns.md Permanent Exclusions (only integer size parameters).
+**Spec:** language.md Section 3, Section 12 (only integer size parameters).
 
 ---
 
@@ -408,7 +408,7 @@ error: floating-point types are not supported
   help: use Field for arithmetic — all computation is over finite fields
 ```
 
-**Spec:** language.md Section 2, patterns.md Permanent Exclusions.
+**Spec:** language.md Section 2, Section 12.
 
 ---
 

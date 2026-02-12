@@ -45,7 +45,7 @@ at least one diagnostic entry.
 ### Completeness claim
 
 165 diagnostics cover every user-violable "must"/"cannot"/"only" constraint
-in the language reference (language.md, provable.md, grammar.md, patterns.md),
+in the language reference (language.md, provable.md, grammar.md),
 targets.md, and ir.md. The derivation was audited by scanning all reference
 documents for prohibition keywords and cross-referencing each against the
 catalog.
@@ -76,7 +76,7 @@ catalog.
 ## See Also
 
 - [Language Reference](language.md) — Types, operators, builtins, grammar
-- [Target Reference](targets.md) — Target profiles, cost models, and OS model
+- [Target Reference](targets.md) — OS model, integration tracking, how-to-add checklists
 - [IR Reference](ir.md) — 54 operations, 4 tiers, lowering paths
 - [Tutorial](../tutorials/tutorial.md) — Step-by-step guide with working examples
 - [For Developers](../tutorials/for-developers.md) — Why bounded loops? Why no heap?

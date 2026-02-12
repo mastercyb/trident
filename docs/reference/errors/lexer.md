@@ -174,7 +174,7 @@ error: unexpected '"'; Trident has no string type
   help: strings are a permanent exclusion — no target VM supports string operations
 ```
 
-**Spec:** language.md Section 2, patterns.md Permanent Exclusions.
+**Spec:** language.md Section 2, Section 12.
 
 ---
 

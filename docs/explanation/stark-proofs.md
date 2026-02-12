@@ -288,7 +288,7 @@ In this example, the Processor and Op Stack tables are both 3,847 rows, but
 the padded height is 4,096. If a small code change pushed any table past
 4,096, the padded height would jump to 8,192 -- doubling proving time.
 
-Cross-reference: [targets.md](../reference/targets.md) for the full cost model,
+Cross-reference: [vm.md](../reference/vm.md) for the full cost model,
 [optimization.md](../guides/optimization.md) for strategies to reduce table heights.
 
 ---
@@ -787,7 +787,7 @@ The cost of a single hash operation varies dramatically across ZK systems:
 For hash-heavy workloads -- Merkle tree operations, sponge hashing, content
 addressing -- this difference dominates total proving cost.
 
-Cross-reference: [targets.md](../reference/targets.md) for the complete cost model,
+Cross-reference: [vm.md](../reference/vm.md) for the complete cost model,
 [optimization.md](../guides/optimization.md) for cost reduction strategies.
 
 ---
@@ -912,7 +912,7 @@ Cross-reference: [vision.md](vision.md) "Recursive STARK Verification",
 - [Language Reference](../reference/language.md) -- Quick lookup: cost-per-instruction
   table (Section 7) maps every construct to its table impact.
 
-- [Target Reference](../reference/targets.md) -- Cost models and target profiles
+- [VM Reference](../reference/vm.md) -- VM registry, lowering paths, cost models
   full detail. Section 8.4 covers extension-field dot products. Section 13.4
   gives the recursive verifier sketch.
 

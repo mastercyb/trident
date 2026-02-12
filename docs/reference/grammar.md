@@ -99,6 +99,6 @@ comment       = "//" .* NEWLINE ;
 
 - [Language Reference](language.md) — Core language (types, operators, statements)
 - [Provable Computation](provable.md) — Hash, Merkle, extension field, proof composition
-- [Standard Library](stdlib.md) — `std.*` modules and OS extensions
+- [Standard Library](stdlib.md) — `std.*` modules
 - [CLI Reference](cli.md) — Compiler commands and flags
-- [Patterns](patterns.md) — Common patterns and permanent exclusions
+- [OS Reference](os.md) — OS concepts, `os.*` gold standard, extensions

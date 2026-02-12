@@ -202,7 +202,7 @@ instead of `sui.ext.*` for cross-chain portability:
 
 Use `sui.ext.*` when you need: object ownership (owned/shared/frozen),
 dynamic fields, capability pattern, or other Sui-specific features. See
-[stdlib.md](../stdlib.md) for the full `os.*` API.
+[os.md](../os.md) for the full `os.*` API.
 
 ---
 

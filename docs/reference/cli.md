@@ -61,7 +61,7 @@ See [targets.md](targets.md) for the full target registry.
 
 - [Language Reference](language.md) — Core language (types, operators, statements)
 - [Provable Computation](provable.md) — Hash, Merkle, extension field, proof composition
-- [Standard Library](stdlib.md) — `std.*` modules and OS extensions
+- [Standard Library](stdlib.md) — `std.*` modules
 - [Grammar](grammar.md) — EBNF grammar
-- [Patterns](patterns.md) — Common patterns and permanent exclusions
+- [OS Reference](os.md) — OS concepts, `os.*` gold standard, extensions
 - [Target Reference](targets.md) — All VMs and OSes

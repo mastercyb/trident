@@ -181,8 +181,8 @@ WRONG: recursive calls  ->  not allowed; call graph must be acyclic
 
 - [Language Reference](language.md) — Full language specification (types, operators, statements)
 - [Provable Computation](provable.md) — Hash, Merkle, extension field, proof composition
-- [Standard Library](stdlib.md) — `std.*` modules and OS extensions
+- [Standard Library](stdlib.md) — `std.*` modules
 - [CLI Reference](cli.md) — Compiler commands and flags
 - [Grammar](grammar.md) — EBNF grammar
-- [Patterns](patterns.md) — Common patterns and permanent exclusions
-- [Target Reference](targets.md) — OS model, target profiles, cost models
+- [OS Reference](os.md) — OS concepts, `os.*` gold standard, extensions
+- [Target Reference](targets.md) — OS model, integration tracking, how-to-add checklists

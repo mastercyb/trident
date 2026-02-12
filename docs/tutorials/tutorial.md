@@ -844,7 +844,7 @@ These constraints make every Trident program a fixed, bounded computation -- exa
 ## Next Steps
 
 - [Language Reference](../reference/language.md) -- Quick lookup for types, operators, builtins, and grammar
-- [Target Reference](../reference/targets.md) -- Target profiles, cost models, and OS model
+- [Target Reference](../reference/targets.md) -- OS model, integration tracking, how-to-add checklists
 - [Programming Model](../explanation/programming-model.md) -- How programs run (currently targeting [Triton VM](https://triton-vm.org/)) and the Neptune transaction model
 - [Compiling a Program](../guides/compiling-a-program.md) -- Next lifecycle stage: build targets, output formats, and optimization flags
 - [Optimization Guide](../guides/optimization.md) -- Strategies to reduce proving cost

@@ -213,7 +213,7 @@ instead of `starknet.ext.*` for cross-chain portability:
 
 Use `starknet.ext.*` when you need: L1/L2 messaging, library calls,
 Pedersen-addressed storage vars, or other Starknet-specific features. See
-[stdlib.md](../stdlib.md) for the full `os.*` API.
+[os.md](../os.md) for the full `os.*` API.
 
 ---
 

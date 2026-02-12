@@ -343,6 +343,6 @@ uses the same I/O channels -- `pub_read` becomes calldata or stdin,
 - [Universal Design](universal-design.md) -- Multi-target compilation architecture
 - [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide to writing Trident programs
 - [Language Reference](../reference/language.md) -- Types, operators, builtins, grammar
-- [Target Reference](../reference/targets.md) -- OS model, target profiles, cost models
+- [Target Reference](../reference/targets.md) -- OS model, integration tracking, how-to-add checklists
 - [How STARK Proofs Work](stark-proofs.md) -- The proof system underlying provable execution
 - [Optimization Guide](../guides/optimization.md) -- Cost reduction strategies

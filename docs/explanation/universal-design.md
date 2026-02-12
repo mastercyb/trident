@@ -445,7 +445,7 @@ end-to-end proving and verification.
 
 - [Tutorial](../tutorials/tutorial.md) -- getting started, including `asm(triton)` blocks
 - [Language Reference](../reference/language.md) -- complete syntax and semantics
-- [Target Reference](../reference/targets.md) -- Target profiles, cost models, and OS model
+- [Target Reference](../reference/targets.md) -- OS model, integration tracking, how-to-add checklists
 - [Compiling a Program](../guides/compiling-a-program.md) -- `--target` flag and build pipeline
 - [Programming Model](programming-model.md) -- bounded execution, cost transparency, auditability
 - [Content-Addressed Code](content-addressing.md) -- how target-independent hashing works

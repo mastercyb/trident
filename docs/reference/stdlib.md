@@ -1,10 +1,10 @@
-# Standard Library
+# Standard Library Reference
 
-[← Language Reference](language.md) | [Target Reference](targets.md)
+[← Language Reference](language.md) | [OS Reference](os.md)
 
 ---
 
-## Universal Modules (`std.*`)
+## Module Map
 
 Available on all targets. These modules provide the core language runtime.
 
@@ -23,170 +23,183 @@ Available on all targets. These modules provide the core language runtime.
 
 ---
 
-## Portable OS Layer (`os.*`)
+## `std.core`
 
-### The Model: Neurons, Signals, Tokens
+### `core.field` — Field arithmetic
 
-The entire blockchain design space reduces to three primitives:
+Intrinsics that map directly to the target VM's field operations.
+`add`, `sub`, `mul`, `neg`, `inv`. On non-provable targets, these use
+software modular reduction.
 
-- **Neuron** — an actor. Accounts, UTXOs, objects, cells, notes, resources,
-  contracts, wallets — all are neurons. A neuron has identity, can hold
-  state, and can send signals.
-- **Signal** — a transaction. A bundle of directed weighted edges (cyberlinks)
-  from neuron to neuron. The weight is the amount. The signal is the act of
-  communication itself.
-- **Token** — a neuron viewed as an asset. Neurons ARE tokens. A fungible
-  token (ETH, SOL, CKByte) is a fungible neuron — many identical
-  interchangeable units, like shares of a company. A non-fungible token
-  (NFT, smart contract, unique UTXO) is a non-fungible neuron — unique
-  identity, one-of-one, like a person.
+### `core.convert` — Type conversions
 
-The model: **neurons send signals carrying tokens to other neurons.**
-Neurons are the tokens. Everything else — accounts, UTXOs, objects,
-cells — is how a specific OS represents neurons internally. The
-compiler's job is to map neuron/signal operations down to those internals.
+`as_u32`, `as_field`, `split`. Convert between `Field`, `U32`, and
+component types. `split` decomposes a field element into its constituent
+limbs.
 
-### Module Overview
+### `core.u32` — Unsigned 32-bit operations
 
-Available on all blockchain and traditional OSes. The compiler lowers each
-function to the OS-native mechanism based on `--target`.
+`log2`, `pow`, `popcount`. Higher-level U32 operations built on the
+primitive `U32` type.
 
-Programs using only `std.*` + `os.*` are portable across all OSes that
-support the required operations. If an OS doesn't support a concept (e.g.,
-`os.neuron.id()` on UTXO chains, `os.signal.send()` on journal targets),
-the compiler emits a clear error.
+### `core.assert` — Assertions
 
-### `os.neuron` — Identity and authorization
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `id()` | `() -> Digest` | Identity of the current neuron (caller) |
-| `verify(expected)` | `(expected: Digest) -> Bool` | Check caller matches expected |
-| `auth(credential)` | `(credential: Digest) -> ()` | Assert authorized; crash if not |
-
-A neuron is identified by a `Digest` — the universal identity container.
-A 20-byte EVM address, a 32-byte Solana pubkey, and a 251-bit Starknet
-felt all fit in a Digest.
-
-`neuron.auth(credential)` is an assertion — it succeeds silently or crashes
-the VM. On account chains, it checks the caller address. On UTXO chains,
-it checks a hash preimage (divine the secret, hash it, assert the digest
-matches). Same source code, different mechanism. This is the only auth
-mechanism that works on every OS with identity.
-
-**Supported:** Account, Stateless, Object, Process.
-**`id()`/`verify()` compile error:** UTXO (no caller — use `auth()`), Journal (no identity).
-**`auth()` compile error:** Journal (no identity).
-
-### `os.signal` — Communication between neurons
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `send(from, to, amount)` | `(from: Digest, to: Digest, amount: Field) -> ()` | Emit a weighted directed edge from one neuron to another |
-| `balance(neuron)` | `(neuron: Digest) -> Field` | Query neuron balance |
-
-`send(from, to, amount)` is the universal primitive: a directed weighted
-edge — a signal — from one neuron to another. In most cases `from` is the
-current neuron, but delegation/proxy/allowance patterns pass a different
-`from` (e.g., ERC-20 `transferFrom`, spending another neuron's UTXO with
-their authorization).
-
-**Supported:** Account, Stateless, Object, UTXO.
-**Compile error:** Journal (no value), Process (no native value).
-
-### `os.state` — Neuron state
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `read(key)` | `(key: Field) -> Field` | Read one field element at key |
-| `write(key, value)` | `(key: Field, value: Field) -> ()` | Write one field element at key |
-| `read_n(key, width)` | `(key: Field, width: U32) -> [Field; N]` | Read N elements starting at key |
-| `write_n(key, values)` | `(key: Field, values: [Field; N]) -> ()` | Write N elements starting at key |
-| `exists(key)` | `(key: Field) -> Bool` | Check if key has been written |
-
-**Supported:** Account, Stateless, Object, UTXO, Process.
-**Compile error:** Journal (no persistent state).
-
-On UTXO chains, the compiler auto-generates the divine-and-authenticate
-pattern: divine the value, hash it, Merkle-prove against the state root.
-The developer writes `state.read(key)` — the proof machinery is invisible.
-
-### `os.time` — Portable clock
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `now()` | `() -> Field` | Current timestamp |
-| `block_height()` | `() -> Field` | Current block/slot number |
-
-**Supported:** All OS families.
-
-On blockchain OSes, `now()` returns block/slot timestamp. On traditional
-OSes, it returns wall-clock time. On journal targets, it returns the
-timestamp provided as public input.
-
-### `os.event` — Events (already universal)
-
-`reveal` and `seal` are the event mechanism. They compile to the TIR ops
-`Reveal` and `Seal`, which each backend lowers to its native event
-mechanism (LOG on EVM, sol_log on Solana, announcements on Neptune).
-No additional `os.event` module needed — events use language-level
-`reveal`/`seal` statements directly.
-
-### The three-tier model
-
-```
-std.*          Standard library      Pure computation (all 20 VMs, all 25 OSes)
-os.*           OS standard           Universal runtime contract (all OSes)
-<os>.ext.*     OS extensions         OS-native API (one specific OS)
-```
-
-Programs can mix all three tiers. `std.*` for math and crypto. `os.*`
-for portable neuron identity, signals, state, and events. `<os>.ext.*`
-when OS-native features are needed (PDAs, object ownership, L1/L2
-messaging, CPI, etc.).
-
-For per-OS lowering details (what each `os.*` function compiles to on
-each specific OS), see [targets.md — `os.*` Lowering](targets.md).
+`is_true`, `eq`, `digest`. Runtime assertions — on provable VMs, a
+failed assertion means no valid proof can be generated. On EVM, assertions
+revert. On NOCK, they crash.
 
 ---
 
-## OS Extensions (`<os>.ext.*`)
+## `std.io`
 
-Each OS provides its own `<os>.ext.*` modules with runtime-specific
-bindings: storage, accounts, syscalls, transaction models. Importing any
-`<os>.ext.*` module binds the program to that OS — the compiler rejects
-cross-OS imports.
+### `io.io` — Public I/O
 
-### Implemented
+`pub_read`, `pub_write`, `divine`. The public input/output interface.
+`pub_read` reads from the public input stream. `pub_write` writes to the
+public output stream. `divine` reads non-deterministic advice (prover
+hint).
 
-| Module | Description | OS doc |
-|--------|-------------|--------|
-| `neptune.ext.kernel` | Transaction kernel MAST authentication | [neptune.md](os/neptune.md) |
-| `neptune.ext.utxo` | UTXO structure authentication | [neptune.md](os/neptune.md) |
-| `neptune.ext.xfield` | Extension field arithmetic intrinsics | [neptune.md](os/neptune.md) |
-| `neptune.ext.proof` | Recursive STARK verification | [neptune.md](os/neptune.md) |
-| `neptune.ext.recursive` | Low-level recursive proof primitives | [neptune.md](os/neptune.md) |
-| `neptune.ext.registry` | On-chain definition registry (5 ops) | [neptune.md](os/neptune.md) |
+### `io.mem` — Memory operations
 
-### Designed (not yet implemented)
+`read`, `write`, `read_block`, `write_block`. Direct RAM access. On stack
+machines, these map to RAM table operations. On register machines, these
+map to load/store instructions.
 
-| OS | Modules | OS doc |
-|----|---------|--------|
-| Ethereum | `ethereum.ext.` storage, account, transfer, call, event, block, tx, precompile | [ethereum.md](os/ethereum.md) |
-| Solana | `solana.ext.` account, pda, cpi, transfer, system, log, clock, rent | [solana.md](os/solana.md) |
-| Starknet | `starknet.ext.` storage, account, call, event, messaging, crypto | [starknet.md](os/starknet.md) |
-| Sui | `sui.ext.` object, transfer, dynamic_field, tx, coin, event | [sui.md](os/sui.md) |
+### `io.storage` — Persistent storage
 
-See each OS doc for the full API reference. See [targets.md Part II](targets.md)
-for the complete OS registry (25 OSes).
+Storage wrapper that delegates to mem operations. For OS-level persistent
+state (blockchain storage, filesystem), see [os.state](os.md).
+
+---
+
+## `std.crypto`
+
+### `crypto.hash` — Hash functions
+
+`hash`, `sponge_init`, `sponge_absorb`, `sponge_squeeze`. The hash
+function is VM-specific (Tip5 on TRITON/NOCK, Rescue on MIDEN, etc.) but
+the API is identical. `hash()` is Tier 1 (all VMs). Sponge operations are
+Tier 2 (provable VMs only).
+
+### `crypto.merkle` — Merkle authentication
+
+`verify1`..`verify4`, `authenticate_leaf3`. Merkle tree verification
+primitives. Tier 2 — require a provable VM with native or emulated Merkle
+coprocessor support.
+
+### `crypto.auth` — Authentication
+
+`verify_preimage`, `verify_digest_preimage`. Hash preimage verification
+patterns used by Neptune lock scripts and UTXO authorization.
+
+### `crypto.sha256` — SHA-256
+
+Full SHA-256 implementation. Available on all targets (software on
+non-SHA-256 VMs, native on RISCZERO).
+
+### `crypto.keccak256` — Keccak-256
+
+Keccak-f[1600] permutation, 24 rounds. Available on all targets (native
+on EVM).
+
+### `crypto.poseidon2` — Poseidon2
+
+Full Poseidon2 (t=8, rate=4, x^7 S-box). Available on all targets
+(native on SP1, OPENVM, JOLT, AZTEC).
+
+### `crypto.bigint` — Big integer arithmetic
+
+256-bit unsigned integer arithmetic. Used for cross-field operations and
+non-native field emulation.
+
+### `crypto.ecdsa` — ECDSA signatures
+
+Signature structure, input reading, range validation. Foundation for
+secp256k1 and ed25519 verification.
+
+### `crypto.secp256k1` — secp256k1 (stub)
+
+`point_add`/`scalar_mul` return identity. `verify_ecdsa()` unimplemented.
+
+### `crypto.ed25519` — Ed25519 (stub)
+
+`point_add`/`scalar_mul` return identity. `verify()` incomplete.
+
+### `crypto.poseidon` — Poseidon (placeholder)
+
+Dummy round constants, simplified S-box/MDS. NOT cryptographically secure.
+Placeholder for future proper implementation.
+
+---
+
+## Common Patterns
+
+### Read-Compute-Write (Universal)
+
+```
+fn main() {
+    let a: Field = pub_read()
+    let b: Field = pub_read()
+    pub_write(a + b)
+}
+```
+
+### Accumulator (Universal)
+
+```
+fn sum<N>(arr: [Field; N]) -> Field {
+    let mut total: Field = 0
+    for i in 0..N { total = total + arr[i] }
+    total
+}
+```
+
+### Non-Deterministic Verification (Universal)
+
+```
+fn prove_sqrt(x: Field) {
+    let s: Field = divine()      // prover injects sqrt(x)
+    assert(s * s == x)           // verifier checks s^2 = x
+}
+```
+
+### Merkle Proof Verification (Tier 2)
+
+```
+module merkle
+
+pub fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
+    let mut idx = index
+    let mut current = leaf
+    for _ in 0..depth bounded 64 {
+        (idx, current) = merkle_step(idx, current)
+    }
+    assert_digest(current, root)
+}
+```
+
+### Event Emission (Tier 2)
+
+```
+event Transfer { from: Digest, to: Digest, amount: Field }
+
+fn process(sender: Digest, receiver: Digest, value: Field) {
+    // ... validation ...
+    reveal Transfer { from: sender, to: receiver, amount: value }
+}
+```
 
 ---
 
 ## See Also
 
+- [OS Reference](os.md) — `os.*` portable layer, neuron/signal/token model, extensions
 - [Language Reference](language.md) — Core language (types, operators, statements)
 - [Provable Computation](provable.md) — Hash, Merkle, extension field, proof composition
+- [VM Reference](vm.md) — VM registry, tier/type/builtin tables
 - [CLI Reference](cli.md) — Compiler commands and flags
 - [Grammar](grammar.md) — EBNF grammar
-- [Patterns](patterns.md) — Common patterns and permanent exclusions
-- [Target Reference](targets.md) — OS registry, `<os>.ext.*` bindings
+
+---
+
+*Trident v0.5 — Write once. Run anywhere.*

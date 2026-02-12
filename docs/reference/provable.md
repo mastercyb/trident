@@ -119,9 +119,9 @@ cannot compile for any other target.
 ## See Also
 
 - [Language Reference](language.md) — Core language (types, operators, statements)
-- [Standard Library](stdlib.md) — `std.*` modules and OS extensions
+- [Standard Library](stdlib.md) — `std.*` modules
 - [CLI Reference](cli.md) — Compiler commands and flags
 - [Grammar](grammar.md) — EBNF grammar
-- [Patterns](patterns.md) — Common patterns and permanent exclusions
+- [OS Reference](os.md) — OS concepts, `os.*` gold standard, extensions
 - [IR Reference](ir.md) — Compiler intermediate representation (54 ops, 4 tiers)
 - [Target Reference](targets.md) — Tier compatibility per VM

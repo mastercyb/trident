@@ -185,7 +185,7 @@ instead of `ethereum.ext.*` for cross-chain portability:
 
 Use `ethereum.ext.*` when you need: precompiles, delegatecall, specific
 LOG topics, storage maps, or other EVM-specific features. See
-[stdlib.md](../stdlib.md) for the full `os.*` API.
+[os.md](../os.md) for the full `os.*` API.
 
 ---
 

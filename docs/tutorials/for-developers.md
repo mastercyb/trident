@@ -622,7 +622,7 @@ target that supports the same feature set.
   I/O, hashing, events, testing, cost analysis
 - [Language Reference](../reference/language.md) -- Quick lookup: types, operators,
   builtins, grammar, CLI flags
-- [Target Reference](../reference/targets.md) -- Target profiles, cost models, and OS model
+- [Target Reference](../reference/targets.md) -- OS model, integration tracking, how-to-add checklists
   constructs, the type system, module system, grammar, and cost model
 - [Programming Model](../explanation/programming-model.md) -- How programs run inside Triton
   VM, the Neptune blockchain model, script types, and data flow

@@ -198,7 +198,7 @@ instead of `solana.ext.*` for cross-chain portability:
 
 Use `solana.ext.*` when you need: PDAs, CPI, specific account indices,
 rent exemption checks, or other Solana-specific features. See
-[stdlib.md](../stdlib.md) for the full `os.*` API.
+[os.md](../os.md) for the full `os.*` API.
 
 ---
 

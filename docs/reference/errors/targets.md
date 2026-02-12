@@ -137,7 +137,7 @@ error: cannot import 'neptune.ext.xfield' when compiling for target 'miden'
 Importing `<os>.ext.*` binds the program to that OS. Compiling for a
 different target is a hard error.
 
-**Spec:** stdlib.md OS Extensions, targets.md (cross-OS imports rejected).
+**Spec:** os.md Extension Tracking, targets.md (cross-OS imports rejected).
 
 ---
 

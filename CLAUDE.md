@@ -6,17 +6,19 @@
 Each file owns a specific domain:
 
 - **`language.md`** — syntax, types, operators, builtins, attributes,
-  memory model, type checking rules
+  memory model, type checking rules, permanent exclusions
 - **`ir.md`** — TIROp variant names, counts, tier assignments, lowering paths,
   naming conventions, architecture diagrams, pipeline
-- **`targets.md`** — OS model, VM profiles, cost models, type/builtin
-  availability per target, tier compatibility
+- **`targets.md`** — OS model, integration tracking, how-to-add checklists
+- **`vm.md`** — VM registry, lowering paths, tier/type/builtin tables,
+  cost models
+- **`os.md`** — OS concepts (neuron/signal/token), `os.*` gold standard,
+  OS registry, extension tracking
+- **`stdlib.md`** — `std.*` modules, common patterns
 - **`provable.md`** — Tier 2-3 builtins (sponge, Merkle, extension field,
   proof composition)
 - **`errors.md`** — error codes and diagnostic messages
 - **`grammar.md`** — EBNF grammar
-- **`patterns.md`** — permanent exclusions and common patterns
-- **`stdlib.md`** — standard library modules and OS extensions
 - **`cli.md`** — compiler commands and flags
 - **`briefing.md`** — AI-optimized compact cheat-sheet
 

@@ -411,8 +411,7 @@ to any OS that supports the required concepts. The compiler emits clear
 errors when targeting an OS that lacks a concept (e.g., `os.neuron.id()`
 on UTXO chains, `os.signal.send()` on journal targets).
 
-For full API specifications, see [stdlib.md](stdlib.md). For per-OS lowering
-tables, see [targets.md](targets.md).
+For full API specifications and per-OS lowering tables, see [os.md](os.md).
 
 ---
 
@@ -546,16 +545,40 @@ written to public output. The verifier sees the commitment, not the data.
 
 ---
 
+## 12. Permanent Exclusions
+
+These are design decisions, not roadmap items.
+
+| Feature | Reason |
+|---------|--------|
+| Strings | No string operations in any target VM ISA |
+| Dynamic arrays | Unpredictable trace length |
+| Heap allocation | Non-deterministic memory, no GC |
+| Recursion | Unbounded trace; use bounded loops |
+| Closures | Requires dynamic dispatch |
+| Type-level generics | Compile-time complexity, audit difficulty |
+| Operator overloading | Hides costs |
+| Inheritance / Traits | Complexity without benefit |
+| Exceptions | Use assert; failure = no proof |
+| Floating point | Not supported by field arithmetic |
+| Macros | Source-level complexity |
+| Concurrency | VM is single-threaded |
+| Wildcard imports | Obscures dependencies |
+| Circular dependencies | Prevents deterministic compilation |
+
+---
+
 ## See Also
 
 - [Agent Briefing](briefing.md) — AI-optimized compact cheat-sheet
 - [Provable Computation](provable.md) — Hash, sponge, Merkle, extension field, proof composition (Tier 2-3)
-- [Standard Library](stdlib.md) — `std.*` modules and OS extensions (`<os>.ext.*`)
+- [Standard Library](stdlib.md) — `std.*` modules
+- [OS Reference](os.md) — OS concepts, `os.*` gold standard, extensions
+- [VM Reference](vm.md) — VM registry, lowering paths, cost models
 - [CLI Reference](cli.md) — Compiler commands and flags
 - [Grammar](grammar.md) — EBNF grammar
-- [Patterns and Exclusions](patterns.md) — Common patterns and permanent exclusions
 - [IR Reference](ir.md) — Compiler intermediate representation (54 ops, 4 tiers)
-- [Target Reference](targets.md) — OS model, target profiles, cost models
+- [Target Reference](targets.md) — OS model, integration tracking, how-to-add checklists
 - [Error Catalog](errors.md) — All compiler error messages explained
 - [Tutorial](../tutorials/tutorial.md) — Step-by-step developer guide
 

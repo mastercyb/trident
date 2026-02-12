@@ -383,7 +383,7 @@ src/legacy/                        ← old emitter (deprecated, comparison tests
 ## See Also
 
 - [Language Reference](language.md) — Types, operators, builtins, grammar
-- [Target Reference](targets.md) — OS model, VM profiles, cost models
+- [Target Reference](targets.md) — OS model, integration tracking, how-to-add checklists
 - [Provable Computation](provable.md) — Hash, sponge, Merkle, extension field (Tier 2-3)
 - [CLI Reference](cli.md) — Compiler commands and flags
 - [Error Catalog](errors.md) — All compiler error messages explained

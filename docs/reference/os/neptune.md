@@ -271,7 +271,7 @@ have no caller concept. Use `os.neuron.auth(credential)` for authorization.
 
 Use `neptune.ext.*` when you need: kernel MAST authentication, recursive proof
 verification, UTXO structure access, or other Neptune-specific features. See
-[stdlib.md](../stdlib.md) for the full `os.*` API.
+[os.md](../os.md) for the full `os.*` API.
 
 ---
 

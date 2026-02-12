@@ -141,7 +141,7 @@ error: 'while' is not supported
   help: use `for i in 0..n bounded N { }` with a declared bound
 ```
 
-**Spec:** language.md Section 5, patterns.md Permanent Exclusions.
+**Spec:** language.md Section 5, Section 12.
 
 ---
 
@@ -152,7 +152,7 @@ error: 'loop' is not supported
   help: use `for` with a bounded range
 ```
 
-**Spec:** language.md Section 5, patterns.md Permanent Exclusions.
+**Spec:** language.md Section 5, Section 12.
 
 ---
 
@@ -163,7 +163,7 @@ error: 'break' is not supported in Trident
   help: all loops run for their full declared bound
 ```
 
-**Spec:** language.md Section 5, patterns.md Permanent Exclusions.
+**Spec:** language.md Section 5, Section 12.
 
 ---
 
@@ -173,7 +173,7 @@ error: 'break' is not supported in Trident
 error: 'continue' is not supported in Trident
 ```
 
-**Spec:** language.md Section 5, patterns.md Permanent Exclusions.
+**Spec:** language.md Section 5, Section 12.
 
 ---
 
@@ -184,7 +184,7 @@ error: 'enum' is not supported; Trident has no sum types
   help: use struct + integer tag for variant patterns
 ```
 
-**Spec:** language.md Section 2, patterns.md Permanent Exclusions (no enums, no sum types).
+**Spec:** language.md Section 2, Section 12 (no enums, no sum types).
 
 ---
 
@@ -194,7 +194,7 @@ error: 'enum' is not supported; Trident has no sum types
 error: 'trait' is not supported in Trident
 ```
 
-**Spec:** patterns.md Permanent Exclusions.
+**Spec:** language.md Section 12.
 
 ---
 
@@ -204,7 +204,7 @@ error: 'trait' is not supported in Trident
 error: 'impl' is not supported; use free functions
 ```
 
-**Spec:** patterns.md Permanent Exclusions.
+**Spec:** language.md Section 12.
 
 ---
 
@@ -214,7 +214,7 @@ error: 'impl' is not supported; use free functions
 error: macros are not supported in Trident
 ```
 
-**Spec:** patterns.md Permanent Exclusions.
+**Spec:** language.md Section 12.
 
 ---
 
@@ -225,7 +225,7 @@ error: closures are not supported in Trident
   help: use named functions instead
 ```
 
-**Spec:** language.md Section 3, patterns.md Permanent Exclusions (no closures).
+**Spec:** language.md Section 3, Section 12 (no closures).
 
 ---
 
@@ -282,7 +282,7 @@ error: 'try'/'catch'/'throw' are not supported
   help: use `assert` for failure — proof generation becomes impossible on assert failure
 ```
 
-**Spec:** patterns.md Permanent Exclusions.
+**Spec:** language.md Section 12.
 
 ---
 
@@ -293,7 +293,7 @@ error: 'async'/'await'/'spawn' are not supported
   help: Trident execution is sequential; concurrency is handled at the runtime level
 ```
 
-**Spec:** patterns.md Permanent Exclusions.
+**Spec:** language.md Section 12.
 
 ---
 
@@ -304,7 +304,7 @@ error: pointers and references ('&', '*') are not supported
   help: all values are passed by copy on the stack
 ```
 
-**Spec:** language.md Section 2, Section 8, patterns.md Permanent Exclusions (no heap, no pointers).
+**Spec:** language.md Section 2, Section 8, Section 12 (no heap, no pointers).
 
 ---
 
@@ -332,4 +332,4 @@ error: 'alloc' is not supported; Trident has no heap
 No `alloc`, `free`, `new`, or garbage collection. All memory is either
 stack (16 elements, LRU spill) or word-addressed RAM.
 
-**Spec:** language.md Section 8, patterns.md Permanent Exclusions (no heap, no GC).
+**Spec:** language.md Section 8, Section 12 (no heap, no GC).
