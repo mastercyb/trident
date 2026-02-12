@@ -1,6 +1,6 @@
 # 🔭 Trident: Provable Programs for Everyone
 
-*The language that makes zero-knowledge programming practical.*
+*Write once. Prove anywhere.*
 
 ---
 
