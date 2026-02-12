@@ -162,6 +162,99 @@ The developer writes `state.read(key)` — the proof machinery is invisible.
 | Process | Linux, macOS, WASI, Browser, Android | File / environment read |
 | Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no persistent state |
 
+### `os.token` — Token Operations
+
+Tokens are neurons viewed as assets. `os.signal.send()` moves native
+currency between neurons. `os.token` provides the full token lifecycle:
+creation, destruction, querying, and ownership — for both fungible and
+non-fungible tokens.
+
+#### Fungible Tokens
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `mint(to, amount)` | `(to: Digest, amount: Field) -> ()` | Create new tokens for recipient |
+| `burn(from, amount)` | `(from: Digest, amount: Field) -> ()` | Destroy tokens from holder |
+| `balance(account)` | `(account: Digest) -> Field` | Query token balance |
+| `supply()` | `() -> Field` | Query total supply |
+
+`mint` and `burn` require authorization — the compiler enforces this via
+the OS-native mechanism. On UTXO chains, minting creates a new output;
+burning consumes an input without creating an output. On account chains,
+minting credits a balance; burning debits it. The conservation law
+(`sum(mints) - sum(burns) == supply_change`) is enforced by every OS,
+just differently.
+
+#### Non-Fungible Tokens
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `owner(asset_id)` | `(asset_id: Digest) -> Digest` | Query current owner of unique asset |
+| `transfer(asset_id, to)` | `(asset_id: Digest, to: Digest) -> ()` | Transfer ownership of unique asset |
+| `metadata(asset_id)` | `(asset_id: Digest) -> Digest` | Query metadata commitment of asset |
+| `exists(asset_id)` | `(asset_id: Digest) -> Bool` | Check if asset exists in tree |
+
+Non-fungible operations work on individual assets identified by `asset_id`
+(a unique `Digest`). Ownership is one-of-one: exactly one neuron owns each
+asset. `transfer` changes the owner; `metadata` returns the committed
+metadata hash. `exists` is a membership proof — on UTXO chains, a Merkle
+inclusion proof; on account chains, a storage lookup.
+
+**Supported:** Account, Stateless, Object, UTXO.
+**Compile error:** Journal (no persistent state), Process (no native token concept).
+
+#### Per-OS Lowering — Fungible
+
+| OS family | OSes | `token.mint(to, amount)` lowers to |
+|-----------|------|------------------------------------|
+| Account (EVM) | Ethereum | `_mint(to, amount)` (ERC-20 internal) |
+| Account (Cairo) | Starknet | `mint(to, amount)` syscall |
+| Account (WASM) | Near, Cosmos | `ft_transfer` / `MintMsg` |
+| Stateless | Solana | `spl_token::mint_to(mint, to, amount)` |
+| Object | Sui, Aptos | `coin::mint(treasury, amount)` + `transfer` |
+| UTXO | Neptune | Emit output UTXO with amount (TSP-1 Mint op) |
+| UTXO | Nervos, Aleo, Aztec | Emit output cell/record/note with amount |
+| Process | Linux, macOS, WASI, Browser, Android | **Compile error** — no native token |
+| Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no persistent state |
+
+| OS family | OSes | `token.balance(account)` lowers to |
+|-----------|------|------------------------------------|
+| Account (EVM) | Ethereum | `balanceOf(account)` (ERC-20) |
+| Account (Cairo) | Starknet | `balance_of(account)` |
+| Account (WASM) | Near, Cosmos | `ft_balance_of` / `QueryBalanceRequest` |
+| Stateless | Solana | `spl_token::get_account(account).amount` |
+| Object | Sui, Aptos | `coin::balance(account)` |
+| UTXO | Neptune | Sum UTXO values for account (Merkle-authenticated) |
+| UTXO | Nervos, Aleo, Aztec | Sum cell/record/note values |
+| Process | Linux, macOS, WASI, Browser, Android | **Compile error** — no native token |
+| Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no persistent state |
+
+#### Per-OS Lowering — Non-Fungible
+
+| OS family | OSes | `token.transfer(asset_id, to)` lowers to |
+|-----------|------|------------------------------------------|
+| Account (EVM) | Ethereum | `transferFrom(owner, to, tokenId)` (ERC-721) |
+| Account (Cairo) | Starknet | `transfer_from(owner, to, token_id)` |
+| Account (WASM) | Near, Cosmos | `nft_transfer` / `SendNft` |
+| Stateless | Solana | `mpl_token::transfer(asset, to)` (Metaplex) |
+| Object | Sui, Aptos | `transfer::public_transfer(object, to)` |
+| UTXO | Neptune | Consume owner's asset leaf, emit new leaf with `owner_id = to` (TSP-2 Pay op) |
+| UTXO | Nervos, Aleo, Aztec | Consume cell/record/note, emit with new owner |
+| Process | Linux, macOS, WASI, Browser, Android | **Compile error** — no native token |
+| Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no persistent state |
+
+| OS family | OSes | `token.owner(asset_id)` lowers to |
+|-----------|------|-----------------------------------|
+| Account (EVM) | Ethereum | `ownerOf(tokenId)` (ERC-721) |
+| Account (Cairo) | Starknet | `owner_of(token_id)` |
+| Account (WASM) | Near, Cosmos | `nft_token` / `OwnerOf` query |
+| Stateless | Solana | `mpl_token::get_metadata(asset).owner` |
+| Object | Sui, Aptos | `object::owner(object_id)` |
+| UTXO | Neptune | Merkle inclusion proof for asset leaf, read `owner_id` |
+| UTXO | Nervos, Aleo, Aztec | Merkle inclusion proof, read owner field |
+| Process | Linux, macOS, WASI, Browser, Android | **Compile error** — no native token |
+| Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no persistent state |
+
 ### `os.time` — Clock
 
 | Function | Signature | Description |
