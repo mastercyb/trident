@@ -15,7 +15,6 @@ and code disagree, the reference wins.
 | [Grammar (EBNF)](grammar.md) | Complete formal grammar |
 | [IR Design](ir.md) | TIR operations (54 ops, 4 tiers), lowering paths |
 | [Target Reference](targets.md) | OS model, target profiles, cost models |
-| [Provable Computation](provable.md) | Tier 2 (sponge, Merkle) and Tier 3 (recursion) |
 
 ## Platform Reference
 

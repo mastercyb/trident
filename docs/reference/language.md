@@ -1,6 +1,6 @@
 # Trident Language Reference
 
-[IR Reference](ir.md) | [Target Reference](targets.md) | [Error Catalog](errors.md) | [Agent Briefing](briefing.md)
+[IR Reference](ir.md) | [Target Reference](targets.md) | [Grammar](grammar.md) | [Error Catalog](errors.md) | [Agent Briefing](briefing.md)
 
 Trident is a programming language for provable computation. One source
 file is designed to compile to 20 virtual machines — from zero-knowledge
@@ -105,7 +105,7 @@ width D varies by target (5 on TRITON, 4 on MIDEN, 8 on SP1/OPENVM, 1 on CAIRO).
 No implicit conversions. `Field` and `U32` do not auto-convert. Use `as_field()`
 and `as_u32()` (the latter inserts a range check).
 
-For extension field types, see [provable.md](provable.md).
+For extension field types, see [Extension Field](#15-extension-field).
 
 ### Composite Types
 
@@ -234,7 +234,7 @@ sec ram: { 17: Field, 42: Field }   // pre-initialized RAM slots
 No subtraction operator (`-`). No division operator (`/`). No `!=`, `>`, `<=`,
 `>=`. No `&&`, `||`, `!`. Use builtins: `sub(a, b)`, `neg(a)`, `inv(a)`.
 
-For extension field operators, see [provable.md](provable.md).
+For extension field operators, see [Extension Field](#15-extension-field).
 
 ### Other Expressions
 
@@ -389,7 +389,7 @@ their native hash function. All compile to the `Hash` TIR operation internally.
 See [targets.md](targets.md) for per-VM hash functions.
 
 For sponge, Merkle, and extension field builtins (Tier 2-3), see
-[provable.md](provable.md).
+[Part II](#part-ii--provable-computation-tier-2--tier-3) below.
 
 ### Portable OS (`os.*`)
 
@@ -568,10 +568,123 @@ These are design decisions, not roadmap items.
 
 ---
 
+# Part II — Provable Computation (Tier 2 + Tier 3)
+
+Proof-capable targets only. No meaningful equivalent on non-provable targets.
+
+Two capabilities: incremental algebraic hashing (sponge + Merkle) and
+extension field arithmetic. Programs using any Tier 2 feature cannot compile
+for Tier 1-only targets (SP1, OPENVM, CAIRO).
+See [targets.md](targets.md) for tier compatibility.
+
+Note: `hash()` is Tier 1 (universal) and documented in
+[Section 6](#6-builtin-functions). The builtins below are Tier 2+.
+
+---
+
+## 13. Sponge
+
+The sponge API enables incremental hashing of data larger than R fields.
+Initialize, absorb in chunks, squeeze the result. The rate R is
+target-dependent: 10 on TRITON, 8 on MIDEN.
+
+| Signature | IR op | Description |
+|-----------|-------|-------------|
+| `sponge_init()` | `SpongeInit` | Initialize sponge state |
+| `sponge_absorb(fields: Field x R)` | `SpongeAbsorb` | Absorb R fields |
+| `sponge_absorb_mem(ptr: Field)` | `SpongeLoad` | Absorb R fields from RAM |
+| `sponge_squeeze() -> [Field; R]` | `SpongeSqueeze` | Squeeze R fields |
+
+---
+
+## 14. Merkle Authentication
+
+| Signature | IR op | Description |
+|-----------|-------|-------------|
+| `merkle_step(idx: U32, d: Digest) -> (U32, Digest)` | `MerkleStep` | One tree level up |
+| `merkle_step_mem(ptr, idx, d) -> (Field, U32, Digest)` | `MerkleLoad` | Tree level from RAM |
+
+`merkle_step` authenticates one level of a Merkle tree. Call it in a loop
+to verify a full Merkle path:
+
+```
+pub fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
+    let mut idx = index
+    let mut current = leaf
+    for _ in 0..depth bounded 64 {
+        (idx, current) = merkle_step(idx, current)
+    }
+    assert_digest(current, root)
+}
+```
+
+---
+
+## 15. Extension Field
+
+The extension field extends `Field` to degree E (E = 3 on TRITON and NOCK).
+Only available on targets where `xfield_width > 0`.
+
+### Type
+
+| Type | Width | Description |
+|------|------:|-------------|
+| `XField` | E | Extension field element (E = `xfield_width` from target config) |
+
+### Operator
+
+| Operator | Operand types | Result type | Description |
+|----------|---------------|-------------|-------------|
+| `a *. s` | XField, Field | XField | Scalar multiplication |
+
+### Builtins
+
+| Signature | IR op | Description |
+|-----------|-------|-------------|
+| `xfield(x0, ..., xE) -> XField` | *(constructor)* | Construct from E base field elements |
+| `xinvert(a: XField) -> XField` | `ExtInvert` | Multiplicative inverse |
+| `xx_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)` | `FoldExt` | XField dot product step |
+| `xb_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)` | `FoldBase` | Mixed dot product step |
+
+The dot-step builtins are building blocks for inner product arguments and FRI
+verification — the core of recursive proof composition.
+
+Note: The `*.` operator (scalar multiply) maps to `ExtMul` in the IR.
+
+---
+
+## 16. Proof Composition (Tier 3)
+
+Proofs that verify other proofs. **TRITON and NOCK only.**
+
+Tier 3 enables a program to verify another program's proof inside its own
+execution. This is STARK-in-STARK recursion: the verifier circuit runs as
+part of the prover's trace.
+
+```
+// Verify a proof of program_hash and use its public output
+proof_block(program_hash) {
+    // verification circuit runs here
+    // public outputs of the inner proof become available
+}
+```
+
+Tier 3 uses the extension field builtins above plus dedicated IR operations:
+
+- **ProofBlock** — Wraps a recursive verification circuit
+- **FoldExt / FoldBase** — FRI folding over extension / base field
+- **ExtMul / ExtInvert** — Extension field arithmetic for the verifier
+
+See [ir.md Part I, Tier 3](ir.md) for the full list of 5 recursive operations.
+
+Only TRITON and NOCK support Tier 3. Programs using proof composition
+cannot compile for any other target.
+
+---
+
 ## See Also
 
 - [Agent Briefing](briefing.md) — AI-optimized compact cheat-sheet
-- [Provable Computation](provable.md) — Hash, sponge, Merkle, extension field, proof composition (Tier 2-3)
 - [Standard Library](stdlib.md) — `std.*` modules
 - [OS Reference](os.md) — OS concepts, `os.*` gold standard, extensions
 - [VM Reference](vm.md) — VM registry, lowering paths, cost models

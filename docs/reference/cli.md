@@ -60,7 +60,7 @@ See [targets.md](targets.md) for the full target registry.
 ## See Also
 
 - [Language Reference](language.md) — Core language (types, operators, statements)
-- [Provable Computation](provable.md) — Hash, Merkle, extension field, proof composition
+- [Language Reference](language.md) — Types, operators, builtins, sponge, Merkle, proof composition
 - [Standard Library](stdlib.md) — `std.*` modules
 - [Grammar](grammar.md) — EBNF grammar
 - [OS Reference](os.md) — OS concepts, `os.*` gold standard, extensions

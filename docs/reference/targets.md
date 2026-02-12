@@ -311,7 +311,7 @@ Only if using the legacy emitter pipeline. New VMs should prefer L3.
 - [OS Reference](os.md) — OS concepts, `os.*` gold standard, extensions
 - [Standard Library](stdlib.md) — `std.*` modules
 - [Language Reference](language.md) — Types, operators, builtins, grammar
-- [Provable Computation](provable.md) — Hash, sponge, Merkle, extension field (Tier 2-3)
+- [Language Reference](language.md) — Types, operators, builtins, sponge, Merkle, extension field
 - [IR Reference](ir.md) — 54 operations, 4 tiers, lowering paths
 - [CLI Reference](cli.md) — Compiler commands and flags
 - [Error Catalog](errors.md) — All compiler error messages explained

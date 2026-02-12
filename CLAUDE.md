@@ -6,7 +6,8 @@
 Each file owns a specific domain:
 
 - **`language.md`** — syntax, types, operators, builtins, attributes,
-  memory model, type checking rules, permanent exclusions
+  memory model, type checking rules, permanent exclusions, sponge, Merkle,
+  extension field, proof composition (Tier 2-3)
 - **`ir.md`** — TIROp variant names, counts, tier assignments, lowering paths,
   naming conventions, architecture diagrams, pipeline
 - **`targets.md`** — OS model, integration tracking, how-to-add checklists
@@ -15,8 +16,6 @@ Each file owns a specific domain:
 - **`os.md`** — OS concepts (neuron/signal/token), `os.*` portable APIs,
   `os.<os>.*` OS-specific extensions, OS registry
 - **`stdlib.md`** — `std.*` library modules, common patterns
-- **`provable.md`** — Tier 2-3 builtins (sponge, Merkle, extension field,
-  proof composition)
 - **`errors.md`** — error codes and diagnostic messages
 - **`grammar.md`** — EBNF grammar
 - **`cli.md`** — compiler commands and flags

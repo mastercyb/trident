@@ -428,7 +428,7 @@ See each OS doc for the full API reference.
 - [VM Reference](vm.md) — VM registry, lowering paths, tier/type/builtin tables, cost models
 - [Standard Library](stdlib.md) — `std.*` modules
 - [Language Reference](language.md) — Types, operators, builtins, grammar
-- [Provable Computation](provable.md) — Hash, sponge, Merkle, extension field (Tier 2-3)
+- [Language Reference](language.md) — Types, operators, builtins, sponge, Merkle, extension field
 - Per-OS docs: `os/<os>/README.md`
 
 ---

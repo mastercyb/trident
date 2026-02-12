@@ -2,7 +2,7 @@
 
 Machine-optimized compact format for AI code generation.
 
-[Language Reference](language.md) | [Provable Computation](provable.md) | [Standard Library](stdlib.md) | [CLI](cli.md)
+[Language Reference](language.md) | [Language Reference](language.md) | [Standard Library](stdlib.md) | [CLI](cli.md)
 
 ---
 
@@ -180,7 +180,7 @@ WRONG: recursive calls  ->  not allowed; call graph must be acyclic
 ## See Also
 
 - [Language Reference](language.md) — Full language specification (types, operators, statements)
-- [Provable Computation](provable.md) — Hash, Merkle, extension field, proof composition
+- [Language Reference](language.md) — Types, operators, builtins, sponge, Merkle, proof composition
 - [Standard Library](stdlib.md) — `std.*` modules
 - [CLI Reference](cli.md) — Compiler commands and flags
 - [Grammar](grammar.md) — EBNF grammar

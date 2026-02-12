@@ -52,7 +52,7 @@ error: type 'XField' is not available on target 'miden' (xfield_width = 0)
   help: XField requires a target with extension field support (currently: triton, nock)
 ```
 
-**Spec:** provable.md Extension Field, targets.md (XField = Tier 2, extension field
+**Spec:** language.md Extension Field, targets.md (XField = Tier 2, extension field
 targets only).
 
 ---
@@ -64,7 +64,7 @@ error: operator '*.' (scalar multiply) is not available on target 'miden'
   help: '*.' requires XField support (currently: triton, nock)
 ```
 
-**Spec:** provable.md Extension Field (Tier 2 operator), targets.md.
+**Spec:** language.md Extension Field (Tier 2 operator), targets.md.
 
 ---
 
@@ -86,7 +86,7 @@ error: builtin 'sponge_init' is not available on target 'sp1'
   help: sponge operations require a Tier 2 target (triton, miden, nock)
 ```
 
-**Spec:** provable.md Sponge, targets.md (sponge = Tier 2).
+**Spec:** language.md Sponge, targets.md (sponge = Tier 2).
 
 ---
 
@@ -101,7 +101,7 @@ error: 'seal' requires sponge support (Tier 2)
 writing the commitment digest to public output. Targets without sponge
 support cannot execute `seal`.
 
-**Spec:** provable.md Sponge (seal requires sponge = Tier 2).
+**Spec:** language.md Sponge (seal requires sponge = Tier 2).
 
 ---
 
@@ -112,7 +112,7 @@ error: builtin 'merkle_step' is not available on target 'sp1'
   help: Merkle operations require a Tier 2 target (triton, miden, nock)
 ```
 
-**Spec:** provable.md Merkle Authentication, targets.md (merkle = Tier 2).
+**Spec:** language.md Merkle Authentication, targets.md (merkle = Tier 2).
 
 ---
 
@@ -123,7 +123,7 @@ error: builtin 'xfield' is not available on target 'miden'
   help: extension field builtins require XField support (currently: triton, nock)
 ```
 
-**Spec:** provable.md Extension Field, targets.md (XField builtins = TRITON, NOCK).
+**Spec:** language.md Extension Field, targets.md (XField builtins = TRITON, NOCK).
 
 ---
 
@@ -161,7 +161,7 @@ error: proof_block() requires Digest argument, got Field
 The `proof_block` construct takes a program hash of type `Digest` to
 identify which program's proof is being verified recursively.
 
-**Spec:** provable.md Proof Composition (proof_block(program_hash: Digest)).
+**Spec:** language.md Proof Composition (proof_block(program_hash: Digest)).
 
 ---
 
@@ -185,4 +185,4 @@ error: sponge_absorb() requires 10 field arguments on target 'triton', got 5
   help: sponge rate R = 10 for TRITON; see targets.md for per-target rates
 ```
 
-**Spec:** provable.md Sponge (sponge_absorb takes R elements).
+**Spec:** language.md Sponge (sponge_absorb takes R elements).

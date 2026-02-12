@@ -45,7 +45,7 @@ at least one diagnostic entry.
 ### Completeness claim
 
 165 diagnostics cover every user-violable "must"/"cannot"/"only" constraint
-in the language reference (language.md, provable.md, grammar.md),
+in the language reference (language.md, grammar.md),
 targets.md, and ir.md. The derivation was audited by scanning all reference
 documents for prohibition keywords and cross-referencing each against the
 catalog.

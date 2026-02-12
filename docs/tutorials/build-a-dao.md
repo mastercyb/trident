@@ -341,7 +341,7 @@ You have built a complete private web3 application. To go further:
 - [Language Tour](tutorial.md) -- complete syntax reference with examples
 - [Agent Briefing](../reference/briefing.md) -- compact cheat-sheet for
   the full language
-- [Provable Computation](../reference/provable.md) -- sponge, Merkle,
+- [Language Reference](../reference/language.md) -- sponge, Merkle,
   extension fields, proof composition
 - [Gold Standard](../explanation/gold-standard.md) -- production patterns
   for PLUMB, TIDE, and COMPASS
