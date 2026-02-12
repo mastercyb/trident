@@ -104,10 +104,10 @@ mechanism differs.
 | Journal | No identity (pure computation) | N/A |
 | Process | UID/PID | `ext.<os>.process.uid()` |
 
-### 4. Value Transfer -- How Money Moves
+### 4. Signals -- How Neurons Communicate
 
-| OS family | Transfer mechanism | Trident pattern |
-|-----------|-------------------|-----------------|
+| OS family | Signal mechanism | Trident pattern |
+|-----------|-----------------|-----------------|
 | UTXO | Create new UTXOs, destroy old ones | Kernel outputs (new UTXOs) in transaction |
 | Account (EVM) | Transfer opcode | `ext.ethereum.transfer.send(from, to, amount)` |
 | Stateless (Solana) | Lamport transfer via system program | `ext.solana.transfer.lamports(from, to, amount)` |
@@ -241,16 +241,16 @@ ext.<os>.*     S2 — OS-native             One specific OS
 | Tier | Layer | Scope | Example |
 |------|-------|-------|---------|
 | S0 | **`std.*`** | All targets | `std.crypto.hash`, `std.crypto.merkle`, `std.io.io` |
-| S1 | **`std.os.*`** | All OSes with the concept | `std.os.state.read`, `std.os.caller.id`, `std.os.auth.verify` |
+| S1 | **`std.os.*`** | All OSes with the concept | `std.os.state.read`, `std.os.neuron.id`, `std.os.neuron.auth` |
 | S2 | **`ext.<os>.*`** | One OS | `ext.neptune.kernel`, `ext.ethereum.storage`, `ext.solana.account` |
 
 **S0 — `std.*`**: Pure computation. Hash, Merkle, field arithmetic, I/O
 channels. Works everywhere but cannot touch state, identity, or money.
 
-**S1 — `std.os.*`**: Portable OS abstraction. Names the *intent* (read state,
-check authorization, send value) — the compiler picks the *mechanism* based on
-the target OS. A program using `std.os.state.read(key)` compiles to SLOAD on
-Ethereum, `account.data` on Solana, `dynamic_field.borrow` on Sui, and
+**S1 — `std.os.*`**: Portable OS abstraction. Names the *intent* (identify
+neuron, send signal, read state) — the compiler picks the *mechanism* based
+on the target OS. A program using `std.os.state.read(key)` compiles to SLOAD
+on Ethereum, `account.data` on Solana, `dynamic_field.borrow` on Sui, and
 `divine()` + `merkle_authenticate` on Neptune. Same source, different lowering.
 
 **S2 — `ext.<os>.*`**: OS-native API. Full access to OS-specific features
@@ -261,16 +261,15 @@ layer cannot express what you need.
 
 | Module | Intent | Compile error when... |
 |--------|--------|-----------------------|
+| `std.os.neuron` | Identity and authorization | UTXO (no caller for `id()`), Journal (no identity) |
+| `std.os.signal` | Send weighted edges between neurons | Journal + process targets (no value) |
 | `std.os.state` | Read/write persistent state | Journal targets (no state) |
-| `std.os.caller` | Who initiated this call | UTXO targets (no caller concept) |
-| `std.os.auth` | Is this operation authorized | Journal targets (no identity) |
-| `std.os.transfer` | Move value between actors | Journal + process targets (no value) |
 | `std.os.time` | Current time / block height | -- (all OSes have time) |
 | `std.os.event` | Observable side effects | -- (uses `reveal`/`seal` directly) |
 
 The compiler emits a clear error when a `std.os.*` function targets an OS
-that doesn't support the concept. For example, `std.os.caller.id()` on
-Neptune produces: *"UTXO chains have no caller — use `std.os.auth.verify()`
+that doesn't support the concept. For example, `std.os.neuron.id()` on
+Neptune produces: *"UTXO chains have no caller — use `std.os.neuron.auth()`
 or `ext.neptune.*` for hash-preimage identity."*
 
 ### Choosing a Tier
@@ -284,9 +283,9 @@ fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
 
 // S1 — portable OS, any blockchain
 use std.os.state
-use std.os.auth
+use std.os.neuron
 fn guarded_write(key: Field, value: Field, credential: Digest) {
-    std.os.auth.verify(credential)
+    std.os.neuron.auth(credential)
     std.os.state.write(key, value)
 }
 

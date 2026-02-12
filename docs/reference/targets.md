@@ -366,9 +366,12 @@ correct lowering strategy. See [stdlib.md](stdlib.md) for full API specs.
 | Process | Linux, macOS, WASI, Browser, Android | File / environment read |
 | Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no persistent state |
 
-#### `std.os.caller` — Identity
+#### `std.os.neuron` — Identity and Authorization
 
-| OS family | OSes | `caller.id()` lowers to |
+`neuron.id()` returns the current neuron's identity as a `Digest`.
+`neuron.auth(cred)` is an assertion — succeeds silently or crashes the VM.
+
+| OS family | OSes | `neuron.id()` lowers to |
 |-----------|------|-------------------------|
 | Account (EVM) | Ethereum | `msg.sender` (padded to Digest) |
 | Account (Cairo) | Starknet | `get_caller_address` |
@@ -377,14 +380,10 @@ correct lowering strategy. See [stdlib.md](stdlib.md) for full API specs.
 | Stateless | Solana | `account.key(0)` (first signer) |
 | Object | Sui, Aptos | `tx_context::sender` |
 | Process | Linux, macOS, WASI, Android | `getuid()` (padded to Digest) |
-| UTXO | Neptune, Nockchain, Nervos, Aleo, Aztec | **Compile error** — no caller; use `std.os.auth` |
+| UTXO | Neptune, Nockchain, Nervos, Aleo, Aztec | **Compile error** — no caller; use `neuron.auth()` |
 | Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no identity |
 
-#### `std.os.auth` — Authorization
-
-`auth.verify(cred)` is an assertion — succeeds silently or crashes the VM.
-
-| OS family | OSes | `auth.verify(cred)` lowers to |
+| OS family | OSes | `neuron.auth(cred)` lowers to |
 |-----------|------|-------------------------------|
 | Account (EVM) | Ethereum | `assert(msg.sender == cred)` |
 | Account (Cairo) | Starknet | `assert(get_caller_address() == cred)` |
@@ -396,13 +395,14 @@ correct lowering strategy. See [stdlib.md](stdlib.md) for full API specs.
 | Process | Linux, macOS, WASI, Android | `assert(getuid() == cred)` |
 | Journal | Boundless, Succinct, OpenVM Network | **Compile error** — no identity |
 
-#### `std.os.transfer` — Value Movement
+#### `std.os.signal` — Communication Between Neurons
 
-`send(from, to, amount)` — directed weighted edge from one actor to
-another. `from` is usually the caller but supports delegation/proxy
-patterns (ERC-20 `transferFrom`, UTXO spend on behalf of another actor).
+`send(from, to, amount)` — a signal: directed weighted edge from one
+neuron to another. `from` is usually the current neuron but supports
+delegation/proxy patterns (ERC-20 `transferFrom`, UTXO spend on behalf
+of another neuron).
 
-| OS family | OSes | `transfer.send(from, to, amount)` lowers to |
+| OS family | OSes | `signal.send(from, to, amount)` lowers to |
 |-----------|------|----------------------------------------------|
 | Account (EVM) | Ethereum | `CALL(to, amount, "")` (self) / `transferFrom(from, to, amount)` (delegated) |
 | Account (Cairo) | Starknet | `transfer(from, to, amount)` syscall |
@@ -435,9 +435,9 @@ The compiler selects lowering strategy from three fields in `os/*.toml`:
 
 | Field | Values | Effect on `std.os.*` |
 |-------|--------|---------------------|
-| `account_model` | `account`, `stateless`, `object`, `utxo`, `journal`, `process` | Selects caller/auth lowering |
+| `account_model` | `account`, `stateless`, `object`, `utxo`, `journal`, `process` | Selects neuron/signal lowering |
 | `storage_model` | `key-value`, `account-data`, `object-store`, `merkle-authenticated`, `filesystem`, `none` | Selects state lowering |
-| `transaction_model` | `signed`, `proof-based`, `none` | Selects auth/transfer lowering |
+| `transaction_model` | `signed`, `proof-based`, `none` | Selects neuron.auth/signal lowering |
 
 ---
 

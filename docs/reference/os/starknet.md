@@ -207,7 +207,7 @@ instead of `ext.starknet.*` for cross-chain portability:
 | `ext.starknet.*` (this OS only) | `std.os.*` (any OS) |
 |---------------------------------|---------------------|
 | `ext.starknet.storage.read(addr)` | `std.os.state.read(key)` → storage_var read |
-| `ext.starknet.account.caller()` | `std.os.caller.id()` → get_caller_address |
+| `ext.starknet.account.caller()` | `std.os.neuron.id()` → get_caller_address |
 | `ext.starknet.call.invoke(addr, sel, args)` | No portable equivalent (cross-contract is OS-specific) |
 | `ext.starknet.messaging.send_to_l1(to, data)` | No portable equivalent (L1/L2 messaging is OS-specific) |
 

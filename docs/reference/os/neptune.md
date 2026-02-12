@@ -263,11 +263,11 @@ instead of `ext.neptune.*` for cross-chain portability:
 | `ext.neptune.*` (this OS only) | `std.os.*` (any OS) |
 |--------------------------------|---------------------|
 | `ext.neptune.kernel.authenticate_*` + divine/merkle | `std.os.state.read(key)` → auto-generates divine + merkle_authenticate |
-| Hash preimage via `std.crypto.auth` | `std.os.auth.verify(cred)` → divine + hash + assert_eq |
-| Manual UTXO output construction | `std.os.transfer.send(from, to, amt)` → emit output UTXO |
+| Hash preimage via `std.crypto.auth` | `std.os.neuron.auth(cred)` → divine + hash + assert_eq |
+| Manual UTXO output construction | `std.os.signal.send(from, to, amt)` → emit output UTXO |
 
-**Note:** `std.os.caller.id()` is a **compile error** on Neptune — UTXO chains
-have no caller concept. Use `std.os.auth.verify(credential)` for authorization.
+**Note:** `std.os.neuron.id()` is a **compile error** on Neptune — UTXO chains
+have no caller concept. Use `std.os.neuron.auth(credential)` for authorization.
 
 Use `ext.neptune.*` when you need: kernel MAST authentication, recursive proof
 verification, UTXO structure access, or other Neptune-specific features. See

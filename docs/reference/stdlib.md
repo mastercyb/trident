@@ -25,16 +25,76 @@ Available on all targets. These modules provide the core language runtime.
 
 ## Portable OS Layer (`std.os.*`)
 
-Available on all blockchain and traditional OSes. These modules provide
-target-independent access to OS-level concerns. The compiler lowers each
+### The Model: Neurons, Signals, Tokens
+
+The entire blockchain design space reduces to three primitives:
+
+- **Neuron** — an actor. Accounts, UTXOs, objects, cells, notes, resources,
+  contracts, wallets — all are neurons. A neuron has identity, can hold
+  state, and can send signals.
+- **Signal** — a transaction. A bundle of directed weighted edges (cyberlinks)
+  from neuron to neuron. The weight is the amount. The signal is the act of
+  communication itself.
+- **Token** — a neuron viewed as an asset. Neurons ARE tokens. A fungible
+  token (ETH, SOL, CKByte) is a fungible neuron — many identical
+  interchangeable units, like shares of a company. A non-fungible token
+  (NFT, smart contract, unique UTXO) is a non-fungible neuron — unique
+  identity, one-of-one, like a person.
+
+The model: **neurons send signals carrying tokens to other neurons.**
+Neurons are the tokens. Everything else — accounts, UTXOs, objects,
+cells — is how a specific OS represents neurons internally. The
+compiler's job is to map neuron/signal operations down to those internals.
+
+### Module Overview
+
+Available on all blockchain and traditional OSes. The compiler lowers each
 function to the OS-native mechanism based on `--target`.
 
 Programs using only `std.*` + `std.os.*` are portable across all OSes that
 support the required operations. If an OS doesn't support a concept (e.g.,
-`caller.id()` on UTXO chains, `transfer.send()` on journal targets), the
+`neuron.id()` on UTXO chains, `signal.send()` on journal targets), the
 compiler emits a clear error.
 
-### `std.os.state` — Portable key-value state
+### `std.os.neuron` — Identity and authorization
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `id()` | `() -> Digest` | Identity of the current neuron (caller) |
+| `verify(expected)` | `(expected: Digest) -> Bool` | Check caller matches expected |
+| `auth(credential)` | `(credential: Digest) -> ()` | Assert authorized; crash if not |
+
+A neuron is identified by a `Digest` — the universal identity container.
+A 20-byte EVM address, a 32-byte Solana pubkey, and a 251-bit Starknet
+felt all fit in a Digest.
+
+`neuron.auth(credential)` is an assertion — it succeeds silently or crashes
+the VM. On account chains, it checks the caller address. On UTXO chains,
+it checks a hash preimage (divine the secret, hash it, assert the digest
+matches). Same source code, different mechanism. This is the only auth
+mechanism that works on every OS with identity.
+
+**Supported:** Account, Stateless, Object, Process.
+**`id()`/`verify()` compile error:** UTXO (no caller — use `auth()`), Journal (no identity).
+**`auth()` compile error:** Journal (no identity).
+
+### `std.os.signal` — Communication between neurons
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `send(from, to, amount)` | `(from: Digest, to: Digest, amount: Field) -> ()` | Emit a weighted directed edge from one neuron to another |
+| `balance(neuron)` | `(neuron: Digest) -> Field` | Query neuron balance |
+
+`send(from, to, amount)` is the universal primitive: a directed weighted
+edge — a signal — from one neuron to another. In most cases `from` is the
+current neuron, but delegation/proxy/allowance patterns pass a different
+`from` (e.g., ERC-20 `transferFrom`, spending another neuron's UTXO with
+their authorization).
+
+**Supported:** Account, Stateless, Object, UTXO.
+**Compile error:** Journal (no value), Process (no native value).
+
+### `std.os.state` — Neuron state
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -50,50 +110,6 @@ compiler emits a clear error.
 On UTXO chains, the compiler auto-generates the divine-and-authenticate
 pattern: divine the value, hash it, Merkle-prove against the state root.
 The developer writes `state.read(key)` — the proof machinery is invisible.
-
-### `std.os.caller` — Portable identity
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `id()` | `() -> Digest` | Identity of the current caller |
-| `verify(expected)` | `(expected: Digest) -> Bool` | Check caller matches expected |
-
-**Supported:** Account, Stateless, Object, Process.
-**Compile error:** UTXO (no caller concept — use `std.os.auth`), Journal (no identity).
-
-Returns `Digest` — the universal identity container. A 20-byte EVM address,
-a 32-byte Solana pubkey, and a 251-bit Starknet felt all fit in a Digest.
-
-### `std.os.auth` — Portable authorization
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `verify(credential)` | `(credential: Digest) -> ()` | Assert operation is authorized; crash if not |
-
-**Supported:** Account, Stateless, Object, UTXO, Process.
-**Compile error:** Journal (no identity).
-
-`auth.verify` is an assertion — it succeeds silently or crashes the VM.
-On account chains, it checks the caller address. On UTXO chains, it checks
-a hash preimage (divine the secret, hash it, assert the digest matches).
-Same source code, different mechanism. This is the only auth mechanism that
-works on every OS with identity.
-
-### `std.os.transfer` — Portable value movement
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `send(from, to, amount)` | `(from: Digest, to: Digest, amount: Field) -> ()` | Transfer native value from one actor to another |
-| `balance(account)` | `(account: Digest) -> Field` | Query account balance |
-
-The three-argument `send(from, to, amount)` is the universal primitive:
-a directed weighted edge from one actor to another. In most cases `from`
-is the caller, but delegation/proxy/allowance patterns pass a different
-`from` (e.g., ERC-20 `transferFrom`, spending another actor's UTXO with
-their authorization).
-
-**Supported:** Account, Stateless, Object, UTXO.
-**Compile error:** Journal (no value), Process (no native value).
 
 ### `std.os.time` — Portable clock
 
@@ -125,8 +141,9 @@ ext.<os>.*     S2 — OS-native             One specific OS
 ```
 
 Programs can mix all three tiers. `std.*` for math and crypto. `std.os.*`
-for portable state, auth, and events. `ext.<os>.*` when OS-native features
-are needed (PDAs, object ownership, L1/L2 messaging, CPI, etc.).
+for portable neuron identity, signals, state, and events. `ext.<os>.*`
+when OS-native features are needed (PDAs, object ownership, L1/L2
+messaging, CPI, etc.).
 
 For per-OS lowering details (what each `std.os.*` function compiles to on
 each specific OS), see [targets.md — `std.os.*` Lowering](targets.md).

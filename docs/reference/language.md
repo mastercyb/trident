@@ -393,24 +393,23 @@ For sponge, Merkle, and extension field builtins (Tier 2-3), see
 
 ### Portable OS (`std.os.*`)
 
-The `std.os.*` modules provide portable OS interaction — state, identity,
-authorization, value transfer, and time. They are not builtins (they're
-standard library functions), but they compile to target-specific lowerings
-just like builtins do.
+The `std.os.*` modules provide portable OS interaction — neuron identity,
+signals, state, and time. They are not builtins (they're standard library
+functions), but they compile to target-specific lowerings just like
+builtins do.
 
 | Module | Key functions | Available when |
 |--------|---------------|----------------|
+| `std.os.neuron` | `id() -> Digest`, `verify(expected: Digest) -> Bool`, `auth(credential: Digest) -> ()` | Target has identity |
+| `std.os.signal` | `send(from: Digest, to: Digest, amount: Field)`, `balance(neuron: Digest) -> Field` | Target has native value |
 | `std.os.state` | `read(key: Field) -> Field`, `write(key, value)`, `exists(key)` | Target has persistent state |
-| `std.os.caller` | `id() -> Digest`, `verify(expected: Digest) -> Bool` | Target has caller concept |
-| `std.os.auth` | `verify(credential: Digest) -> ()` (assertion) | Target has identity |
-| `std.os.transfer` | `send(from: Digest, to: Digest, amount: Field)`, `balance(account: Digest) -> Field` | Target has native value |
 | `std.os.time` | `now() -> Field`, `block_height() -> Field` | All targets |
 
 These sit between `std.*` (pure computation, all targets) and `ext.<os>.*`
 (OS-native, one target). A program using only `std.*` + `std.os.*` compiles
 to any OS that supports the required concepts. The compiler emits clear
-errors when targeting an OS that lacks a concept (e.g., `std.os.caller.id()`
-on UTXO chains, `std.os.transfer.send()` on journal targets).
+errors when targeting an OS that lacks a concept (e.g., `std.os.neuron.id()`
+on UTXO chains, `std.os.signal.send()` on journal targets).
 
 For full API specifications, see [stdlib.md](stdlib.md). For per-OS lowering
 tables, see [targets.md](targets.md).
