@@ -11,7 +11,7 @@ and code disagree, the reference wins.
 
 [language.md](language.md) — the complete language in one file, 16 sections.
 
-**Language**
+### Language
 
 | # | Section | What it covers |
 |---|---------|----------------|
@@ -28,7 +28,7 @@ and code disagree, the reference wins.
 | 11 | [Type Checking Rules](language.md#11-type-checking-rules) | No implicit conversions, exhaustive match, purity |
 | 12 | [Permanent Exclusions](language.md#12-permanent-exclusions) | What Trident will never add, and why |
 
-**Provable Computation**
+### Provable Computation
 
 | # | Section | What it covers |
 |---|---------|----------------|
