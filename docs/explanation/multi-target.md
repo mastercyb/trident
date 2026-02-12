@@ -272,256 +272,25 @@ The `sender_bal - amount` and `assert(new_bal >= 0)` are pure Level 1 logic. The
 
 ## ⚙️ TargetConfig
 
-Targets are defined as TOML files in the `vm/` directory. The compiler loads
-a target by name via `--target <name>`, which resolves to `vm/<name>.toml`.
-Triton VM also has a hardcoded fallback in `TargetConfig::triton()` so the
-compiler works without any TOML files on disk.
-
-### TOML Schema
-
-Each target file declares the following sections:
-
-```toml
-[target]
-name = "triton"                       # Short identifier (CLI, file paths)
-display_name = "Triton VM"            # Human-readable name
-architecture = "stack"                # "stack" or "register"
-output_extension = ".tasm"            # File extension for compiled output
-
-[field]
-prime = "2^64 - 2^32 + 1"            # Field prime (informational)
-limbs = 2                             # U32 limbs when splitting a field element
-
-[stack]
-depth = 16                            # Operand stack depth before spilling
-spill_ram_base = 1073741824           # Base RAM address for spilled variables
-
-[hash]
-function = "Tip5"                     # Hash function name (informational)
-digest_width = 5                      # Width of a hash digest in field elements
-rate = 10                             # Hash absorption rate in field elements
-
-[extension_field]
-degree = 3                            # Extension field degree (0 if none)
-
-[cost]
-tables = ["processor", "hash", "u32", "op_stack", "ram", "jump_stack"]
-```
-
-### TargetConfig Struct
-
-The `TargetConfig` struct in `src/target.rs` holds all parameters:
-
-```rust
-pub struct TargetConfig {
-    pub name: String,
-    pub display_name: String,
-    pub architecture: Arch,           // Arch::Stack or Arch::Register
-    pub field_prime: String,
-    pub field_limbs: u32,
-    pub stack_depth: u32,
-    pub spill_ram_base: u64,
-    pub digest_width: u32,
-    pub xfield_width: u32,
-    pub hash_rate: u32,
-    pub output_extension: String,
-    pub cost_tables: Vec<String>,
-}
-```
-
-Target resolution (`TargetConfig::resolve`) searches for the TOML file relative
-to the compiler binary and the working directory. Path traversal in target names
-is rejected.
-
-### Shipped Target Configurations
-
-| File             | Name   | Arch     | Field           | Digest | Hash Rate |
-|------------------|--------|----------|-----------------|:------:|:---------:|
-| `triton.toml`    | triton | stack    | Goldilocks      | 5      | 10        |
-| `miden.toml`     | miden  | stack    | Goldilocks      | 4      | 8         |
-| `openvm.toml`    | openvm | register | Goldilocks      | 8      | 8         |
-| `sp1.toml`       | sp1    | register | Mersenne-31     | 8      | 8         |
-| `cairo.toml`     | cairo  | register | Stark-252       | 1      | 2         |
+Targets are defined as TOML files in `vm/<name>/target.toml`. Each declares architecture, field parameters, stack depth, hash function, and cost table names. The compiler loads them via `--target <name>`. See [Target Reference](../reference/targets.md) for the schema, shipped configurations, and how to add new targets.
 
 ---
 
 ## 🔧 Backend Traits
 
-### StackLowering
-
-The `StackLowering` trait in `src/tir/lower/mod.rs` abstracts instruction
-emission for stack-machine targets. It converts TIR operations to target
-assembly text, sharing all stack management and control-flow logic.
-
-```rust
-pub(crate) trait StackLowering {
-    fn target_name(&self) -> &str;
-    fn output_extension(&self) -> &str;
-
-    // Stack operations
-    fn inst_push(&self, value: u64) -> String;
-    fn inst_pop(&self, count: u32) -> String;
-    fn inst_dup(&self, depth: u32) -> String;
-    fn inst_swap(&self, depth: u32) -> String;
-
-    // Arithmetic
-    fn inst_add(&self) -> &'static str;
-    fn inst_mul(&self) -> &'static str;
-    fn inst_eq(&self) -> &'static str;
-    fn inst_invert(&self) -> &'static str;
-    // ... (split, lt, and, xor, div_mod, log2, pow, pop_count, xb_mul, x_invert)
-
-    // I/O
-    fn inst_read_io(&self, count: u32) -> String;
-    fn inst_write_io(&self, count: u32) -> String;
-    fn inst_divine(&self, count: u32) -> String;
-
-    // Memory
-    fn inst_read_mem(&self, count: u32) -> String;
-    fn inst_write_mem(&self, count: u32) -> String;
-
-    // Hash and Merkle
-    fn inst_hash(&self) -> &'static str;
-    fn inst_sponge_init(&self) -> &'static str;
-    fn inst_sponge_absorb(&self) -> &'static str;
-    fn inst_sponge_squeeze(&self) -> &'static str;
-    fn inst_merkle_step(&self) -> &'static str;
-    // ...
-
-    // Control flow
-    fn inst_assert(&self) -> &'static str;
-    fn inst_skiz(&self) -> &'static str;
-    fn inst_call(&self, label: &str) -> String;
-    fn inst_return(&self) -> &'static str;
-    fn inst_halt(&self) -> &'static str;
-
-    // Inline assembly passthrough
-    fn inst_push_neg_one(&self) -> &'static str;
-}
-```
-
-The following targets implement this trait:
-
-- **`TritonLowering`** -- Triton Assembly (TASM). Production target.
-- **`MidenLowering`** -- Miden Assembly (MASM). Uses `dup.N` / `movup.N` syntax,
-  `adv_push.1` for divine, `hperm` for hashing.
-
-Register targets use a separate `RegisterLowering` path via LIR. Tree targets
-(Nock) use `TreeLowering`. See [IR Reference](../reference/ir.md) for the
-full lowering architecture.
-
-The `create_backend(target_name)` factory function returns the appropriate
-implementation.
-
-### CostModel
-
-The `CostModel` trait in `src/cost.rs` provides target-specific proving cost
-analysis. The cost analyzer walks the AST once; all target-specific knowledge
-flows through this trait.
-
-```rust
-pub(crate) trait CostModel {
-    fn table_names(&self) -> &[&str];
-    fn table_short_names(&self) -> &[&str];
-    fn builtin_cost(&self, name: &str) -> TableCost;
-    fn binop_cost(&self, op: &BinOp) -> TableCost;
-    fn call_overhead(&self) -> TableCost;
-    fn stack_op(&self) -> TableCost;
-    fn if_overhead(&self) -> TableCost;
-    fn loop_overhead(&self) -> TableCost;
-    fn hash_rows_per_permutation(&self) -> u64;
-    fn target_name(&self) -> &str;
-}
-```
-
-Implemented cost models:
-
-| Struct            | Target      | Tables                                              |
-|-------------------|-------------|------------------------------------------------------|
-| `TritonCostModel` | Triton VM   | processor, hash, u32, op_stack, ram, jump_stack      |
-| `MidenCostModel`  | Miden VM    | processor, hash, chiplets, stack                     |
-| `CycleCostModel`  | OpenVM, SP1 | cycles (single-dimension)                            |
-| `CairoCostModel`  | Cairo       | steps, builtins                                      |
-
-The `create_cost_model(target_name)` factory returns the appropriate model. The
-`CostAnalyzer` struct is parameterized by a `&dyn CostModel` reference, so the
-same analysis code produces target-appropriate reports, hotspot rankings, and
-optimization hints (H0001 hash dominance, H0002 headroom, H0004 loop bound
-waste).
+Each target implements two traits: `StackLowering` (mapping TIR operations to target assembly) and `CostModel` (providing per-instruction cost in target-native dimensions). Stack targets (Triton, Miden) share control-flow and stack-management logic. Register targets use `RegisterLowering` via LIR. Tree targets (Nock) use `TreeLowering`. See [IR Reference](../reference/ir.md) for the trait interfaces and [Target Reference](../reference/targets.md) for implemented backends.
 
 ---
 
 ## 📚 Standard Library Layers
 
-The standard library is organized into three layers that enable code portability
-across targets.
+Three layers enable portability:
 
-### Layer 1: `std.core` -- Universal
+- **`std.core`** -- Pure Trident, no VM dependencies. Compiles everywhere.
+- **`std.io` / `std.crypto`** -- Same API on every target. The compiler dispatches to target-native instructions.
+- **`os.<os>.*`** -- OS-specific extensions that lock to one target.
 
-Pure Trident code with no VM dependencies. Compiles identically on every target.
-
-```trident
-std/core/
-  field.tri       Field arithmetic helpers
-  convert.tri     as_u32, as_field (with range checks)
-  assert.tri      Assertion helpers
-  u32.tri         U32 arithmetic helpers
-```
-
-### Layer 2: `std.io` / `std.crypto` -- Abstraction
-
-Same user-facing API on every target. The compiler dispatches to the appropriate
-backend instructions via intrinsic annotations.
-
-```trident
-std/io/
-  io.tri          pub_read, pub_write, divine
-  mem.tri         ram_read, ram_write, ram_read_block, ram_write_block
-  storage.tri     Persistent storage abstraction
-
-std/crypto/
-  hash.tri        hash(), sponge_init/absorb/squeeze
-  merkle.tri      Merkle tree verification
-  auth.tri        Preimage verification
-  poseidon.tri    Poseidon hash (native on some targets, software on others)
-  poseidon2.tri   Poseidon2 hash
-  sha256.tri      SHA-256 (precompile on RISC-V targets)
-  keccak256.tri   Keccak-256 (precompile on RISC-V targets)
-  ecdsa.tri       ECDSA signature verification
-  secp256k1.tri   secp256k1 curve operations
-  ed25519.tri     Ed25519 curve operations
-  bigint.tri      Big integer arithmetic
-```
-
-### Layer 3: `<target>.ext` -- Target-Specific
-
-Backend extensions that expose target-unique capabilities. Programs that import
-from `os.<target>.*` are explicitly bound to that target.
-
-```text
-os/neptune/
-  xfield.tri      XField type (cubic extension), xx_add, xx_mul, x_invert
-  kernel.tri      Neptune kernel interface (authenticate_field, tree_height)
-  utxo.tri        UTXO verification
-  proof.tri       Recursive STARK verifier components
-  recursive.tri   Recursive proof composition
-  registry.tri    Registry operations
-```
-
-### Target Detection
-
-`std/target.tri` exposes compile-time constants derived from the active
-`TargetConfig`:
-
-```trident
-pub const DIGEST_WIDTH    // 5 for Triton (Tip5), 4 for Miden (RPO), etc.
-pub const FIELD_LIMBS     // 2 for Goldilocks, 4 for Stark-252, etc.
-pub const HASH_RATE       // 10 for Tip5, 8 for RPO, etc.
-```
-
-Programs use these constants to write target-polymorphic code without `#[cfg]`
-guards. For example, `Digest` is defined as `[Field; DIGEST_WIDTH]`, so its
-width adjusts automatically per target.
+Programs using only `std.*` compile to any backend. `std/target.tri` exposes compile-time constants (`DIGEST_WIDTH`, `FIELD_LIMBS`, `HASH_RATE`) derived from the active target, enabling polymorphic code without `#[cfg]` guards. See [Standard Library Reference](../reference/stdlib.md) for the full module inventory.
 
 ---
 
@@ -724,17 +493,7 @@ This creates a spectrum of trust: deploy the same logic directly (transparent, a
 
 ## 🗺️ Why Not An Existing Language?
 
-**Solidity** is EVM-only. Solang attempts EVM→SVM compilation but is experimental and not production-grade. Solidity's entire semantic model (storage slots, msg.sender, reentrancy patterns) is EVM-specific.
-
-**Rust** is used by CosmWasm, Solana, and several zkVMs, but the contract interfaces are completely incompatible. You cannot take an Anchor program and deploy it as a CosmWasm contract. The platform-specific code dominates the contract structure.
-
-**Cairo** is StarkNet-only. Its type system and execution model are deeply tied to the STARK prover architecture.
-
-**Move** is restricted to Aptos/Sui. Its resource model is innovative but not portable.
-
-**Fe** (Ethereum Foundation) has the right architectural instincts (Rust-like, uses Yul IR) but is EVM-only and currently mid-rewrite.
-
-No existing language treats field arithmetic, bounded execution, and abstract storage as core primitives. Trident does, because these properties emerged from the requirements of provable computation. The discovery is that they are exactly what universal blockchain deployment requires.
+Existing blockchain languages are designed for one VM: Solidity for EVM, Cairo for StarkNet, Move for Aptos/Sui. Rust is used across CosmWasm, Solana, and zkVMs, but the contract interfaces are incompatible — you cannot take an Anchor program and deploy it as a CosmWasm contract. No existing language treats field arithmetic, bounded execution, and abstract storage as core primitives. See [Comparative Analysis](provable-computing.md) for the full comparison.
 
 ---
 
@@ -790,13 +549,8 @@ end-to-end proving and verification.
 
 ## 🔗 See Also
 
-- [Tutorial](../tutorials/tutorial.md) — Getting started, including `asm(triton)` blocks
-- [Language Reference](../reference/language.md) — Complete syntax and semantics
-- [IR Reference](../reference/ir.md) — Full lowering architecture
-- [Target Reference](../reference/targets.md) — OS model, integration tracking, how-to-add checklists
-- [Programming Model](programming-model.md) — Execution model, OS abstraction, six concerns
-- [Content-Addressed Code](content-addressing.md) — How target-independent hashing works
-- [Comparative Analysis](provable-computing.md) — Proving cost estimation and zkVM comparison
-- [Compiling a Program](../guides/compiling-a-program.md) — `--target` flag and build pipeline
-- [For Developers](for-developers.md) — Portability concepts for general developers
-- [Vision](vision.md) — Long-term direction for Trident
+- [IR Reference](../reference/ir.md) — Lowering architecture
+- [Target Reference](../reference/targets.md) — OS model, target profiles
+- [Programming Model](programming-model.md) — Execution model, OS abstraction
+- [Language Reference](../reference/language.md) — Syntax and semantics
+- [Compiling a Program](../guides/compiling-a-program.md) — `--target` flag

@@ -254,14 +254,6 @@ The goal is not to minimize every table, but to bring the tallest table down. On
 
 ## 🔗 See Also
 
-- [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide to writing Trident programs
-- [Language Reference](../reference/language.md) -- Types, operators, builtins (Part I universal, Part II provable)
-- [VM Reference](../reference/vm.md) -- VM registry, lowering paths, cost models
-- [How STARK Proofs Work](../explanation/stark-proofs.md) -- Section 4 (six tables explained), Section 11 (proving cost formula)
-- [Programming Model](../explanation/programming-model.md) -- How Triton VM execution produces the trace
-- [Error Catalog](../reference/errors.md) -- All compiler error messages explained
-- [For Developers](../explanation/for-developers.md) -- Why bounded loops determine cost (Section 3)
-- [For Blockchain Devs](../explanation/for-blockchain-devs.md) -- Where's My Gas? section explains cost from a smart contract perspective
-- [Vision](../explanation/vision.md) -- The cost transparency story and why it matters
-- [Comparative Analysis](../explanation/provable-computing.md) -- Hash performance comparison across all ZK systems
-- [Triton VM specification](https://triton-vm.org/spec/) -- Target VM instruction costs
+- [Compiling a Program](compiling-a-program.md) -- Build pipeline, `--costs` / `--hotspots` flags
+- [Generating Proofs](generating-proofs.md) -- How proving cost translates to proof generation time
+- [IR Reference](../reference/ir.md) -- TIR operations and lowering paths

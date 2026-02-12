@@ -187,12 +187,9 @@ The `.tasm` file produced by `trident build` is human-readable Triton Assembly. 
 
 ## 🔗 See Also
 
-- [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide: types, functions, modules, testing
 - [Compiling a Program](compiling-a-program.md) -- The prior stage: build pipeline and cost analysis
+- [Deploying a Program](deploying-a-program.md) -- The next stage: packaging for on-chain use
 - [Error Catalog](../reference/errors.md) -- All error messages explained with fixes
-- [How STARK Proofs Work](../explanation/stark-proofs.md) -- Execution traces and the six constraint tables
-- [For Developers](../explanation/for-developers.md) -- Zero-knowledge concepts for general developers
-- [Language Reference](../reference/language.md) -- Types, operators, builtins, grammar
 
 ## 🚀 Next Step
 

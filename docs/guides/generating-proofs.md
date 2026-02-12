@@ -91,7 +91,7 @@ for the full execution model.
 
 ## ⚡ 3. Understanding Proving Cost
 
-Proving time and memory are determined by one number: the **padded height** -- the next power of 2 above the tallest of Triton VM's six execution tables. Only the tallest table matters; reducing a shorter table has zero effect on proving time. See [Optimization Guide](optimization.md) for the full table model, padded height mechanics, and reduction strategies.
+Proving time and memory are determined by one number: the **padded height**. Only the tallest table matters; reducing a shorter table has zero effect on proving time. See [Optimization Guide](optimization.md) for the full table model and reduction strategies.
 
 ### Measuring Cost with Trident
 
