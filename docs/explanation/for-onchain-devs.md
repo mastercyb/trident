@@ -1,4 +1,4 @@
-# 🌉 From Smart Contracts to Zero-Knowledge Programs
+# 🌉 Trident for Onchain Devs
 
 You know how to write smart contracts. Trident programs look similar but work
 fundamentally differently. This guide maps your existing mental model -- whether
@@ -664,7 +664,7 @@ These concepts have no direct parallel in smart contract development:
 
 ### `divine()` -- Secret Witness Input
 
-The prover inputs data the verifier never sees, then authenticates it (via hashing, Merkle proofs, or range checks). In EVM all calldata is public; in Trident, `divine` is the default input method. See [For Developers](for-developers.md) for the full divine-and-authenticate pattern.
+The prover inputs data the verifier never sees, then authenticates it (via hashing, Merkle proofs, or range checks). In EVM all calldata is public; in Trident, `divine` is the default input method. See [For Offchain Devs](for-offchain-devs.md) for the full divine-and-authenticate pattern.
 
 ### `seal` -- Privacy-Preserving Events
 
@@ -678,7 +678,7 @@ seal Nullifier { account_id: s_id, nonce: s_nonce }
 
 ### Bounded Loops
 
-All iteration must have a compile-time upper bound (`for i in 0..n bounded 100`). No unbounded recursion, no dynamic dispatch. This is what makes compile-time cost analysis possible. See [For Developers](for-developers.md) for loop syntax and costing rules.
+All iteration must have a compile-time upper bound (`for i in 0..n bounded 100`). No unbounded recursion, no dynamic dispatch. This is what makes compile-time cost analysis possible. See [For Offchain Devs](for-offchain-devs.md) for loop syntax and costing rules.
 
 ### Cost Annotations
 
@@ -698,7 +698,7 @@ is a pure function of the source code.
 
 ### Recursive Proof Verification
 
-A Trident program can verify another STARK proof inside its own execution, enabling proof composition. See [For Developers](for-developers.md) for how recursive verification works and its cost profile.
+A Trident program can verify another STARK proof inside its own execution, enabling proof composition. See [For Offchain Devs](for-offchain-devs.md) for how recursive verification works and its cost profile.
 
 ### Quantum Safety
 
@@ -763,4 +763,4 @@ types, functions, modules, I/O, hashing, events, testing, and cost analysis.
 - [Gold Standard Libraries](../explanation/gold-standard.md) -- Token standards (TSP-1/TSP-2) and capability library
 - [How STARK Proofs Work](../explanation/stark-proofs.md) -- From execution traces to quantum-safe proofs
 - [Multi-Target Compilation](../explanation/multi-target.md) -- Multi-target architecture: universal core, backend extensions
-- [For Developers](for-developers.md) -- Zero-knowledge from scratch (if you also need the ZK primer)
+- [For Offchain Devs](for-offchain-devs.md) -- Zero-knowledge from scratch (if you also need the ZK primer)

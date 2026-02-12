@@ -79,5 +79,5 @@ catalog.
 - [Target Reference](targets.md) — OS model, integration tracking, how-to-add checklists
 - [IR Reference](ir.md) — 54 operations, 4 tiers, lowering paths
 - [Tutorial](../tutorials/tutorial.md) — Step-by-step guide with working examples
-- [For Developers](../explanation/for-developers.md) — Why bounded loops? Why no heap?
+- [For Offchain Devs](../explanation/for-offchain-devs.md) — Why bounded loops? Why no heap?
 - [Optimization Guide](../guides/optimization.md) — Cost reduction strategies

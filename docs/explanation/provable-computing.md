@@ -476,8 +476,8 @@ The risk is real: a 3-person team, a $0.57 token, an inflation bug in history, a
 - [Optimization Guide](../guides/optimization.md) -- The six-table cost model in practice
 - [Error Catalog](../reference/errors.md) -- All compiler error messages explained
 - [Tutorial](../tutorials/tutorial.md) -- Start building on the system this analysis recommends
-- [For Developers](for-developers.md) -- Zero-knowledge concepts for conventional programmers
-- [For Blockchain Devs](for-blockchain-devs.md) -- Mental model migration from smart contract platforms
+- [For Offchain Devs](for-offchain-devs.md) -- Zero-knowledge concepts for conventional programmers
+- [For Onchain Devs](for-onchain-devs.md) -- Mental model migration from smart contract platforms
 
 ---
 

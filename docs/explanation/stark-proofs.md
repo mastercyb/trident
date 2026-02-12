@@ -16,7 +16,7 @@ It covers the full pipeline: how an execution trace becomes a polynomial,
 how polynomials become commitments, how commitments become a proof, and
 why that proof is secure against both classical and quantum adversaries.
 
-For a quick overview, see [What Is a STARK?](for-developers.md#8-what-is-a-stark)
+For a quick overview, see [What Is a STARK?](for-offchain-devs.md#8-what-is-a-stark)
 in the developer guide.
 
 ---
@@ -357,7 +357,7 @@ field elements and produces a 5-element Digest. In Triton VM, this costs
 setup row. Compare this to SHA-256 in a RISC-V zkVM, which costs thousands
 of cycles for the same operation.
 
-Cross-reference: [for-developers.md](for-developers.md) Section 7 for
+Cross-reference: [for-offchain-devs.md](for-offchain-devs.md) Section 7 for
 Merkle tree basics.
 
 ---
@@ -574,7 +574,7 @@ evaluations). It performs four categories of checks:
 
 - **Prover time**: depends on padded height. See Section 11.
 
-Cross-reference: [for-developers.md](for-developers.md) Section 9 for the
+Cross-reference: [for-offchain-devs.md](for-offchain-devs.md) Section 9 for the
 CLI walkthrough of build, prove, and verify.
 
 ---
@@ -911,11 +911,11 @@ Cross-reference: [vision.md](vision.md) "Recursive STARK Verification",
   ZK system: StarkWare, SP1, RISC Zero, Aleo, Mina, NockVM. Covers quantum
   safety, privacy, performance, and ecosystem strength.
 
-- [For Developers](for-developers.md) -- The beginner-friendly introduction.
+- [For Offchain Devs](for-offchain-devs.md) -- The beginner-friendly introduction.
   Section 8 gives a one-page STARK overview. Section 9 walks through the
   build-prove-verify CLI workflow.
 
-- [For Blockchain Devs](for-blockchain-devs.md) -- Mental model migration
+- [For Onchain Devs](for-onchain-devs.md) -- Mental model migration
   from Solidity/Anchor/CosmWasm. See "Where's My Gas?" for the cost model
   from a smart contract perspective.
 

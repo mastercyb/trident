@@ -53,7 +53,7 @@ The design constraints are deliberate:
 - **Cost transparency.** Proving cost computable from source before execution.
 
 These constraints make every program a fixed, bounded computation -- exactly
-what a STARK prover requires. See [For Developers](for-developers.md) for
+what a STARK prover requires. See [For Offchain Devs](for-offchain-devs.md) for
 the full language model.
 
 The compiler is ~43K lines of Rust with 5 runtime dependencies. 25 standard
@@ -113,8 +113,8 @@ makes this position stronger.
 
 ## 🔗 See Also
 
-- [For Developers](for-developers.md) -- Zero-knowledge programming from scratch
-- [For Blockchain Devs](for-blockchain-devs.md) -- From Solidity/Cairo/Anchor to Trident
+- [For Offchain Devs](for-offchain-devs.md) -- Zero-knowledge programming from scratch
+- [For Onchain Devs](for-onchain-devs.md) -- From Solidity/Cairo/Anchor to Trident
 - [Multi-Target Compilation](multi-target.md) -- One source, every chain
 - [Comparative Analysis](provable-computing.md) -- Triton VM vs every other ZK system
 - [How STARK Proofs Work](stark-proofs.md) -- From execution traces to quantum-safe proofs

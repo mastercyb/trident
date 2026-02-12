@@ -595,7 +595,7 @@ pub_write5(d.0, d.1, d.2, d.3, d.4)  // write five elements
 
 ### Secret Input (Divine)
 
-Secret inputs are known to the prover but not the verifier. For a conceptual introduction to why this matters, see [ZK Concepts for Developers](../explanation/for-developers.md).
+Secret inputs are known to the prover but not the verifier. For a conceptual introduction to why this matters, see [For Offchain Devs](../explanation/for-offchain-devs.md).
 
 ```trident
 let secret: Field = divine()        // one field element
@@ -826,7 +826,7 @@ Named variables in scope are spilled to RAM before the block executes and restor
 
 ## 💡 17. Key Differences from Conventional Languages
 
-These are not limitations -- they are properties required for provable computation. For a deeper explanation, see the [Programming Model](../explanation/programming-model.md). For zero-knowledge concepts explained from first principles, see [ZK Concepts for Developers](../explanation/for-developers.md). For migration from smart-contract languages, see [For Blockchain Devs](../explanation/for-blockchain-devs.md).
+These are not limitations -- they are properties required for provable computation. For a deeper explanation, see the [Programming Model](../explanation/programming-model.md). For zero-knowledge concepts explained from first principles, see [For Offchain Devs](../explanation/for-offchain-devs.md). For migration from smart-contract languages, see [For Onchain Devs](../explanation/for-onchain-devs.md).
 
 | Conventional expectation | Trident | Why |
 |--------------------------|---------|-----|
@@ -854,8 +854,8 @@ These constraints make every Trident program a fixed, bounded computation -- exa
 - [How STARK Proofs Work](../explanation/stark-proofs.md) -- The proof system behind every Trident program
 - [Error Catalog](../reference/errors.md) -- All error messages explained
 - [Formal Verification](../explanation/formal-verification.md) -- `#[requires]`, `#[ensures]`, `#[invariant]`, and `#[pure]`
-- [For Developers](../explanation/for-developers.md) -- Zero-knowledge concepts explained for conventional programmers
-- [For Blockchain Devs](../explanation/for-blockchain-devs.md) -- Mental model migration from Solidity/Anchor/CosmWasm
+- [For Offchain Devs](../explanation/for-offchain-devs.md) -- Zero-knowledge concepts explained for conventional programmers
+- [For Onchain Devs](../explanation/for-onchain-devs.md) -- Mental model migration from Solidity/Anchor/CosmWasm
 - [Content-Addressed Code](../explanation/content-addressing.md) -- Content-addressed code and the UCM model
 - [Vision](../explanation/vision.md) -- Why Trident exists and what you can build
 - [Comparative Analysis](../explanation/provable-computing.md) -- Triton VM vs. every other ZK system

@@ -34,8 +34,8 @@ it does, for readers who want the full picture.
 
 | Document | Description |
 |----------|-------------|
-| [For Developers](for-developers.md) | Zero-knowledge from scratch |
-| [For Blockchain Devs](for-blockchain-devs.md) | Mental model migration from Solidity/Anchor/CosmWasm |
+| [For Offchain Devs](for-offchain-devs.md) | Zero-knowledge from scratch |
+| [For Onchain Devs](for-onchain-devs.md) | Mental model migration from Solidity/Anchor/CosmWasm |
 
 ## ⚖️ Philosophy
 

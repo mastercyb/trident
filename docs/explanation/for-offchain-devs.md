@@ -1,4 +1,4 @@
-# 🔑 Trident for Developers
+# 🔑 Trident for Offchain Devs
 
 A guide to Trident and zero-knowledge programming for developers coming from
 Rust, Python, Go, JavaScript, C++, or any conventional language. No prior
@@ -372,6 +372,6 @@ target that supports the same feature set.
   cost across all six Triton VM tables
 - [Multi-Target Compilation](../explanation/multi-target.md) -- Multi-target architecture,
   backend extensions, and the universal core
-- [For Blockchain Devs](for-blockchain-devs.md) -- If you come from Solidity,
+- [For Onchain Devs](for-onchain-devs.md) -- If you come from Solidity,
   Anchor, or CosmWasm, start here instead
 - [Comparative Analysis](../explanation/provable-computing.md) -- Triton VM vs. every other ZK system

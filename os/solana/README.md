@@ -270,4 +270,4 @@ The compiler reports cost in compute units via `--costs`.
 
 For VM details, see [sbpf.md](../../vm/sbpf/README.md).
 For mental model migration from Anchor/Rust, see
-[For Blockchain Devs](../../docs/explanation/for-blockchain-devs.md).
+[For Onchain Devs](../../docs/explanation/for-onchain-devs.md).

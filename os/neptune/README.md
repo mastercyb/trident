@@ -337,4 +337,4 @@ For VM details, see [triton.md](../../vm/triton/README.md).
 For the divine-and-authenticate pattern in depth, see
 [Programming Model](../../docs/explanation/programming-model.md).
 For Solidity-to-Trident mental model migration, see
-[For Blockchain Devs](../../docs/explanation/for-blockchain-devs.md).
+[For Onchain Devs](../../docs/explanation/for-onchain-devs.md).

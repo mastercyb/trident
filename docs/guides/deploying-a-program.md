@@ -105,7 +105,7 @@ The relevant standard library modules for Neptune deployment:
 
 For the full Neptune programming model, see [Programming Model](../explanation/programming-model.md).
 For the blockchain developer mental model, see
-[For Blockchain Devs](../explanation/for-blockchain-devs.md).
+[For Onchain Devs](../explanation/for-onchain-devs.md).
 
 ---
 

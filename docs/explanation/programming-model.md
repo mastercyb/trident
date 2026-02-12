@@ -219,5 +219,5 @@ is direct, no proof. The program still uses the same I/O channels.
 - [OS Reference](../reference/os.md) -- Full `os.*` API and per-OS lowering tables
 - [Multi-Target Compilation](multi-target.md) -- Compiler architecture and backend traits
 - [Gold Standard](gold-standard.md) -- PLUMB token standards and capability library
-- [For Blockchain Devs](for-blockchain-devs.md) -- Migration from Solidity, Anchor, CosmWasm
+- [For Onchain Devs](for-onchain-devs.md) -- Migration from Solidity, Anchor, CosmWasm
 - [Language Reference](../reference/language.md) -- Types, operators, builtins, grammar
