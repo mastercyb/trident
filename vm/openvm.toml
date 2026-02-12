@@ -23,3 +23,11 @@ degree = 0
 
 [cost]
 tables = ["cycles"]
+
+[status]
+level = 4
+lowering = "none"
+lowering_path = "legacy"
+cost_model = true
+tests = false
+notes = "RISC-V scaffold. CycleCostModel."

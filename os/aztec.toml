@@ -14,3 +14,9 @@ transaction_model = "proof-based+signed"
 
 [cross_chain]
 protocols = ["ethereum-l2"]
+
+[status]
+level = 1
+ext_modules = 0
+tests = false
+notes = ""

@@ -26,3 +26,11 @@ degree = 0
 
 [cost]
 tables = ["wall-clock"]
+
+[status]
+level = 3
+lowering = "RegisterLowering"
+lowering_path = "lir"
+cost_model = false
+tests = false
+notes = "Native target. todo!() stubs in lowering."

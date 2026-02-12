@@ -14,3 +14,9 @@ transaction_model = "syscall"
 
 [cross_chain]
 protocols = []
+
+[status]
+level = 1
+ext_modules = 0
+tests = false
+notes = ""

@@ -26,3 +26,11 @@ degree = 3
 
 [cost]
 tables = ["reductions"]
+
+[status]
+level = 3
+lowering = "TreeLowering"
+lowering_path = "tree"
+cost_model = false
+tests = false
+notes = "Jets stubbed. Noun-based lowering."

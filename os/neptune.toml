@@ -14,3 +14,9 @@ transaction_model = "proof-based"
 
 [cross_chain]
 protocols = []
+
+[status]
+level = 2
+ext_modules = 6
+tests = false
+notes = "kernel, proof, recursive, registry, utxo, xfield"

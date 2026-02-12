@@ -439,37 +439,22 @@ The compiler selects lowering strategy from three fields in `os/*.toml`:
 
 ## Part III — Adding a Target
 
-### Adding a VM
+For detailed step-by-step checklists with exact file paths, integration
+level definitions, and current status matrices, see
+**[Integration Status](integration.md)**.
 
-1. Write `vm/<vm>.toml` with CPU parameters (word size, hash, stack,
-   cost). This makes `--target <vm>` work for bare compilation.
-2. Implement the appropriate lowering trait:
-   - `StackLowering` — stack machines (Triton, Miden, TVM)
-   - `RegisterLowering` — register machines (SP1, OpenVM, RISC Zero, Jolt, Cairo, AVM)
-   - `TreeLowering` — tree/combinator machines (Nock)
-   - `EvmLowering` — EVM bytecode
-   - `WasmLowering` — WASM bytecode
-   - `BpfLowering` — eBPF bytecode
-   - `MoveLowering` — Move bytecode
-   - `AcirLowering` — arithmetic circuits (Aztec/Noir)
-   - `KernelLowering` — GPU compute kernels (planned)
-3. Implement `CostModel` for the VM's billing model
-4. Write `docs/reference/vm/<vm>.md` documentation
+Quick summary:
 
-### Adding an OS
+- **Adding a VM**: Create `vm/<vm>.toml` -> document -> implement lowering
+  -> add cost model -> test. (6 levels, L0--L5.)
+- **Adding an OS**: Create `os/<os>.toml` -> document -> write `ext/<os>/*.tri`
+  bindings -> test. (4 levels, L0--L3.)
 
-1. Write `os/<os-name>.toml` — must include `vm = "<vm-name>"` referencing
-   an existing VM in `vm/`. This makes `--target <os-name>` work.
-2. Write `ext/<os-name>/*.tri` runtime binding modules
-3. Write `docs/reference/os/<os-name>.md` documentation
+No new lowering is needed for an OS — the VM already compiles. Only the
+runtime bindings differ. The `ext/` directory is keyed by **OS name**
+(not VM name): `ext/neptune/`, `ext/solana/`, `ext/linux/`.
 
-No new lowering needed — the VM already compiles. Only the runtime differs.
-
-The `ext/` directory is keyed by **OS name** (not VM name): `ext/neptune/`,
-`ext/solana/`, `ext/linux/` — because the bindings are OS-specific.
-
-See [ir.md Part VI](ir.md) for lowering trait interfaces and the backend
-guide.
+See [ir.md Part VI](ir.md) for lowering trait interfaces.
 
 ---
 

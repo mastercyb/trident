@@ -26,3 +26,11 @@ degree = 0
 
 [cost]
 tables = ["gates"]
+
+[status]
+level = 1
+lowering = "none"
+lowering_path = "none"
+cost_model = false
+tests = false
+notes = "Planned: specialized AcirLowering."

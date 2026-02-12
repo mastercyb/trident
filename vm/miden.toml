@@ -23,3 +23,11 @@ degree = 0
 
 [cost]
 tables = ["processor", "hash", "chiplets", "stack"]
+
+[status]
+level = 5
+lowering = "StackLowering"
+lowering_path = "tir"
+cost_model = true
+tests = true
+notes = "Second full target."

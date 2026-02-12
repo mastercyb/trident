@@ -23,3 +23,11 @@ degree = 0
 
 [cost]
 tables = ["steps", "builtins"]
+
+[status]
+level = 4
+lowering = "none"
+lowering_path = "legacy"
+cost_model = true
+tests = false
+notes = "Sierra scaffold. CairoCostModel."

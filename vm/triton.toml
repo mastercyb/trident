@@ -26,3 +26,11 @@ degree = 3
 
 [cost]
 tables = ["processor", "hash", "u32", "op_stack", "ram", "jump_stack"]
+
+[status]
+level = 5
+lowering = "StackLowering"
+lowering_path = "tir"
+cost_model = true
+tests = true
+notes = "Primary target. Full pipeline."
