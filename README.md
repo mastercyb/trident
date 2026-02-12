@@ -91,8 +91,8 @@ Cash runs a recursive verifier in production today. ~300K clock cycles
 regardless of the original computation's complexity.
 
 See the [Gold Standard](docs/explanation/gold-standard.md) for the full
-financial primitives specification: PLUMB framework, TSP-1, TSP-2, TIDE
-(unified liquidity), COMPASS (oracle).
+specification: PLUMB framework, TSP-1, TSP-2, and the capability library —
+23 composable skills from Liquidity (TIDE) to Oracle Pricing (COMPASS).
 
 ---
 
@@ -327,7 +327,7 @@ Full index: [docs/README.md](docs/README.md)
 - [Content-Addressed Code](docs/explanation/content-addressing.md) — Code identity by computation
 - [OS Abstraction](docs/explanation/os-abstraction.md) — How Trident abstracts over 25 operating systems
 - [Comparative Analysis](docs/explanation/provable-computing.md) — Trident vs every other ZK system
-- [Gold Standard](docs/explanation/gold-standard.md) — Neptune financial primitives: PLUMB, TSP-1, TSP-2
+- [Gold Standard](docs/explanation/gold-standard.md) — Token standards (TSP-1, TSP-2) and capability library (PLUMB framework)
 
 ---
 

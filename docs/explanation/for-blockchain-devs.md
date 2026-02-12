@@ -941,7 +941,7 @@ types, functions, modules, I/O, hashing, events, testing, and cost analysis.
 - [Language Reference](../reference/language.md) -- Quick lookup: types, operators, builtins, grammar
 - [Target Reference](../reference/targets.md) -- OS model, integration tracking, how-to-add checklists
 - [Deploying a Program](../guides/deploying-a-program.md) -- Neptune UTXO scripts, lock/type scripts, multi-target deployment
-- [Gold Standard Libraries](../explanation/gold-standard.md) -- Token standards (TSP-1/TSP-2), bridge clients, crypto gadgets
+- [Gold Standard Libraries](../explanation/gold-standard.md) -- Token standards (TSP-1/TSP-2) and capability library
 - [Programming Model](../explanation/programming-model.md) -- How programs run in Triton VM
 - [Optimization Guide](../guides/optimization.md) -- Cost reduction strategies
 - [Multi-Target Compilation](../explanation/multi-target.md) -- Multi-target architecture: universal core, backend extensions

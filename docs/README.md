@@ -71,7 +71,7 @@ Per-target documentation lives alongside its config:
 | [Provable Computing](explanation/provable-computing.md) | Comparative analysis of ZK systems |
 | [Formal Verification](explanation/formal-verification.md) | Symbolic execution, SMT, invariant synthesis |
 | [Content-Addressed Code](explanation/content-addressing.md) | Hashing, caching, registry, equivalence |
-| [Neptune Gold Standard](explanation/gold-standard.md) | ZK-native financial primitives |
+| [Neptune Gold Standard](explanation/gold-standard.md) | Token standards and capability library |
 | [For Developers](explanation/for-developers.md) | Zero-knowledge from scratch |
 | [For Blockchain Devs](explanation/for-blockchain-devs.md) | Mental model migration from Solidity/Anchor/CosmWasm |
 | [Cyber License](explanation/cyber-license.md) | Don't trust. Don't fear. Don't beg. |

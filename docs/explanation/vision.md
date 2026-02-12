@@ -475,8 +475,8 @@ the original computation's complexity.
 ### And More
 
 - **DeFi protocols** -- AMMs, lending, stablecoins on a private, quantum-safe
-  foundation. TIDE (unified liquidity) and COMPASS (oracle) are designed.
-  See [Gold Standard](gold-standard.md) §§7-8.
+  foundation. The Liquidity capability (TIDE) and Oracle Pricing capability (COMPASS) are designed.
+  See [Gold Standard](gold-standard.md) §§9.1-9.2.
 - **Cross-chain bridges** -- Recursive STARK verification sidesteps expensive
   non-native cryptography. Bridge logic written once, compiled to both sides.
 - **Identity and credentials** -- The `verify_auth` pattern generalizes to
@@ -632,7 +632,7 @@ The numbers are growing. The foundation is solid. The rest is building.
 - [Programming Model](programming-model.md) -- How Triton VM execution works
 - [Multi-Target Compilation](multi-target.md) -- Write once, deploy to every blockchain
 - [OS Abstraction](os-abstraction.md) -- How Trident abstracts over 25 operating systems
-- [Gold Standard](gold-standard.md) -- Neptune financial primitives: PLUMB, TSP-1, TSP-2, TIDE
+- [Gold Standard](gold-standard.md) -- Neptune financial standards (TSP-1, TSP-2) and capability library (TIDE, COMPASS)
 - [Optimization Guide](../guides/optimization.md) -- Cost reduction strategies and table management
 - [Comparative Analysis](provable-computing.md) -- Triton VM vs. every other ZK system
 - [Developer Guide](for-developers.md) -- Getting started with Trident

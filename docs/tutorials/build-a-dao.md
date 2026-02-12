@@ -343,8 +343,8 @@ You have built a complete private web3 application. To go further:
   the full language
 - [Language Reference](../reference/language.md) -- sponge, Merkle,
   extension fields, proof composition
-- [Gold Standard](../explanation/gold-standard.md) -- production patterns
-  for PLUMB, TIDE, and COMPASS
+- [Gold Standard](../explanation/gold-standard.md) -- production token
+  standards and capability library
 - [OS Reference](../reference/os.md) -- portable runtime APIs across 25
   operating systems
 - `examples/` -- production implementations of `coin.tri` and `uniq.tri`

@@ -29,7 +29,7 @@ it does, for readers who want the full picture.
 | Document | Description |
 |----------|-------------|
 | [Content-Addressed Code](content-addressing.md) | Hashing, caching, registry, equivalence |
-| [Neptune Gold Standard](gold-standard.md) | ZK-native financial primitives |
+| [Neptune Gold Standard](gold-standard.md) | Token standards and capability library |
 
 ## 🎓 Onboarding
 
