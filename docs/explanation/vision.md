@@ -50,11 +50,17 @@ The alternative ecosystems are not alternatives at all:
   purpose VM is still on the roadmap.
 
 - **Nockchain** has the right instincts: UTXO model, Proof-of-Work, no
-  foundation gatekeeping. But it runs on a Hoon-derived VM that is not
-  quantum-resistant (no STARK-native hash, no algebraic field arithmetic),
-  has no privacy primitives, and has no general-purpose programming
-  language — just raw Nock combinators. The architecture is promising; the
-  cryptographic foundation is incomplete.
+  foundation gatekeeping. But it runs on a Nock VM that is not
+  quantum-resistant (no STARK-native hash, no algebraic field arithmetic)
+  and has no privacy primitives (planned H2 2026). The programming story
+  is emerging: [Jock](https://docs.jock.org/) (alpha, June 2025) compiles
+  to Nock with Swift-inspired syntax, but lacks a type system, caching,
+  and many standard features (no list indexing, no maps, no traits, no
+  crash handling). Hoon works but has a notoriously steep learning curve.
+  You can deploy NockApps today via the SDK, but smart contract
+  programmability (optimistic execution, fraud proofs) is roadmapped for
+  Q2 2026. The architecture is promising; the cryptographic foundation
+  and developer tooling are incomplete.
 
 Every one of these systems makes a compromise. Either you give up quantum
 safety, or privacy, or programmability, or permissionless participation.
@@ -73,7 +79,7 @@ OS (the chain, consensus, and economics built on top):
 | RISC Zero | RISC Zero | **No** (Groth16 wrap) | Yes | Yes | **No** |
 | Aleo | AVM | **No** (Pasta curves) | Yes | Yes | **Partial** (stake-gated) |
 | Mina | Kimchi | **No** (Pasta curves) | Partial | **Partial** | **No** |
-| Nockchain | Nock | **No** (no STARK hash) | **No** | **No** (raw Nock) | Yes |
+| Nockchain | Nock | **No** (no STARK hash) | **No** | **Partial** (Jock alpha) | Yes |
 | **Neptune** | **Triton** | **Yes** | **Yes** | **Yes** | **Yes** |
 
 Neptune is the only OS that passes all four tests today. Trident is
@@ -634,7 +640,7 @@ against four requirements: quantum-safe, private, programmable, and mineable.
 | RISC Zero | RISC Zero | No (Groth16) | Yes | Yes | No | **No** |
 | Aleo | AVM | No (Pasta) | Yes | Yes | Partial | **No** |
 | Mina | Kimchi | No (Pasta) | Partial | Partial | No | **No** |
-| Nockchain | Nock | No | No | No (raw Nock) | Yes | **No** |
+| Nockchain | Nock | No | No | Partial (Jock alpha) | Yes | **No** |
 | **Neptune** | **Triton** | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** |
 
 Neptune is the only OS that satisfies all four simultaneously, today,
