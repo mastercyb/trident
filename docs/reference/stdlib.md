@@ -144,7 +144,7 @@ Placeholder for future proper implementation.
 
 ### Read-Compute-Write (Universal)
 
-```
+```trident
 fn main() {
     let a: Field = pub_read()
     let b: Field = pub_read()
@@ -154,7 +154,7 @@ fn main() {
 
 ### Accumulator (Universal)
 
-```
+```trident
 fn sum<N>(arr: [Field; N]) -> Field {
     let mut total: Field = 0
     for i in 0..N { total = total + arr[i] }
@@ -164,7 +164,7 @@ fn sum<N>(arr: [Field; N]) -> Field {
 
 ### Non-Deterministic Verification (Universal)
 
-```
+```trident
 fn prove_sqrt(x: Field) {
     let s: Field = divine()      // prover injects sqrt(x)
     assert(s * s == x)           // verifier checks s^2 = x
@@ -173,7 +173,7 @@ fn prove_sqrt(x: Field) {
 
 ### Merkle Proof Verification (Tier 2)
 
-```
+```trident
 module merkle
 
 pub fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
@@ -188,7 +188,7 @@ pub fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
 
 ### Event Emission (Tier 2)
 
-```
+```trident
 event Transfer { from: Digest, to: Digest, amount: Field }
 
 fn process(sender: Digest, receiver: Digest, value: Field) {

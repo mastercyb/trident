@@ -23,7 +23,7 @@ The binary is at `target/release/trident`. Add it to your PATH or use it directl
 
 Create a file `hello.tri`:
 
-```
+```trident
 program hello
 
 fn main() {
@@ -57,7 +57,7 @@ Every `.tri` file starts with either a `program` or a `module` declaration.
 
 A **program** has an entry point (`fn main()`) and compiles to an executable:
 
-```
+```trident
 program my_app
 
 fn main() {
@@ -68,7 +68,7 @@ fn main() {
 
 A **module** is a library with no entry point. Its public items are available to other files:
 
-```
+```trident
 module helpers
 
 pub fn double(x: Field) -> Field {
@@ -78,7 +78,7 @@ pub fn double(x: Field) -> Field {
 
 A project has exactly one `program` file and zero or more `module` files. The typical layout:
 
-```
+```text
 my_project/
   trident.toml    # Project configuration
   main.tri        # program (entry point)
@@ -110,14 +110,14 @@ All types have compile-time known widths measured in field elements. There are n
 
 The base type. A prime field element modulo p = 2^64 - 2^32 + 1 (the [Goldilocks prime](https://xn--2-umb.com/22/goldilocks/)). Supports `+`, `*`, `==`.
 
-```
+```trident
 let x: Field = 42
 let y: Field = x + x
 ```
 
 There is no `-` operator. Use `sub(a, b)` from `vm.core.field`. This is deliberate -- in a prime field, `1 - 2` gives `p - 1`, not `-1`. Making subtraction explicit avoids this footgun (see the [Key Differences](#17-key-differences-from-conventional-languages) table at the end):
 
-```
+```trident
 program example
 
 use vm.core.field
@@ -132,7 +132,7 @@ fn main() {
 
 Boolean values. `true` or `false`. Produced by `==` and `<` comparisons.
 
-```
+```trident
 let flag: Bool = x == y
 if flag {
     // ...
@@ -143,7 +143,7 @@ if flag {
 
 Unsigned 32-bit integer. Range-checked by the VM. Supports `+`, `*`, `<`, bitwise `&`, `^`.
 
-```
+```trident
 let n: U32 = as_u32(42)
 let m: U32 = n + n
 ```
@@ -152,7 +152,7 @@ let m: U32 = n + n
 
 Extension field element (3 base field elements). Used for [FRI](https://eccc.weizmann.ac.il/report/2017/134/) and IPA operations. See [How STARK Proofs Work](../explanation/stark-proofs.md) for where extension fields appear in the proof system.
 
-```
+```trident
 let x: XField = os.neptune.xfield.new(1, 0, 0)
 ```
 
@@ -160,13 +160,13 @@ let x: XField = os.neptune.xfield.new(1, 0, 0)
 
 A [Tip5](https://eprint.iacr.org/2023/107) hash digest (5 field elements). Returned by hash functions.
 
-```
+```trident
 let d: Digest = tip5(a, b, c, 0, 0, 0, 0, 0, 0, 0)
 ```
 
 Access individual elements with `.0`, `.1`, `.2`, `.3`, `.4`:
 
-```
+```trident
 let first: Field = d.0
 let last: Field = d.4
 ```
@@ -177,7 +177,7 @@ let last: Field = d.4
 
 Define named data types with `struct`:
 
-```
+```trident
 struct Account {
     pub id: Field,
     pub balance: Field,
@@ -189,7 +189,7 @@ Fields marked `pub` are accessible from other modules. Unmarked fields are priva
 
 Create instances with struct literal syntax:
 
-```
+```trident
 fn new_account(id: Field) -> Account {
     Account { id: id, balance: 0, nonce: 0 }
 }
@@ -197,13 +197,13 @@ fn new_account(id: Field) -> Account {
 
 Access fields with dot notation:
 
-```
+```trident
 let bal: Field = account.balance
 ```
 
 Assign to mutable struct fields:
 
-```
+```trident
 let mut acc: Account = new_account(1)
 acc.balance = 100
 ```
@@ -212,7 +212,7 @@ acc.balance = 100
 
 Structs can be destructured in `match` arms. Each field can bind a variable, match a literal, or use `_` as a wildcard:
 
-```
+```trident
 struct Point {
     x: Field,
     y: Field,
@@ -229,7 +229,7 @@ fn describe(p: Point) -> Field {
 
 You can also use wildcard fields to ignore values you don't need:
 
-```
+```trident
 match p {
     Point { x: _, b } => { pub_write(b) }
 }
@@ -241,7 +241,7 @@ match p {
 
 Fixed-size arrays with compile-time known lengths:
 
-```
+```trident
 let arr: [Field; 4] = [10, 20, 30, 40]
 let first: Field = arr[0]
 let last: Field = arr[3]
@@ -249,14 +249,14 @@ let last: Field = arr[3]
 
 Mutable arrays support element assignment:
 
-```
+```trident
 let mut data: [Field; 3] = [0, 0, 0]
 data[0] = 42
 ```
 
 Array indexing can use runtime values (with bounds checking):
 
-```
+```trident
 let idx: Field = pub_read()
 let val: Field = arr[idx]
 ```
@@ -269,7 +269,7 @@ let val: Field = arr[idx]
 
 Variables are immutable by default:
 
-```
+```trident
 let x: Field = 42
 let flag: Bool = true
 let arr: [Field; 3] = [1, 2, 3]
@@ -277,7 +277,7 @@ let arr: [Field; 3] = [1, 2, 3]
 
 Use `mut` for mutable variables:
 
-```
+```trident
 let mut counter: Field = 0
 counter = counter + 1
 ```
@@ -286,7 +286,7 @@ counter = counter + 1
 
 Module-level constants are inlined at every use site:
 
-```
+```trident
 const MAX_SUPPLY: Field = 1000000
 const TREE_HEIGHT: U32 = as_u32(3)
 pub const ZERO: Field = 0
@@ -294,7 +294,7 @@ pub const ZERO: Field = 0
 
 ### Tuple Destructuring
 
-```
+```trident
 let (quot, rem) = divmod(17, 5)
 ```
 
@@ -302,7 +302,7 @@ let (quot, rem) = divmod(17, 5)
 
 Field arithmetic uses `+` and `*`. There is no `-` operator -- in a prime field, `1 - 2` produces `p - 1`, not `-1`. Subtraction is explicit via `vm.core.field.sub`:
 
-```
+```trident
 use vm.core.field
 
 let sum: Field = a + b
@@ -312,7 +312,7 @@ let difference: Field = vm.core.field.sub(a, b)
 
 Comparisons produce `Bool`:
 
-```
+```trident
 let equal: Bool = a == b       // Field or U32
 let less: Bool = x < y         // U32 only
 ```
@@ -325,7 +325,7 @@ There are no `!=`, `>`, `<=`, or `>=` operators. Compose them from `==`, `<`, an
 
 ### If / Else
 
-```
+```trident
 if condition {
     do_something()
 } else {
@@ -335,13 +335,13 @@ if condition {
 
 If/else works as an expression (tail expression returns a value):
 
-```
+```trident
 let result: Field = if flag { 1 } else { 0 }
 ```
 
 There is no `else if`. Nest instead:
 
-```
+```trident
 if a {
     handle_a()
 } else {
@@ -357,7 +357,7 @@ if a {
 
 All loops require a compile-time bound:
 
-```
+```trident
 for i in 0..10 bounded 10 {
     process(i)
 }
@@ -367,7 +367,7 @@ for i in 0..10 bounded 10 {
 
 Dynamic ranges work with `bounded`:
 
-```
+```trident
 let n: Field = pub_read()
 for i in 0..n bounded 100 {
     // runs at most 100 iterations
@@ -377,7 +377,7 @@ for i in 0..n bounded 100 {
 
 When the range is a constant (e.g., `0..10`), the bound can be omitted -- the compiler infers it:
 
-```
+```trident
 for i in 0..10 {
     process(i)
 }
@@ -389,7 +389,7 @@ The loop variable `i` has type `Field`.
 
 Pattern matching over integer, boolean, and struct values:
 
-```
+```trident
 match op_code {
     0 => { handle_pay() }
     1 => { handle_lock() }
@@ -400,7 +400,7 @@ match op_code {
 
 The wildcard `_` arm is required unless all values are covered. For `Bool`, covering both arms is sufficient:
 
-```
+```trident
 match flag {
     true  => { accept() }
     false => { reject() }
@@ -411,7 +411,7 @@ For struct pattern matching, see the [Structs](#4-structs) section above.
 
 ### Early Return
 
-```
+```trident
 fn early_exit(x: Field) -> Field {
     if x == 0 {
         return 0
@@ -430,7 +430,7 @@ There is no `while`, `loop`, `break`, or `continue`.
 
 Functions are declared with `fn`. The last expression in the body is the return value (tail expression). You can also use explicit `return`:
 
-```
+```trident
 fn add_three(a: Field, b: Field, c: Field) -> Field {
     a + b + c
 }
@@ -445,7 +445,7 @@ fn abs_diff(a: Field, b: Field) -> Field {
 
 Functions with no return value omit the `->` annotation:
 
-```
+```trident
 fn log_value(x: Field) {
     pub_write(x)
 }
@@ -455,7 +455,7 @@ fn log_value(x: Field) {
 
 Functions are private by default. Mark them `pub` to export from a module:
 
-```
+```trident
 module utils
 
 pub fn public_fn() -> Field { 42 }    // accessible from other modules
@@ -466,7 +466,7 @@ fn private_fn() -> Field { 99 }        // internal only
 
 Return tuples and destructure at the call site:
 
-```
+```trident
 fn divmod(a: Field, b: Field) -> (Field, Field) {
     a /% b
 }
@@ -478,7 +478,7 @@ let (q, r) = divmod(17, 5)
 
 Functions can be generic over array sizes using `<N>`:
 
-```
+```trident
 fn sum<N>(arr: [Field; N]) -> Field {
     let mut total: Field = 0
     for i in 0..N bounded N {
@@ -490,7 +490,7 @@ fn sum<N>(arr: [Field; N]) -> Field {
 
 The size parameter `N` is inferred from the argument or specified explicitly:
 
-```
+```trident
 let a: [Field; 3] = [1, 2, 3]
 let s: Field = sum(a)           // N inferred as 3
 let t: Field = sum<5>(b)        // N specified as 5
@@ -502,7 +502,7 @@ Size generics are monomorphized at compile time -- each distinct `N` produces a 
 
 Size parameters can appear in arithmetic expressions in types. This enables functions that compute output sizes from input sizes:
 
-```
+```trident
 fn first_of<M, N>(a: [Field; M + N]) -> Field {
     a[0]
 }
@@ -518,7 +518,7 @@ The expressions support `+` and `*` over size parameters and integer literals. P
 
 Mark a function `#[pure]` to declare it has no I/O side effects -- no `pub_read`, `pub_write`, `divine`, `reveal`, or `seal`:
 
-```
+```trident
 #[pure]
 fn square(x: Field) -> Field {
     x * x
@@ -535,7 +535,7 @@ The compiler enforces the constraint: calling any I/O function inside a `#[pure]
 
 Import modules with `use`:
 
-```
+```trident
 program my_app
 
 use helpers
@@ -545,7 +545,7 @@ use vm.crypto.hash
 
 Call functions with the module prefix:
 
-```
+```trident
 let d: Digest = vm.crypto.hash.tip5(x, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 let result: Field = helpers.double(x)
 ```
@@ -585,7 +585,7 @@ See the [Reference](../reference/language.md) for a complete list of standard li
 
 Public inputs are visible to the verifier:
 
-```
+```trident
 let x: Field = pub_read()         // read one field element
 pub_write(x)                       // write one field element
 
@@ -597,7 +597,7 @@ pub_write5(d.0, d.1, d.2, d.3, d.4)  // write five elements
 
 Secret inputs are known to the prover but not the verifier. For a conceptual introduction to why this matters, see [ZK Concepts for Developers](for-developers.md).
 
-```
+```trident
 let secret: Field = divine()        // one field element
 let (a, b, c) = divine3()           // three field elements
 let d: Digest = divine5()           // five field elements (Digest)
@@ -605,7 +605,7 @@ let d: Digest = divine5()           // five field elements (Digest)
 
 The program must verify divine values are correct:
 
-```
+```trident
 let claimed_root: Digest = divine5()
 let actual_root: Digest = compute_root(data)
 vm.core.assert.digest(claimed_root, actual_root)
@@ -617,7 +617,7 @@ vm.core.assert.digest(claimed_root, actual_root)
 
 [Tip5](https://eprint.iacr.org/2023/107) is Triton VM's native algebraic hash function (see [How STARK Proofs Work](../explanation/stark-proofs.md) Section 5 for why this hash matters for proofs). It always takes exactly 10 field elements as input and produces a 5-element Digest. Pad unused inputs with zeros:
 
-```
+```trident
 use vm.crypto.hash
 
 fn hash_pair(a: Field, b: Field) -> Digest {
@@ -627,7 +627,7 @@ fn hash_pair(a: Field, b: Field) -> Digest {
 
 For streaming data, use the sponge API:
 
-```
+```trident
 fn hash_stream() -> Digest {
     vm.crypto.hash.sponge_init()
     vm.crypto.hash.sponge_absorb(a, b, c, d, e, f, g, h, i, j)
@@ -646,7 +646,7 @@ Events record structured data in the proof trace. Declare the event, then `revea
 
 ### Declaration
 
-```
+```trident
 event Transfer {
     from: Digest,
     to: Digest,
@@ -658,7 +658,7 @@ event Transfer {
 
 All fields are visible to the verifier:
 
-```
+```trident
 fn pay(sender: Digest, receiver: Digest, value: Field) {
     reveal Transfer {
         from: sender,
@@ -672,7 +672,7 @@ fn pay(sender: Digest, receiver: Digest, value: Field) {
 
 Fields are hashed; only the digest is visible to the verifier:
 
-```
+```trident
 fn pay_private(sender: Digest, receiver: Digest, value: Field) {
     seal Transfer {
         from: sender,
@@ -690,7 +690,7 @@ Use `reveal` for public audit trails. Use `seal` when field values must remain p
 
 Add `#[test]` attributes to test functions:
 
-```
+```trident
 fn add(a: Field, b: Field) -> Field {
     a + b
 }
@@ -748,7 +748,7 @@ See the [Optimization Guide](../guides/optimization.md) for strategies to reduce
 
 Use `#[cfg(...)]` to include items only for specific targets:
 
-```
+```trident
 #[cfg(debug)]
 fn debug_log(x: Field) {
     pub_write(x)
@@ -788,7 +788,7 @@ For operations not covered by the language, embed raw [TASM](https://triton-vm.o
 
 The effect annotation (`+N` or `-N`) declares the net stack depth change. The compiler trusts it to track stack layout:
 
-```
+```trident
 fn custom_op(a: Field, b: Field) -> Field {
     asm(-1) {
         add
@@ -802,7 +802,7 @@ fn custom_op(a: Field, b: Field) -> Field {
 
 For multi-target projects, tag the block with a backend name. Blocks for non-active targets are silently skipped:
 
-```
+```trident
 fn target_specific(a: Field, b: Field) -> Field {
     asm(triton, -1) {
         add
@@ -814,7 +814,7 @@ A bare `asm { ... }` (no target tag) is treated as `asm(triton) { ... }` for bac
 
 ### Combining with Stack Effects
 
-```
+```trident
 asm(triton, +1) { push 42 }         // pushes one element
 asm(-2) { pop 1 pop 1 }             // pops two elements
 asm { dup 0 add }                    // zero net effect (default)

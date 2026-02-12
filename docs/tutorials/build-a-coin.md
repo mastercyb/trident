@@ -22,7 +22,7 @@ implementation.
 A coin needs accounts. Each account is a leaf in a Merkle tree, represented as
 a hash of five fields:
 
-```
+```trident
 leaf = hash(id, balance, nonce, auth_hash, lock_until, 0, 0, 0, 0, 0)
 ```
 
@@ -44,7 +44,7 @@ is valid.
 
 Let us write the leaf hash function:
 
-```
+```trident
 fn hash_leaf(
     id: Field,
     bal: Field,
@@ -65,7 +65,7 @@ reconstruct and verify account leaves.
 
 Here is the authorization function:
 
-```
+```trident
 fn verify_auth(auth_hash: Field) {
     let secret: Field = divine()
     let computed: Digest = hash(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -93,7 +93,7 @@ Before we write operations, we need two event types. Events record structured
 data in the proof trace. The verifier can check that events were emitted
 without re-running the program.
 
-```
+```trident
 event Nullifier {
     account_id: Field,
     nonce: Field,
@@ -123,7 +123,7 @@ we need to ensure the result is non-negative. In a prime field, `sub(5, 10)`
 does not give `-5` -- it gives a huge number near `p`. We catch this with a
 range check:
 
-```
+```trident
 fn assert_non_negative(val: Field) {
     let checked: U32 = as_u32(val)
 }
@@ -151,7 +151,7 @@ The structure follows a pattern that every operation will share:
 6. Compute new leaves
 7. Emit events
 
-```
+```text
 fn pay() {
     // --- Public inputs (verifier sees these) ---
     let old_root: Digest = pub_read5()
@@ -258,7 +258,7 @@ Mint creates new tokens. It is simpler than pay -- there is no sender to
 debit, only a recipient to credit. But it requires a different kind of
 authorization: a mint authority.
 
-```
+```trident
 fn mint() {
     // --- Public inputs ---
     let old_root: Digest = pub_read5()
@@ -318,7 +318,7 @@ hold, no proof.
 Burn destroys tokens. It is the mirror of pay, but instead of crediting a
 receiver, the tokens vanish and the supply decreases.
 
-```
+```trident
 fn burn() {
     // --- Public inputs ---
     let old_root: Digest = pub_read5()
@@ -387,7 +387,7 @@ Here is the complete coin. Three operations dispatched by an opcode, with two
 more (lock and update) described by name but left for you to read in the
 production version.
 
-```
+```trident
 program coin
 
 // --- Leaf hashing ---

@@ -39,7 +39,7 @@ Declares a precondition on function inputs. The function is only obligated to
 behave correctly for inputs satisfying the predicate. Multiple `#[requires]`
 annotations are conjunctive (all must hold).
 
-```
+```trident
 #[requires(amount > 0)]
 #[requires(sender_balance > amount)]
 fn transfer(sender_balance: Field, amount: Field) -> Field {
@@ -53,7 +53,7 @@ Declares a postcondition on function outputs. The compiler verifies that the
 postcondition holds for all inputs satisfying the preconditions. Use `result`
 to refer to the return value.
 
-```
+```trident
 #[requires(amount > 0)]
 #[ensures(result == sub(balance, amount))]
 fn withdraw(balance: Field, amount: Field) -> Field {
@@ -64,7 +64,7 @@ fn withdraw(balance: Field, amount: Field) -> Field {
 For functions returning tuples, named bindings in the ensures clause refer to
 the destructured output variables:
 
-```
+```trident
 #[requires(amount > 0)]
 #[ensures(new_sender == sub(sender_balance, amount))]
 #[ensures(new_receiver == receiver_balance + amount)]
@@ -83,7 +83,7 @@ Declares a loop invariant. The compiler verifies:
 2. If the invariant holds at iteration `i`, it holds at iteration `i + 1`.
 3. The invariant at loop exit implies any enclosing postcondition.
 
-```
+```trident
 #[ensures(result == n * (n - 1) / 2)]
 fn sum_to(n: U32) -> Field {
     let mut total: Field = 0
@@ -106,7 +106,7 @@ Marks a function as having no I/O side effects (no `pub_read`, `pub_write`,
 or `divine` calls). Pure functions enable more aggressive symbolic reasoning
 because the verifier can safely inline and rewrite them.
 
-```
+```trident
 #[pure]
 fn square(x: Field) -> Field {
     x * x
@@ -119,7 +119,7 @@ Every `assert()` and `assert_eq()` in Trident source is also a specification.
 The verifier attempts to prove each assertion holds for all executions that
 reach it. No annotation is needed -- assertions are verified automatically.
 
-```
+```trident
 fn safe_transfer(sender_balance: Field, amount: Field, receiver_balance: Field) {
     assert(amount != 0)
 
@@ -227,7 +227,7 @@ trident verify main.tri --synthesize
 
 A typical verification report looks like:
 
-```
+```text
 Verifying main.tri...
 
 Static analysis: PASS (no trivially violated assertions)
@@ -249,7 +249,7 @@ Verdict: SAFE -- no violations found
 
 When a violation is found:
 
-```
+```trident
 Verdict: UNSAFE -- random testing found violations (high confidence)
   Constraint #2: assert((pub_in_0 == 0))
   Counterexample:
@@ -313,7 +313,7 @@ by weakening candidates (e.g., widening `<= K` to `<= K+1` or lowering
 
 ### Synthesis Output
 
-```
+```text
 Synthesized 4 specification(s):
 
   [medium] sum_loop loop invariant (over i): acc >= 0
@@ -394,7 +394,7 @@ implementation scaffolds.
 A spec file is a valid Trident source file where functions have annotations
 but no implementation:
 
-```
+```trident
 program transfer_spec
 
 #[requires(amount > 0)]

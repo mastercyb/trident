@@ -6,7 +6,7 @@
 
 ### Cannot find module
 
-```
+```text
 error: cannot find module 'helpers' (looked at 'path/to/helpers.tri'): No such file
   help: create the file 'path/to/helpers.tri' or check the module name in the `use` statement
 ```
@@ -15,7 +15,7 @@ error: cannot find module 'helpers' (looked at 'path/to/helpers.tri'): No such f
 
 ### Circular dependency
 
-```
+```text
 error: circular dependency detected involving module 'a'
   help: break the cycle by extracting shared definitions into a separate module
 ```
@@ -24,7 +24,7 @@ error: circular dependency detected involving module 'a'
 
 ### Duplicate function
 
-```
+```text
 error: duplicate function 'main'
 ```
 
@@ -32,7 +32,7 @@ error: duplicate function 'main'
 
 ### Cannot read entry file
 
-```
+```text
 error: cannot read 'main.tri': No such file or directory
   help: check that the file exists and is readable
 ```
@@ -41,7 +41,7 @@ error: cannot read 'main.tri': No such file or directory
 
 ### Program without main **(planned)**
 
-```
+```text
 error: program 'my_program' must have a `fn main()` entry point
   help: add `fn main() { ... }` or change to `module` if this is a library
 ```
@@ -52,7 +52,7 @@ error: program 'my_program' must have a `fn main()` entry point
 
 ### Module with main **(planned)**
 
-```
+```text
 error: module 'my_module' must not define `fn main()`
   help: modules are libraries; change to `program` if this is an entry point
 ```
@@ -63,7 +63,7 @@ error: module 'my_module' must not define `fn main()`
 
 ### Duplicate struct **(planned)**
 
-```
+```text
 error: duplicate struct definition 'Point'
 ```
 
@@ -73,7 +73,7 @@ error: duplicate struct definition 'Point'
 
 ### Duplicate constant **(planned)**
 
-```
+```text
 error: duplicate constant definition 'MAX'
 ```
 
@@ -83,7 +83,7 @@ error: duplicate constant definition 'MAX'
 
 ### Duplicate import **(planned)**
 
-```
+```text
 error: duplicate import 'use merkle'
 ```
 
@@ -93,7 +93,7 @@ error: duplicate import 'use merkle'
 
 ### Self import **(planned)**
 
-```
+```text
 error: module cannot import itself
 ```
 

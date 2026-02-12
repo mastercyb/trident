@@ -66,7 +66,7 @@ Each bidder commits to their bid by publishing a hash. The bid amount
 and salt are secret. Nobody -- not even the auctioneer -- knows what
 anyone bid.
 
-```
+```trident
 program auction_commit
 
 fn main() {
@@ -120,7 +120,7 @@ amount. They prove three things:
 
 The losing bidders do nothing. Their bids remain secret forever.
 
-```
+```trident
 program auction_reveal
 
 fn main() {
@@ -213,7 +213,7 @@ Settlement composes three proofs, each from a previous chapter:
 3. **Name transfer proof** (Chapter 3) -- The seller transfers the name
    to the winner.
 
-```
+```text
 program auction_settle
 
 fn main() {

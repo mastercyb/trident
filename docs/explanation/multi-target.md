@@ -32,7 +32,7 @@ These properties emerged from ZK requirements. The discovery is that they define
 
 ## Architecture: Three Levels
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │               Level 1: Execute Anywhere                  │
 │  Field, U32, Bool, Digest, structs, bounded loops,      │
@@ -86,7 +86,7 @@ to audit, and expensive to get wrong — lives entirely in Level 1.
 
 Trident does not generate Solidity, Vyper, Rust, or any intermediate source language. It generates **target bytecode directly** from its own TIR:
 
-```
+```text
 Source (.tri)
     │
     ├── Lexer → Parser → AST
@@ -107,7 +107,7 @@ The TIR (Trident Intermediate Representation) is already implemented. It's a lis
 
 ### What a Level 1 program looks like
 
-```
+```trident
 program token_vault
 
 use os.state
@@ -206,7 +206,7 @@ The developer writes `hash(data)`. The compiler is designed to emit `KECCAK256` 
 
 All Level 1 control flow is designed to compile to every target:
 
-```
+```trident
 if condition { ... } else { ... }     // Structural: if.true/else/end on Miden,
                                       // JUMPI on EVM, skiz+call on Triton
 
@@ -243,7 +243,7 @@ Level 2 adds zero-knowledge capabilities. Programs compile only to ZK virtual ma
 
 A Level 2 program is a Level 1 program with these additions. The business logic is identical — only the I/O and witness handling differ:
 
-```
+```trident
 program private_transfer
 
 use std.crypto.merkle
@@ -460,7 +460,7 @@ across targets.
 
 Pure Trident code with no VM dependencies. Compiles identically on every target.
 
-```
+```trident
 std/core/
   field.tri       Field arithmetic helpers
   convert.tri     as_u32, as_field (with range checks)
@@ -473,7 +473,7 @@ std/core/
 Same user-facing API on every target. The compiler dispatches to the appropriate
 backend instructions via intrinsic annotations.
 
-```
+```trident
 std/io/
   io.tri          pub_read, pub_write, divine
   mem.tri         ram_read, ram_write, ram_read_block, ram_write_block
@@ -498,7 +498,7 @@ std/crypto/
 Backend extensions that expose target-unique capabilities. Programs that import
 from `os.<target>.*` are explicitly bound to that target.
 
-```
+```text
 os/neptune/
   xfield.tri      XField type (cubic extension), xx_add, xx_mul, x_invert
   kernel.tri      Neptune kernel interface (authenticate_field, tree_height)
@@ -513,7 +513,7 @@ os/neptune/
 `std/target.tri` exposes compile-time constants derived from the active
 `TargetConfig`:
 
-```
+```trident
 pub const DIGEST_WIDTH    // 5 for Triton (Tip5), 4 for Miden (RPO), etc.
 pub const FIELD_LIMBS     // 2 for Goldilocks, 4 for Stark-252, etc.
 pub const HASH_RATE       // 10 for Tip5, 8 for RPO, etc.
@@ -529,7 +529,7 @@ width adjusts automatically per target.
 
 Inline assembly blocks are tagged with the target they belong to:
 
-```
+```trident
 asm(triton) {
     dup 0
     add
@@ -550,7 +550,7 @@ the body through as raw instructions.
 A single source file can contain assembly blocks for multiple targets. Only the
 blocks matching the active `--target` are emitted:
 
-```
+```trident
 fn fast_double(a: Field) -> Field {
     asm(triton) { dup 0 add }         // Emitted when --target triton
     asm(miden)  { dup.0 add }         // Emitted when --target miden
@@ -559,7 +559,7 @@ fn fast_double(a: Field) -> Field {
 
 The `#[cfg(target)]` conditional compilation attribute works for larger blocks:
 
-```
+```trident
 #[cfg(triton)]
 use os.neptune.xfield
 
@@ -669,7 +669,7 @@ Now Chain A can trust off-chain computation without re-executing it. The verifie
 
 Because Level 1 already requires Goldilocks support on every target, the infrastructure for proof verification is partially deployed by default. The field arithmetic library that makes `Field` work on EVM is the same library the FRI verifier uses.
 
-```
+```text
 ┌──────────────────┐    STARK proof    ┌──────────────────┐
 │ Triton VM        │ ────────────────→ │ EVM              │
 │ Level 1+2        │                   │ Verifier contract│

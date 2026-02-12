@@ -34,7 +34,7 @@ compiler's job is to map neuron/signal operations down to those internals.
 
 ## The Three-Tier Namespace
 
-```
+```trident
 std.*          Standard library      Pure computation (all 20 VMs, all 25 OSes)
 os.*           OS standard           Universal runtime contract (all OSes)
 os.<os>.*      OS extensions         OS-native API (one specific OS)

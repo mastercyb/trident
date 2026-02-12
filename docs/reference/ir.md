@@ -4,7 +4,7 @@
 
 54 operations. 4 tiers. One source language compiles everywhere.
 
-```
+```text
 Source (.tri)
   │
   ▼
@@ -304,7 +304,7 @@ Type parameters substitute into width calculations.
 
 ## Part V: File Layout
 
-```
+```trident
 src/tir/                           ← stack-based IR (canonical)
 ├── mod.rs                         ← TIROp enum (54 variants) + Display
 ├── builder/                       ← AST → Vec<TIROp>

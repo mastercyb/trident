@@ -54,7 +54,7 @@ If you hold PLUMB coins, you can vote. Your weight equals your balance.
 
 Create a file called `vote.tri`:
 
-```
+```trident
 program vote
 
 fn main() {
@@ -203,7 +203,7 @@ These are the only things that cross the wire.
 
 After all votes are submitted, the tallier sums the results:
 
-```
+```trident
 program tally
 
 fn main() {
@@ -259,7 +259,7 @@ authority to the DAO -- then only a passing vote can trigger the change.
 
 The composition is:
 
-```
+```text
 DAO_vote_tally  compose  Name_update
 ```
 
@@ -273,7 +273,7 @@ update.
 
 You started Chapter 1 with four lines:
 
-```
+```trident
 let lock_hash: Digest = pub_read5()
 let secret: Field = divine()
 let computed: Digest = hash(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)

@@ -8,7 +8,7 @@ Machine-optimized compact format for AI code generation.
 
 ### Language Identity
 
-```
+```trident
 Name:      Trident
 Extension: .tri
 Paradigm:  Imperative, bounded, first-order, no heap, no recursion
@@ -21,14 +21,14 @@ There is no subtraction operator — use sub(a, b).
 
 ### File Structure
 
-```
+```trident
 program <name>      // Executable (has fn main)
 module <name>       // Library (no fn main)
 ```
 
 Then imports, then items (constants, structs, events, functions).
 
-```
+```trident
 program my_program
 
 use vm.crypto.hash
@@ -50,7 +50,7 @@ fn main() {
 
 ### Types (complete)
 
-```
+```trident
                         Universal — all targets
 Field       1 elem      Field element (target-dependent modulus)
 Bool        1 elem      Constrained to {0, 1}
@@ -73,7 +73,7 @@ NO: implicit conversions between types.
 
 ### Operators (complete)
 
-```
+```text
                                                  Tier 1 — all targets
 a + b       Field,Field -> Field     Addition mod p
 a * b       Field,Field -> Field     Multiplication mod p
@@ -92,7 +92,7 @@ Use `sub(a, b)` for subtraction. `neg(a)` for negation. `inv(a)` for inverse.
 
 ### Declarations
 
-```
+```trident
 let x: Field = 42                              // Immutable
 let mut counter: U32 = 0                       // Mutable
 let (hi, lo): (U32, U32) = split(x)           // Tuple destructuring
@@ -100,7 +100,7 @@ let (hi, lo): (U32, U32) = split(x)           // Tuple destructuring
 
 ### Control Flow
 
-```
+```trident
 if condition { body } else { body }            // No else-if; nest instead
 for i in 0..32 { body }                        // Constant bound
 for i in 0..n bounded 64 { body }             // Runtime bound, declared max
@@ -112,7 +112,7 @@ NO: `while`, `loop`, `break`, `continue`, `else if`, recursion.
 
 ### Functions
 
-```
+```trident
 fn add(a: Field, b: Field) -> Field { a + b }            // Private
 pub fn add(a: Field, b: Field) -> Field { a + b }        // Public
 fn sum<N>(arr: [Field; N]) -> Field { ... }               // Size-generic
@@ -127,7 +127,7 @@ default parameters, variadic arguments, method syntax.
 
 ### Builtins (complete)
 
-```
+```text
 // Tier 1 — all targets
 // I/O
 pub_read() -> Field                    pub_write(v: Field)
@@ -164,7 +164,7 @@ xb_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)
 
 ### Common Errors to Avoid
 
-```
+```trident
 WRONG: a - b           ->  sub(a, b)
 WRONG: a / b           ->  a * inv(b)
 WRONG: a != b          ->  (a == b) == false

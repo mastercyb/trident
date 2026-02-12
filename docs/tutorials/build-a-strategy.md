@@ -41,7 +41,7 @@ who has registered a constant-product strategy.
 
 Two `pay` operations:
 
-```
+```text
 TOKEN_A pay: Alice -> Bob, amount = 100
 TOKEN_B pay: Bob -> Alice, amount = f(100)
 ```
@@ -63,7 +63,7 @@ they all require proofs.
 
 The simplest AMM curve. Two reserves, one invariant:
 
-```
+```text
 reserve_a * reserve_b = k
 ```
 
@@ -71,14 +71,14 @@ Before a swap, the reserves satisfy this equation. After the swap, they must
 still satisfy it. If Alice sends `amount_in` of TOKEN_A and receives
 `amount_out` of TOKEN_B:
 
-```
+```text
 Before:  reserve_a * reserve_b = k
 After:   (reserve_a + amount_in) * (reserve_b - amount_out) = k
 ```
 
 Solve for `amount_out`:
 
-```
+```text
 amount_out = reserve_b - k / (reserve_a + amount_in)
 ```
 
@@ -96,7 +96,7 @@ invariant. The verifier checks the proof. Nobody sees `reserve_a` or
 
 Create a file called `strategy.tri`:
 
-```
+```trident
 program strategy
 
 fn main() {
@@ -136,7 +136,7 @@ Walk through each section.
 
 #### Public inputs: what the verifier sees
 
-```
+```trident
 let amount_in: Field = pub_read()
 let amount_out: Field = pub_read()
 let k_commitment: Digest = pub_read5()
@@ -149,7 +149,7 @@ across swaps, but it reveals nothing about the reserves themselves.
 
 #### Secret inputs: what only the maker knows
 
-```
+```trident
 let reserve_a: Field = divine()
 let reserve_b: Field = divine()
 ```
@@ -160,7 +160,7 @@ password then. Now the secret is a liquidity position.
 
 #### Commitment verification: binding the invariant
 
-```
+```trident
 let computed_k: Field = reserve_a * reserve_b
 let k_digest: Digest = hash(computed_k, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 assert_digest(k_digest, k_commitment)
@@ -177,7 +177,7 @@ they match.
 
 #### Invariant enforcement: the AMM logic
 
-```
+```trident
 let new_reserve_a: Field = reserve_a + amount_in
 let new_reserve_b: Field = sub(reserve_b, amount_out)
 let new_k: Field = new_reserve_a * new_reserve_b
@@ -194,7 +194,7 @@ The assertion fails. No proof. No swap.
 
 #### State transition: preparing for the next swap
 
-```
+```trident
 let new_k_digest: Digest = hash(new_k, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 pub_write5(new_k_digest)
 ```
@@ -214,7 +214,7 @@ movement happens through `pay` -- the same operation from Chapter 2.
 
 A complete swap is three composed proofs:
 
-```
+```text
 Strategy proof:   amount_out = f(amount_in) given reserves
 TOKEN_A pay proof: Alice -> Bob, amount = amount_in
 TOKEN_B pay proof: Bob -> Alice, amount = amount_out
@@ -222,7 +222,7 @@ TOKEN_B pay proof: Bob -> Alice, amount = amount_out
 
 Composed:
 
-```
+```text
 Strategy ⊗ Pay_A ⊗ Pay_B -> single verification
 ```
 
@@ -240,7 +240,7 @@ composition. The primitive does not change.
 
 A strategy is identified by its commitment:
 
-```
+```trident
 strategy = hash(maker, token_a, token_b, program, parameters)
 ```
 

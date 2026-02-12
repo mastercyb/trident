@@ -6,7 +6,7 @@ This guide covers everything about the Trident compilation process: how source c
 
 Trident compiles `.tri` source files directly to [TASM](https://triton-vm.org/spec/) (Triton Assembly) with no intermediate representation. The pipeline has six stages:
 
-```
+```trident
 source (.tri)
   |
   v
@@ -44,7 +44,7 @@ trident build main.tri
 
 Output:
 
-```
+```text
 Compiled -> main.tasm
 ```
 
@@ -64,7 +64,7 @@ trident build .
 
 The compiler reads `trident.toml`, finds the entry point, resolves all module dependencies, and produces a single linked `.tasm` file named after the project:
 
-```
+```text
 Compiled -> my_project.tasm
 ```
 
@@ -110,7 +110,7 @@ trident check main.tri
 
 Output on success:
 
-```
+```text
 OK: main.tri
 ```
 
@@ -131,7 +131,7 @@ trident check main.tri --costs
 
 Trident uses [ariadne](https://crates.io/crates/ariadne) to render diagnostics with source spans, color-coded severity, and contextual help. A typical error looks like:
 
-```
+```text
 error: binary operator '+' requires matching types, got Field and Bool
   --> main.tri:5:21
    |
@@ -145,7 +145,7 @@ error: binary operator '+' requires matching types, got Field and Bool
 
 **Lexer errors** catch invalid characters and missing syntax before parsing begins. For example, using `-` instead of `sub(a, b)` or `/` instead of `/%`:
 
-```
+```text
 error: unexpected '-'; Trident has no subtraction operator
   help: use the `sub(a, b)` function instead of `a - b`
 ```
@@ -160,7 +160,7 @@ error: unexpected '-'; Trident has no subtraction operator
 
 **Recursion detection** is a dedicated pass. Trident prohibits all recursion (direct and indirect) because Triton VM requires deterministic trace lengths:
 
-```
+```text
 error: recursive function call detected: main -> foo -> main
   help: Trident does not allow recursion; use `for` loops instead
 ```
@@ -206,7 +206,7 @@ trident build main.tri --hotspots
 trident build main.tri --hints
 ```
 
-```
+```text
 Optimization hints:
   H0001: function 'process' has 3 separate tip5 calls that could be batched
     note: each tip5 call adds 6 Hash Table rows regardless of input count
@@ -219,7 +219,7 @@ Optimization hints:
 trident build main.tri --annotate
 ```
 
-```
+```trident
  1 | program test
  2 |
  3 | fn main() {
@@ -269,7 +269,7 @@ The extension directory follows the same pattern using `TRIDENT_OSLIB` and `os/`
 
 The compiler discovers all reachable modules by scanning `use` statements, then type-checks them in topological order (dependencies before dependents). If a circular dependency is detected, compilation fails:
 
-```
+```trident
 error: circular dependency detected involving module 'a'
   help: break the cycle by extracting shared definitions into a separate module
 ```
@@ -370,7 +370,7 @@ trident fmt src/              # format all .tri files recursively
 
 Output:
 
-```
+```text
 Formatted: main.tri
 Already formatted: helpers.tri
 ```
@@ -381,7 +381,7 @@ Use `--check` mode in CI to verify formatting without modifying files. It exits 
 trident fmt --check .
 ```
 
-```
+```text
 OK: main.tri
 would reformat: helpers.tri
 ```
@@ -392,7 +392,7 @@ Hidden directories and `target/` are automatically skipped during recursive form
 
 Annotate test functions with `#[test]`. Test functions take no arguments and return no value:
 
-```
+```trident
 program my_app
 
 fn add(a: Field, b: Field) -> Field {
@@ -413,7 +413,7 @@ trident test main.tri
 
 Output:
 
-```
+```text
 running 1 test
   test test_add ... ok (cc=8, hash=0, u32=0)
 

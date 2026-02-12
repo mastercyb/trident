@@ -53,7 +53,7 @@ Programs that use only `std.*` modules are **fully portable** -- they compile
 and generate valid proofs on any supported backend. Programs that import
 `os.<os>.*` modules are backend-specific and will only compile for that target.
 
-```
+```trident
 // Portable program -- designed to compile to any backend
 use std.crypto.merkle
 use vm.io.io
@@ -63,7 +63,7 @@ fn verify_membership(root: Digest, leaf: Digest, index: U32, depth: U32) {
 }
 ```
 
-```
+```trident
 // Triton-specific program -- uses extension field arithmetic
 use std.crypto.merkle
 use os.neptune.xfield           // binds to Triton VM backend
@@ -129,7 +129,7 @@ To read state, the prover **divines** (secretly inputs) the leaf data and then
 **authenticates** it against the root using a Merkle proof. This is the
 divine-and-authenticate pattern (see [Programming Model](../explanation/programming-model.md) for the full treatment):
 
-```
+```trident
 // Trident — read an account from the state tree
 use vm.io.io
 use vm.crypto.hash
@@ -165,7 +165,7 @@ function balanceOf(address who) view returns (uint256) {
 }
 ```
 
-```
+```trident
 // Trident
 use vm.io.io
 use vm.crypto.hash
@@ -215,7 +215,7 @@ There is no `msg.sender`. There is no implicit identity. Authorization is
 explicit: the prover **divines** a secret and proves knowledge of it by hashing
 it and asserting the hash matches an expected value.
 
-```
+```trident
 // Trident — authorization via hash preimage
 use vm.io.io
 use vm.crypto.hash
@@ -258,7 +258,7 @@ function setConfig(uint256 val) external onlyOwner {
 }
 ```
 
-```
+```trident
 // Trident — admin auth pattern
 use vm.io.io
 
@@ -381,7 +381,7 @@ Return `Err(ContractError::...)`. Atomic rollback.
 
 ### Trident
 
-```
+```trident
 assert(balance >= amount)
 ```
 
@@ -394,7 +394,7 @@ holds, or nothing happens. There is no try/catch because there is nothing to
 catch -- a failed assertion means the computation is invalid and no proof
 exists.
 
-```
+```trident
 // Trident — range check pattern (balance >= amount)
 use vm.core.convert
 use vm.core.field
@@ -435,7 +435,7 @@ Two kinds of events:
 
 **`reveal` -- open events** (like Solidity events). All fields visible to the verifier:
 
-```
+```trident
 event Transfer {
     from: Digest,
     to: Digest,
@@ -452,7 +452,7 @@ fn pay() {
 digest is visible to the verifier. The verifier knows *an event happened* but
 cannot read its contents:
 
-```
+```trident
 event Nullifier {
     account_id: Field,
     nonce: Field,
@@ -485,7 +485,7 @@ function transfer(address to, uint256 amount) external returns (bool) {
 }
 ```
 
-```
+```trident
 // Trident (simplified from coin/coin.tri)
 use vm.io.io
 use vm.core.field
@@ -523,7 +523,7 @@ modifier onlyOwner() {
 }
 ```
 
-```
+```trident
 // Trident
 use vm.io.io
 use vm.crypto.hash
@@ -545,7 +545,7 @@ fn verify_auth(auth_hash: Field) {
 require(block.timestamp >= unlockTime, "locked");
 ```
 
-```
+```trident
 // Trident
 use vm.io.io
 use vm.core.field
@@ -564,7 +564,7 @@ balances[user] = 100;
 uint256 bal = balances[user];
 ```
 
-```
+```trident
 // Trident — state is a Merkle tree, each "mapping entry" is a leaf
 use vm.crypto.hash
 
@@ -583,7 +583,7 @@ constructor(string memory name_, uint256 supply_) {
 }
 ```
 
-```
+```trident
 // Trident — config is a hash commitment, provided as public input
 use vm.io.io
 
@@ -603,7 +603,7 @@ function balanceOf(address who) view returns (uint256) {
 }
 ```
 
-```
+```trident
 // Trident — prove a value and output it publicly
 use vm.io.io
 
@@ -623,7 +623,7 @@ require(amount > 0, "zero amount");
 require(sender != receiver, "self-transfer");
 ```
 
-```
+```trident
 // Trident
 assert(amount > 0)
 // Note: no error messages. Either proof exists or it does not.
@@ -636,7 +636,7 @@ assert(amount > 0)
 uint256 ts = block.timestamp;     // injected by EVM
 ```
 
-```
+```trident
 // Trident
 use vm.io.io
 
@@ -655,7 +655,7 @@ function upgradeTo(address newImpl) external onlyOwner {
 }
 ```
 
-```
+```trident
 // Trident — config update operation (Op 2 in coin)
 use vm.io.io
 
@@ -685,7 +685,7 @@ function mint(address to, uint256 amount) external onlyMinter {
 }
 ```
 
-```
+```trident
 // Trident
 use vm.io.io
 use vm.core.assert
@@ -720,7 +720,7 @@ The prover can input arbitrary data that the verifier never sees. This is how
 you feed private data into a proof. The program must verify any divined value
 is legitimate (via hashing, Merkle proofs, or range checks).
 
-```
+```trident
 use vm.io.io
 
 let secret: Field = vm.io.io.divine()       // one field element, invisible to verifier
@@ -735,7 +735,7 @@ input data, and `pub_read` is the exception for data the verifier must see.
 Emit an event where the verifier can confirm it happened but cannot read its
 contents. Used for nullifiers, private audit trails, and compliance proofs.
 
-```
+```trident
 seal Nullifier { account_id: s_id, nonce: s_nonce }
 // Verifier sees: hash(account_id, nonce) -- not the actual values
 ```
@@ -747,7 +747,7 @@ All iteration in Trident must have a compile-time upper bound. There is no
 the execution trace has a known maximum size, which is what makes compile-time
 cost analysis possible.
 
-```
+```trident
 for i in 0..n bounded 100 {
     // Runs at most 100 iterations.
     // The compiler costs this as exactly 100 iterations,

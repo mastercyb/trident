@@ -95,7 +95,7 @@ through one of four backend paths. The default target is
 [Triton VM](https://triton-vm.org/) (`--target triton`), with the
 architecture ready for Miden, Cairo, RISC-V, EVM, Nock, and native backends.
 
-```
+```trident
 program hello
 
 fn main() {
@@ -142,7 +142,7 @@ a first-class operation.
 **Inline assembly with target tags.** Drop into target-specific assembly
 when you need the VM's raw power:
 
-```
+```trident
 fn custom_hash(a: Field, b: Field) -> Field {
     asm(triton) -1 {
         hash
@@ -220,7 +220,7 @@ paths. 26 standard library modules. 53 `.tri` files. 743 tests.
 
 Trident's compiler is built on a 3-layer universal design:
 
-```
+```text
 +-------------------------------------------+
 |         Trident Universal Core            |
 |   (types, control flow, modules, field    |
@@ -244,7 +244,7 @@ extensions** (~22%) expose target-specific capabilities through `os/<target>/`.
 
 ### Compilation Pipeline
 
-```
+```text
 Source (.tri)
   │
   ▼
@@ -292,7 +292,7 @@ See [IR Reference](../reference/ir.md) for the full 54-operation catalog.
 
 ### Standard Library: Layered for Portability
 
-```
+```trident
 vm/
 ├── core/               VM-native — zero target dependencies
 │   ├── field.tri         Goldilocks field arithmetic
@@ -401,7 +401,7 @@ full TSP-1 specification.
 
 The authorization check:
 
-```
+```trident
 fn verify_auth(auth_hash: Field) {
     let secret: Field = divine()
     let computed: Digest = hash(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -417,7 +417,7 @@ about the secret. The proof is unforgeable.
 
 The balance check:
 
-```
+```trident
 let new_s_bal: Field = sub(s_bal, amount)
 assert_non_negative(new_s_bal)
 ```
@@ -454,7 +454,7 @@ verifier running in production today.
 
 A structural sketch in Trident:
 
-```
+```trident
 pub fn verify(claim: Claim) {
     let commitment: Digest = divine5()
 
@@ -551,7 +551,7 @@ projects, teams, and time. See [Content-Addressed Code](content-addressing.md).
 
 Trident sits at a unique intersection:
 
-```
+```text
              Expressiveness
                   |
      Rust/C++  *  |

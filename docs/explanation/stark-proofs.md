@@ -73,7 +73,7 @@ memory access, every hash permutation. This complete record is the
 
 A small example. Consider a program that adds 3 and 7:
 
-```
+```text
 Cycle | Instruction | Stack[0] | Stack[1] | ...
 ------+-------------+----------+----------+----
   0   | push 3      |    3     |    0     |
@@ -106,7 +106,7 @@ explicitly outputs).
 The starting point for all of this is the **Claim**: a public statement of
 what was proved.
 
-```
+```text
 Claim {
     program_digest: Digest,   // Tip5 hash of the program
     input:  Vec<Field>,       // public inputs consumed by read_io
@@ -132,7 +132,7 @@ This is the central insight of STARKs. Everything that follows depends on it.
 Take a single column from the execution trace -- say, Stack[0]. It contains
 N values, one per cycle:
 
-```
+```text
 Cycle 0: 3
 Cycle 1: 7
 Cycle 2: 10
@@ -158,7 +158,7 @@ column polynomials. Consider the `add` instruction: "the value in Stack[0]
 at cycle i+1 must equal Stack[0] at cycle i plus Stack[1] at cycle i." In
 polynomial form:
 
-```
+```text
 S0(x_next) = S0(x) + S1(x)     (when the instruction at cycle x is `add`)
 ```
 
@@ -192,7 +192,7 @@ C(x) that should be zero at every point in the trace domain (every cycle).
 If the trace has N rows, C(x) should have N roots. You can factor out these
 roots:
 
-```
+```text
 C(x) = Q(x) * Z(x)
 ```
 
@@ -211,7 +211,7 @@ non-polynomial is negligible. One random check replaces checking every row.
 This is the core of the STARK: convert "check the entire trace" into "check
 at a few random points."
 
-```
+```trident
 Execution Trace  -->  Interpolate columns  -->  Polynomial constraints
     (table)             into polynomials          (AIR equations)
                                                        |
@@ -268,7 +268,7 @@ determined entirely by its tallest table.
 
 The `--costs` flag reveals the table profile:
 
-```
+```text
 $ trident build token.tri --costs
 
 Table heights:
@@ -403,7 +403,7 @@ The core idea of FRI is elegant. Given a polynomial f(x) of degree at most d:
 5. **Repeat.** Apply the same fold to f', halving the degree again. After
    log2(d) rounds, the polynomial is a constant.
 
-```
+```text
 Round 0: f(x)     degree <= d        committed via Merkle tree
             | fold with alpha_0
 Round 1: f1(x)    degree <= d/2      committed via Merkle tree
@@ -510,7 +510,7 @@ software emulations. This is explored further in Section 12.
 
 The full pipeline from source code to verified proof:
 
-```
+```trident
  Trident source (.tri)
         | compile
         v
@@ -696,7 +696,7 @@ the source code.
 
 From the compiler's cost model (`src/cost.rs`):
 
-```
+```text
 proving_time = padded_height * 300 * log2(padded_height) * 3ns
 ```
 
@@ -721,7 +721,7 @@ Where:
 Because padded height must be a power of 2, small changes in trace height
 can cause dramatic cost jumps:
 
-```
+```text
 Height: 1,024 rows  -->  Padded: 1,024  -->  Proving: ~0.03s
 Height: 1,025 rows  -->  Padded: 2,048  -->  Proving: ~0.07s  (doubled!)
 Height: 2,048 rows  -->  Padded: 2,048  -->  Proving: ~0.07s
@@ -734,7 +734,7 @@ the number-theoretic transform used for polynomial arithmetic.
 
 The compiler warns when a program is near a boundary:
 
-```
+```trident
 warning[W0017]: program is 3 rows below padded height boundary
   --> main.tri
    = note: padded_height = 1024 (max table height = 1021)
@@ -765,7 +765,7 @@ The program itself must be hashed for integrity -- the `program_digest` in
 the Claim is the Tip5 hash of the entire instruction sequence. This
 attestation costs additional Hash table rows:
 
-```
+```text
 attestation_hash_rows = ceil(instruction_count / 10) * 6
 ```
 
@@ -805,7 +805,7 @@ accumulating weighted sums of polynomial evaluations over the cubic extension
 of the Goldilocks field. Triton VM provides native instructions for exactly
 these operations:
 
-```
+```trident
 // Extension field dot product from RAM (1 clock cycle, 6 RAM rows)
 fn xx_dot_step(acc: XField, ptr_a: Field, ptr_b: Field)
     -> (XField, Field, Field)
@@ -829,7 +829,7 @@ inside Tip5-based proofs, with no field conversions).
 
 A structural sketch of the recursive verifier in Trident:
 
-```
+```trident
 pub fn verify(claim: Claim) {
     let commitment: Digest = divine5()
 

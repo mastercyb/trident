@@ -14,7 +14,7 @@ how a verifier can confirm you know a password -- without ever seeing it.
 
 Create a file called `secret.tri`:
 
-```
+```trident
 program secret
 
 fn main() {

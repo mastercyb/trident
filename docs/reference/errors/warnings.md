@@ -6,7 +6,7 @@
 
 ### Unused import
 
-```
+```text
 warning: unused import 'vm.crypto.hash'
 ```
 
@@ -16,7 +16,7 @@ warning: unused import 'vm.crypto.hash'
 
 ### Asm block target mismatch
 
-```
+```text
 warning: asm block tagged for 'risc_v' will be skipped (current target: 'triton')
 ```
 
@@ -27,7 +27,7 @@ informational when using multi-target `asm` blocks intentionally.
 
 ### Power-of-2 boundary proximity
 
-```
+```text
 warning: program is 3 rows below padded height boundary
   help: consider optimizing to stay well below 1024
 ```
@@ -39,7 +39,7 @@ change could double proving cost.
 
 ### Unused variable **(planned)**
 
-```
+```text
 warning: unused variable 'x'
   help: prefix with `_` to suppress: `let _x: Field = ...`
 ```
@@ -50,7 +50,7 @@ warning: unused variable 'x'
 
 ### Unused function **(planned)**
 
-```
+```text
 warning: unused function 'helper'
 ```
 
@@ -60,7 +60,7 @@ warning: unused function 'helper'
 
 ### Unused constant **(planned)**
 
-```
+```text
 warning: unused constant 'MAX'
 ```
 
@@ -70,7 +70,7 @@ warning: unused constant 'MAX'
 
 ### Shadowed variable **(planned)**
 
-```
+```text
 warning: variable 'x' shadows previous declaration
 ```
 

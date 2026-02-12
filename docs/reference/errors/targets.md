@@ -6,7 +6,7 @@
 
 ### Unknown target
 
-```
+```text
 error: unknown target 'wasm' (looked for 'vm/wasm/target.toml')
   help: available targets: triton, miden, openvm, sp1, cairo
 ```
@@ -15,7 +15,7 @@ error: unknown target 'wasm' (looked for 'vm/wasm/target.toml')
 
 ### Cannot read target config
 
-```
+```text
 error: cannot read target config 'vm/foo/target.toml': No such file
 ```
 
@@ -23,7 +23,7 @@ error: cannot read target config 'vm/foo/target.toml': No such file
 
 ### Invalid target name
 
-```
+```text
 error: invalid target name '../../../etc/passwd'
 ```
 
@@ -33,7 +33,7 @@ Target names cannot contain path traversal characters.
 
 ### Tier capability exceeded **(planned)**
 
-```
+```text
 error: program uses Tier 2 operations but target 'sp1' only supports up to Tier 1
   help: remove hash/sponge/merkle operations or choose a Tier 2 target (triton, miden, nock)
 ```
@@ -47,7 +47,7 @@ supported tier. See [targets.md](../targets.md) for tier compatibility.
 
 ### XField on unsupported target **(planned)**
 
-```
+```text
 error: type 'XField' is not available on target 'miden' (xfield_width = 0)
   help: XField requires a target with extension field support (currently: triton, nock)
 ```
@@ -59,7 +59,7 @@ targets only).
 
 ### Scalar multiply on unsupported target **(planned)**
 
-```
+```text
 error: operator '*.' (scalar multiply) is not available on target 'miden'
   help: '*.' requires XField support (currently: triton, nock)
 ```
@@ -70,7 +70,7 @@ error: operator '*.' (scalar multiply) is not available on target 'miden'
 
 ### Hash builtins on unsupported target **(planned)**
 
-```
+```text
 error: builtin 'hash' is not available on target 'sp1' (Tier 2 required)
   help: hash/sponge operations require a target with native hash coprocessor (triton, miden, nock)
 ```
@@ -81,7 +81,7 @@ error: builtin 'hash' is not available on target 'sp1' (Tier 2 required)
 
 ### Sponge builtins on unsupported target **(planned)**
 
-```
+```text
 error: builtin 'sponge_init' is not available on target 'sp1'
   help: sponge operations require a Tier 2 target (triton, miden, nock)
 ```
@@ -92,7 +92,7 @@ error: builtin 'sponge_init' is not available on target 'sp1'
 
 ### Seal on unsupported target **(planned)**
 
-```
+```text
 error: 'seal' requires sponge support (Tier 2)
   help: seal hashes fields via sponge; use 'reveal' for public output on Tier 1 targets
 ```
@@ -107,7 +107,7 @@ support cannot execute `seal`.
 
 ### Merkle builtins on unsupported target **(planned)**
 
-```
+```text
 error: builtin 'merkle_step' is not available on target 'sp1'
   help: Merkle operations require a Tier 2 target (triton, miden, nock)
 ```
@@ -118,7 +118,7 @@ error: builtin 'merkle_step' is not available on target 'sp1'
 
 ### XField builtins on unsupported target **(planned)**
 
-```
+```text
 error: builtin 'xfield' is not available on target 'miden'
   help: extension field builtins require XField support (currently: triton, nock)
 ```
@@ -129,7 +129,7 @@ error: builtin 'xfield' is not available on target 'miden'
 
 ### Cross-target import **(planned)**
 
-```
+```text
 error: cannot import 'os.neptune.xfield' when compiling for target 'miden'
   help: os.<os>.* modules bind to a specific OS
 ```
@@ -143,7 +143,7 @@ different target is a hard error.
 
 ### Tier 3 on non-Triton target **(planned)**
 
-```
+```text
 error: recursive proof verification (Tier 3) is only available on TRITON and NOCK
   help: ProofBlock, FriVerify, and extension field folding require TRITON or NOCK
 ```
@@ -154,7 +154,7 @@ error: recursive proof verification (Tier 3) is only available on TRITON and NOC
 
 ### Invalid proof_block program hash **(planned)**
 
-```
+```text
 error: proof_block() requires Digest argument, got Field
 ```
 
@@ -167,7 +167,7 @@ identify which program's proof is being verified recursively.
 
 ### Hash rate argument mismatch **(planned)**
 
-```
+```text
 error: hash() requires 10 field arguments on target 'triton', got 8
   help: hash rate R = 10 for TRITON; see targets.md for per-target rates
 ```
@@ -180,7 +180,7 @@ The number of arguments to `hash()` must match the target's hash rate R.
 
 ### Sponge absorb argument mismatch **(planned)**
 
-```
+```text
 error: sponge_absorb() requires 10 field arguments on target 'triton', got 5
   help: sponge rate R = 10 for TRITON; see targets.md for per-target rates
 ```

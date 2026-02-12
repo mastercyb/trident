@@ -9,7 +9,7 @@ These appear with `trident build --hints`.
 
 ### H0001: Hash table dominance
 
-```
+```text
 hint[H0001]: hash table is 3.2x taller than processor table
 ```
 
@@ -23,7 +23,7 @@ not reduce proving time.
 
 ### H0002: Power-of-2 headroom
 
-```
+```text
 hint[H0002]: padded height is 1024, but max table height is only 519
 ```
 
@@ -34,7 +34,7 @@ be more complex at zero additional proving cost.
 
 ### H0003: Redundant range check
 
-```
+```text
 hint[H0003]: as_u32(x) is redundant — value is already proven U32
 ```
 
@@ -46,7 +46,7 @@ A value that was already range-checked is being checked again.
 
 ### H0004: Loop bound waste
 
-```
+```text
 hint[H0004]: loop in 'process' bounded 128 but iterates only 10 times
 ```
 
@@ -59,7 +59,7 @@ count. This inflates worst-case cost analysis.
 
 ### H0005: Unnecessary spill **(planned)**
 
-```
+```text
 hint[H0005]: variable 'x' spilled to RAM but used immediately after
   help: reorder declarations to keep frequently-used variables in the top 16 stack positions
 ```

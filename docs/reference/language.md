@@ -22,14 +22,14 @@ future target.
 
 Every `.tri` file starts with exactly one of:
 
-```
+```trident
 program my_program      // Executable — must have fn main()
 module my_module        // Library — no fn main, provides reusable items
 ```
 
 ### Imports
 
-```
+```trident
 use merkle                      // import module
 use crypto.sponge               // nested module (directory-based)
 ```
@@ -49,7 +49,7 @@ Two levels only:
 
 No `pub(crate)`, no `friend`, no `internal`.
 
-```
+```trident
 module wallet
 
 pub struct Balance {
@@ -64,7 +64,7 @@ pub fn create(owner: Digest, amount: Field) -> Balance {
 
 ### Project Layout
 
-```
+```text
 my_project/
 ├── main.tri            // program entry point
 ├── merkle.tri          // module merkle
@@ -142,7 +142,7 @@ Widths marked with a variable are resolved from the target configuration.
 
 ### Functions
 
-```
+```trident
 fn private_fn(x: Field) -> Field { x + 1 }
 pub fn public_fn(x: Field) -> Field { x + 1 }
 ```
@@ -155,7 +155,7 @@ pub fn public_fn(x: Field) -> Field { x + 1 }
 
 ### Size-Generic Functions
 
-```
+```trident
 fn sum<N>(arr: [Field; N]) -> Field {
     let mut total: Field = 0
     for i in 0..N { total = total + arr[i] }
@@ -168,7 +168,7 @@ fn concat<M, N>(a: [Field; M], b: [Field; N]) -> [Field; M+N] { ... }
 Size parameters appear in angle brackets. Each unique combination of size arguments
 produces a monomorphized copy at compile time.
 
-```
+```trident
 let a: [Field; 3] = [1, 2, 3]
 let total: Field = sum(a)       // N=3 inferred from argument type
 let total: Field = sum<3>(a)    // N=3 explicit
@@ -178,7 +178,7 @@ Only integer size parameters — no type-level generics.
 
 ### Structs
 
-```
+```trident
 struct Point { x: Field, y: Field }
 pub struct PubPoint { pub x: Field, pub y: Field }
 
@@ -188,7 +188,7 @@ let x: Field = p.x
 
 ### Events
 
-```
+```trident
 event Transfer { from: Digest, to: Digest, amount: Field }
 ```
 
@@ -198,7 +198,7 @@ Maximum 9 fields. Events are emitted with `reveal` (public) or `seal`
 
 ### Constants
 
-```
+```trident
 const MAX_DEPTH: U32 = 32
 pub const ZERO: Field = 0
 ```
@@ -207,7 +207,7 @@ Inlined at compile time. No runtime cost.
 
 ### I/O Declarations (program modules only)
 
-```
+```trident
 pub input:  [Field; 3]      // public input (visible to verifier)
 pub output: Field            // public output
 sec input:  [Field; 5]      // secret input (prover only)
@@ -238,7 +238,7 @@ For extension field operators, see [Extension Field](#15-extension-field).
 
 ### Other Expressions
 
-```
+```trident
 p.x                             // field access
 arr[i]                          // array indexing
 Point { x: 1, y: 2 }           // struct initialization
@@ -253,7 +253,7 @@ Point { x: 1, y: 2 }           // struct initialization
 
 ### Let Bindings
 
-```
+```trident
 let x: Field = 42                          // immutable
 let mut counter: U32 = 0                   // mutable
 let (hi, lo): (U32, U32) = split(x)       // tuple destructuring
@@ -261,7 +261,7 @@ let (hi, lo): (U32, U32) = split(x)       // tuple destructuring
 
 ### Assignment
 
-```
+```trident
 counter = counter + 1
 p.x = 42
 arr[i] = value
@@ -270,7 +270,7 @@ arr[i] = value
 
 ### If / Else
 
-```
+```trident
 if condition {
     // body
 } else {
@@ -283,7 +283,7 @@ No `else if` — use nested `if/else`. Condition must be `Bool` or `Field`
 
 ### For Loops
 
-```
+```trident
 for i in 0..32 { body }               // constant bound — exactly 32 iterations
 for i in 0..n bounded 64 { body }     // runtime bound — at most 64 iterations
 ```
@@ -295,7 +295,7 @@ No `while`. No `loop`. No `break`. No `continue`.
 
 ### Match
 
-```
+```trident
 match value {
     0 => { handle_zero() }
     1 => { handle_one() }
@@ -306,7 +306,7 @@ match value {
 Patterns: integer literals, `true`, `false`, struct destructuring, `_` (wildcard).
 Exhaustiveness is enforced — wildcard `_` arm is required unless all values are covered.
 
-```
+```trident
 // Struct pattern matching
 match p {
     Point { x: 0, y } => { handle_origin_x(y) }
@@ -317,7 +317,7 @@ match p {
 
 ### Return
 
-```
+```trident
 fn foo(x: Field) -> Field {
     if x == 0 { return 1 }
     x + x                      // tail expression — implicit return
@@ -426,7 +426,7 @@ For full API specifications and per-OS lowering tables, see [os.md](os.md).
 | `#[requires(predicate)]` | Precondition — checked by `trident verify` |
 | `#[ensures(predicate)]` | Postcondition — `result` refers to return value |
 
-```
+```trident
 #[pure]
 fn compute(a: Field, b: Field) -> Field { a * b + a }
 
@@ -458,7 +458,7 @@ The developer does not manage the stack.
 
 Word-addressed memory. Each cell holds one Field element.
 
-```
+```trident
 ram_write(17, value)
 let v: Field = ram_read(17)
 ```
@@ -476,7 +476,7 @@ usage and predictable trace length.
 
 ## 9. Inline Assembly
 
-```
+```trident
 asm { dup 0 add }                   // zero net stack effect (default)
 asm(+1) { push 42 }                // pushes 1 element
 asm(-2) { pop 1 pop 1 }            // pops 2 elements
@@ -504,7 +504,7 @@ targets, they're structured logging (like `console.log`).
 
 Events are declared at module scope (see [Section 3](#3-declarations)):
 
-```
+```trident
 event Transfer { from: Digest, to: Digest, amount: Field }
 ```
 
@@ -512,7 +512,7 @@ Fields must be `Field`-width types. Maximum 9 fields.
 
 ### Reveal (Public Output)
 
-```
+```trident
 reveal Transfer { from: sender, to: receiver, amount: value }
 ```
 
@@ -521,7 +521,7 @@ Each field is written to public output. The verifier sees all data.
 
 ### Seal (Committed Secret)
 
-```
+```trident
 seal Transfer { from: sender, to: receiver, amount: value }
 ```
 
@@ -607,7 +607,7 @@ target-dependent: 10 on TRITON, 8 on MIDEN.
 `merkle_step` authenticates one level of a Merkle tree. Call it in a loop
 to verify a full Merkle path:
 
-```
+```trident
 pub fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
     let mut idx = index
     let mut current = leaf
@@ -661,7 +661,7 @@ Tier 3 enables a program to verify another program's proof inside its own
 execution. This is STARK-in-STARK recursion: the verifier circuit runs as
 part of the prover's trace.
 
-```
+```trident
 // Verify a proof of program_hash and use its public output
 proof_block(program_hash) {
     // verification circuit runs here

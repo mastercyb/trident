@@ -6,7 +6,7 @@
 
 ### Asm effect mismatch **(planned)**
 
-```
+```text
 error: asm block declared effect '+1' but actual stack effect differs
   help: the effect annotation is the contract between assembly and the compiler's stack model
 ```
@@ -20,7 +20,7 @@ surrounding code's stack doesn't balance.
 
 ### Asm in pure function **(planned)**
 
-```
+```text
 error: asm block not allowed in #[pure] function
   help: asm blocks may have unchecked I/O side effects
 ```

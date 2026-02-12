@@ -43,7 +43,7 @@ by checking OS configs first, then VM configs:
 2. Is `<name>` a VM? → load `vm/<name>.toml`, no OS (bare compilation)
 3. Neither → error: unknown target
 
-```
+```trident
 trident build --target neptune     # OS → derives vm="triton" → full compilation
 trident build --target ethereum    # OS → derives vm="evm" → EVM + Ethereum runtime
 trident build --target linux       # OS → derives vm="x86-64" → native + Linux runtime

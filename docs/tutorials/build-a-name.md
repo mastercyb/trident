@@ -46,7 +46,7 @@ ownership and swap in a new metadata hash.
 
 Every name is a leaf in a Merkle tree. The leaf is the hash of all 10 fields:
 
-```
+```trident
 fn hash_leaf(
     asset_id: Field,
     owner_id: Field,
@@ -98,7 +98,7 @@ immutable after mint.
 Before we build the operations, we need the auth pattern. This is Chapter 1
 in a function:
 
-```
+```trident
 fn verify_auth(auth_hash: Field) {
     let secret: Field = divine()
     let computed: Digest = hash(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -118,7 +118,7 @@ as Chapter 1.
 
 Registration is minting. You create a new unique asset in the tree.
 
-```
+```trident
 fn mint() {
     let old_root: Digest = pub_read5()
     let new_root: Digest = pub_read5()
@@ -211,7 +211,7 @@ section.
 The owner wants "cyber" to point to a new public key. This requires proving
 ownership -- then swapping the metadata hash.
 
-```
+```trident
 fn update() {
     let old_root: Digest = pub_read5()
     let new_root: Digest = pub_read5()
@@ -302,7 +302,7 @@ Transfer is Chapter 2's pay pattern applied to a unique asset. Instead of
 moving a balance from one account to another, you move ownership of a name
 from one key to another.
 
-```
+```trident
 fn pay() {
     let old_root: Digest = pub_read5()
     let new_root: Digest = pub_read5()
@@ -414,7 +414,7 @@ asset moves as one indivisible unit.
 Here is the complete name service. Three operations dispatched by opcode:
 pay (0), update (2), mint (3).
 
-```
+```trident
 program name
 
 // --- Leaf hashing (10 fields) ---

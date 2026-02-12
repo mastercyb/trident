@@ -6,7 +6,7 @@
 
 ### #[intrinsic] restriction
 
-```
+```text
 error: #[intrinsic] is only allowed in std.*/ext.* modules, not in 'my_module'
 ```
 
@@ -17,7 +17,7 @@ modules shipped with the compiler. User code cannot use it.
 
 ### #[test] validation
 
-```
+```text
 error: #[test] function 'test_add' must have no parameters
 error: #[test] function 'test_add' must not have a return type
 ```
@@ -28,7 +28,7 @@ Test functions take no arguments and return nothing.
 
 ### #[pure] I/O restriction
 
-```
+```text
 error: #[pure] function cannot call 'pub_read' (I/O side effect)
 error: #[pure] function cannot use 'reveal' (I/O side effect)
 error: #[pure] function cannot use 'seal' (I/O side effect)
@@ -40,7 +40,7 @@ Functions annotated `#[pure]` cannot perform any I/O operations.
 
 ### Unknown attribute **(planned)**
 
-```
+```text
 error: unknown attribute '#[foo]'
   help: valid attributes are: cfg, test, pure, intrinsic, requires, ensures
 ```
@@ -51,7 +51,7 @@ error: unknown attribute '#[foo]'
 
 ### Duplicate attribute **(planned)**
 
-```
+```text
 error: duplicate attribute '#[pure]' on function 'foo'
 ```
 
@@ -61,7 +61,7 @@ error: duplicate attribute '#[pure]' on function 'foo'
 
 ### Unknown cfg flag **(planned)**
 
-```
+```text
 error: unknown cfg flag 'unknown_flag'
   help: valid cfg flags are target-specific and project-defined
 ```
@@ -72,7 +72,7 @@ error: unknown cfg flag 'unknown_flag'
 
 ### Invalid requires/ensures predicate **(planned)**
 
-```
+```text
 error: invalid predicate in #[requires]: undefined variable 'x'
   help: predicates may only reference parameter names and constants
 ```
@@ -87,7 +87,7 @@ or parameters and `result` (for ensures).
 
 ### Result in requires predicate **(planned)**
 
-```
+```text
 error: 'result' is not available in #[requires] predicates
   help: 'result' refers to the return value and is only valid in #[ensures]
 ```

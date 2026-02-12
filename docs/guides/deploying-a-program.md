@@ -67,7 +67,7 @@ type scripts. Programs use the divine-and-authenticate pattern to access kernel
 fields: divine the value from secret input, then authenticate it against the
 MAST hash using Merkle proofs.
 
-```
+```trident
 program simple_lock
 
 use vm.io.io
@@ -135,7 +135,7 @@ that specific backend. They will only compile for the named target.
 The `asm` block syntax enables target-specific code paths within otherwise
 portable programs:
 
-```
+```trident
 fn efficient_hash(a: Field, b: Field) -> Field {
     asm(triton, -1) {
         // Triton VM-specific: uses native hash instruction
@@ -189,7 +189,7 @@ backend = "triton"
 
 A typical project ready for deployment:
 
-```
+```text
 my_project/
   trident.toml          # Project configuration
   main.tri              # Entry point (program declaration)

@@ -52,7 +52,7 @@ identical byte sequences. The normalization steps are:
 
 #### Step 1: Replace variable names with de Bruijn indices
 
-```
+```trident
 // Before normalization:
 fn transfer(sender_balance: Field, amount: Field) -> Field {
     let new_balance = sender_balance - amount
@@ -71,7 +71,7 @@ Variable names are metadata, not identity. The function `transfer(a, b)` and
 
 #### Step 2: Replace dependency references with their content hashes
 
-```
+```trident
 // Before:
 let d = hash(input)
 
@@ -84,7 +84,7 @@ and all callers get new hashes too. Propagation is automatic and exact.
 
 #### Step 3: Canonicalize struct field ordering
 
-```
+```trident
 // These produce the same hash:
 let p = Point { x: 1, y: 2 }
 let p = Point { y: 2, x: 1 }     // fields sorted alphabetically before hashing
@@ -172,7 +172,7 @@ with names as mutable pointers into the hash-keyed store.
 The codebase is stored at `~/.trident/codebase/` by default. Override with the
 `$TRIDENT_CODEBASE_DIR` environment variable.
 
-```
+```text
 ~/.trident/codebase/
   defs/
     <2-char-prefix>/
@@ -191,7 +191,7 @@ trident ucm add myfile.tri
 
 Output:
 
-```
+```text
 Added 3 new definitions, updated 1, unchanged 2
   #a7f3b2c1  verify_merkle      (new)
   #c4e9d1a8  transfer_token     (new)
@@ -210,7 +210,7 @@ trident ucm list
 
 Shows all named definitions, sorted alphabetically:
 
-```
+```text
   #b4c5d6e7  main
   #c4e9d1a8  transfer_token
   #a7f3b2c1  verify_merkle
@@ -227,7 +227,7 @@ trident ucm view #a7f3b2
 
 Output includes the function source, its hash, spec annotations, and dependency list:
 
-```
+```trident
 -- verify_merkle #a7f3b2c1
 pub fn verify_merkle(root: Digest, leaf: Digest, index: U32, depth: U32) {
     ...
@@ -257,7 +257,7 @@ trident ucm deps transfer_token
 
 Output:
 
-```
+```text
 Dependencies:
   #a7f3b2c1  verify_merkle
   #d4e5f6a7  check_balance
@@ -300,7 +300,7 @@ trident hash myfile.tri
 
 Output:
 
-```
+```text
 File: #e1d2c3b4 myfile.tri
   #a7f3b2c1 verify_merkle
   #c4e9d1a8 transfer_token
@@ -316,7 +316,7 @@ By default, hashes are shown in short (40-bit) form. Use `--full` for the comple
 trident hash myfile.tri --full
 ```
 
-```
+```text
 File: a7f3b2c1d4e5f6a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2 myfile.tri
   a7f3b2c1d4e5f6a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2 verify_merkle
   ...
@@ -371,7 +371,7 @@ valid for as long as the cache exists.
 
 ### 5.1 Cache Location
 
-```
+```trident
 ~/.trident/cache/
   compile/
     <source_hash_hex>.<target>.tasm     # compiled output
@@ -393,7 +393,7 @@ When `trident verify` runs on a file:
    random testing, bounded model checking).
 5. The result is stored in the cache, keyed by the content hash.
 
-```
+```text
 Verification Cache Entry:
   safe=true
   constraints=42
@@ -452,7 +452,7 @@ trident equiv myfile.tri double_a double_b
 
 Output for equivalent functions:
 
-```
+```text
 Equivalence check: double_a vs double_b
   Method: polynomial normalization
   Verdict: EQUIVALENT
@@ -460,7 +460,7 @@ Equivalence check: double_a vs double_b
 
 Output for non-equivalent functions:
 
-```
+```text
 Equivalence check: f vs g
   Method: differential testing (counterexample found)
   Verdict: NOT EQUIVALENT

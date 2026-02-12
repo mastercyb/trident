@@ -7,7 +7,7 @@ with `trident generate` or directly with AI assistants.
 
 ## Template 1: Contract from Description
 
-```
+```trident
 Write a Trident program that implements: {DESCRIPTION}
 
 Requirements:
@@ -24,7 +24,7 @@ Target: Triton VM (Goldilocks field, p = 2^64 - 2^32 + 1)
 
 ## Template 2: Spec-Driven Implementation
 
-```
+```trident
 Given this Trident specification:
 
 {SPEC_FILE_CONTENT}
@@ -42,7 +42,7 @@ Run `trident verify` to check correctness after implementation.
 
 ## Template 3: Optimize for Cost
 
-```
+```trident
 This Trident function has high proving cost. The dominant table is {TABLE_NAME}
 with height {HEIGHT}.
 
@@ -62,7 +62,7 @@ Optimize to reduce the dominant table height. Strategies:
 
 ## Template 4: Fix Verification Failure
 
-```
+```trident
 This Trident program failed verification:
 
 Source:
@@ -82,7 +82,7 @@ Fix the program so that:
 
 ## Template 5: Migrate from Solidity
 
-```
+```trident
 Convert this Solidity function to Trident:
 
 {SOLIDITY_CODE}
@@ -101,7 +101,7 @@ Key differences:
 
 ## Template 6: Write Test Functions
 
-```
+```trident
 Write #[test] functions for this Trident code:
 
 {CODE}
@@ -122,7 +122,7 @@ fn test_add_zero() {
 
 ## Template 7: Neptune Transaction Validation
 
-```
+```trident
 Write a Neptune-style UTXO validation program in Trident.
 
 The program validates a {TRANSACTION_TYPE} transaction where:

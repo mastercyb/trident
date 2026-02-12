@@ -2,7 +2,7 @@
 
 ## The License
 
-```
+```text
 Cyber License
 
 Don't trust. Don't fear. Don't beg.

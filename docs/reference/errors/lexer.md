@@ -6,7 +6,7 @@
 
 ### Unexpected character
 
-```
+```text
 error: unexpected character '@' (U+0040)
   help: this character is not recognized as part of Trident syntax
 ```
@@ -19,7 +19,7 @@ A character outside the Trident grammar was found. Source files must be ASCII.
 
 ### Non-ASCII source **(planned)**
 
-```
+```text
 error: non-ASCII byte 0xNN at position N
   help: source files must be ASCII
 ```
@@ -32,7 +32,7 @@ Trident source is ASCII-only. Unicode identifiers are not supported.
 
 ### No subtraction operator
 
-```
+```text
 error: unexpected '-'; Trident has no subtraction operator
   help: use the `sub(a, b)` function instead of `a - b`
 ```
@@ -47,7 +47,7 @@ explicit prevents the `(1 - 2) == p - 1` footgun.
 
 ### No division operator
 
-```
+```text
 error: unexpected '/'; Trident has no division operator
   help: use the `/% (divmod)` operator instead: `let (quot, rem) = a /% b`
 ```
@@ -61,7 +61,7 @@ makes the cost explicit.
 
 ### No inequality operator **(planned)**
 
-```
+```text
 error: unexpected '!='; Trident has no inequality operator
   help: use `(a == b) == false`
 ```
@@ -72,7 +72,7 @@ error: unexpected '!='; Trident has no inequality operator
 
 ### No greater-than operator **(planned)**
 
-```
+```text
 error: unexpected '>'; Trident has no '>' operator
   help: use `b < a` (U32 only)
 ```
@@ -83,7 +83,7 @@ error: unexpected '>'; Trident has no '>' operator
 
 ### No less-or-equal operator **(planned)**
 
-```
+```text
 error: unexpected '<='; Trident has no '<=' operator
   help: combine `<` and `==`
 ```
@@ -94,7 +94,7 @@ error: unexpected '<='; Trident has no '<=' operator
 
 ### No greater-or-equal operator **(planned)**
 
-```
+```text
 error: unexpected '>='; Trident has no '>=' operator
   help: combine `<` and `==`
 ```
@@ -105,7 +105,7 @@ error: unexpected '>='; Trident has no '>=' operator
 
 ### No logical AND operator **(planned)**
 
-```
+```text
 error: unexpected '&&'; Trident has no '&&' operator
   help: use `a * b` for logical AND on Bool values
 ```
@@ -116,7 +116,7 @@ error: unexpected '&&'; Trident has no '&&' operator
 
 ### No logical OR operator **(planned)**
 
-```
+```text
 error: unexpected '||'; Trident has no '||' operator
   help: use `a + b + (neg(a * b))` or equivalent field logic
 ```
@@ -127,7 +127,7 @@ error: unexpected '||'; Trident has no '||' operator
 
 ### No logical NOT operator **(planned)**
 
-```
+```text
 error: unexpected '!'; Trident has no '!' operator
   help: use `sub(1, a)` for logical NOT on Bool values
 ```
@@ -138,7 +138,7 @@ error: unexpected '!'; Trident has no '!' operator
 
 ### No modulo operator **(planned)**
 
-```
+```text
 error: unexpected '%'; Trident has no '%' operator
   help: use `a /% b` to get both quotient and remainder
 ```
@@ -149,7 +149,7 @@ error: unexpected '%'; Trident has no '%' operator
 
 ### No left shift operator **(planned)**
 
-```
+```text
 error: unexpected '<<'; Trident has no '<<' operator
 ```
 
@@ -159,7 +159,7 @@ error: unexpected '<<'; Trident has no '<<' operator
 
 ### No right shift operator **(planned)**
 
-```
+```text
 error: unexpected '>>'; Trident has no '>>' operator
 ```
 
@@ -169,7 +169,7 @@ error: unexpected '>>'; Trident has no '>>' operator
 
 ### No string literal **(planned)**
 
-```
+```text
 error: unexpected '"'; Trident has no string type
   help: strings are a permanent exclusion — no target VM supports string operations
 ```
@@ -180,7 +180,7 @@ error: unexpected '"'; Trident has no string type
 
 ### No block comment **(planned)**
 
-```
+```text
 error: block comments '/* */' are not supported
   help: use line comments: `// comment`
 ```
@@ -194,7 +194,7 @@ the grammar.
 
 ### Integer too large
 
-```
+```text
 error: integer literal '999999999999999999999' is too large
   help: maximum integer value is 18446744073709551615
 ```
@@ -207,7 +207,7 @@ The literal exceeds `u64::MAX` (2^64 - 1).
 
 ### Unterminated asm block
 
-```
+```text
 error: unterminated asm block: missing closing '}'
   help: every `asm { ... }` block must have a matching closing brace
 ```
@@ -218,7 +218,7 @@ error: unterminated asm block: missing closing '}'
 
 ### Invalid asm annotation
 
-```
+```text
 error: expected ')' after asm annotation
   help: asm annotations: `asm(+1) { ... }`, `asm(triton) { ... }`, or `asm(triton, +1) { ... }`
 ```
@@ -227,7 +227,7 @@ The `asm` block has a malformed annotation.
 
 **Fix:** Use one of the valid forms:
 
-```
+```trident
 asm { ... }                     // zero effect, default target
 asm(+1) { ... }                // effect only
 asm(triton) { ... }            // target only
@@ -238,7 +238,7 @@ asm(triton, +1) { ... }        // target + effect
 
 ### Expected asm block body
 
-```
+```text
 error: expected '{' after `asm` keyword
   help: inline assembly syntax is `asm { instructions }` or `asm(triton) { instructions }`
 ```

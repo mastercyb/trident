@@ -25,7 +25,7 @@ Triton VM programs have exactly two input channels and one output channel. There
 
 Values provided via public input are visible to the verifier. They appear in the `Claim.input` field and are part of the public record.
 
-```
+```trident
 let x: Field = pub_read()
 ```
 
@@ -37,7 +37,7 @@ Use public input for: data the verifier needs to see (kernel hashes, commitment 
 
 Values provided via secret input are invisible to the verifier. They come from the prover's non-deterministic input and never appear in the Claim.
 
-```
+```trident
 let witness: Field = divine()
 ```
 
@@ -49,7 +49,7 @@ Use secret input for: witness data (preimages, Merkle authentication paths, priv
 
 Programs produce output via `pub_write`, which pushes values to `Claim.output`. This is the program's public result.
 
-```
+```trident
 pub_write(result)
 ```
 
@@ -115,7 +115,7 @@ trident test main.tri
 
 ### Writing Tests
 
-```
+```trident
 #[test]
 fn test_addition() {
     let a: Field = 3
@@ -222,7 +222,7 @@ The `.tasm` file produced by `trident build` is human-readable Triton Assembly. 
 
 A typical compiled output looks like:
 
-```
+```tasm
 call main
 halt
 

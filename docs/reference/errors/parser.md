@@ -6,14 +6,14 @@
 
 ### Expected program or module
 
-```
+```text
 error: expected 'program' or 'module' declaration at the start of file
   help: every .tri file must begin with `program <name>` or `module <name>`
 ```
 
 #### Fix
 
-```
+```trident
 program my_app
 
 fn main() { }
@@ -23,7 +23,7 @@ fn main() { }
 
 ### Nesting depth exceeded
 
-```
+```text
 error: nesting depth exceeded (maximum 256 levels)
   help: simplify your program by extracting deeply nested code into functions
 ```
@@ -34,7 +34,7 @@ More than 256 levels of nested blocks. Extract inner logic into functions.
 
 ### Expected item
 
-```
+```text
 error: expected item (fn, struct, event, or const)
   help: top-level items must be function, struct, event, or const definitions
 ```
@@ -47,7 +47,7 @@ A top-level construct is not a valid item.
 
 ### Expected type
 
-```
+```text
 error: expected type
   help: valid types are: Field, XField, Bool, U32, Digest, [T; N], (T, U), or a struct name
 ```
@@ -58,7 +58,7 @@ A type annotation contains something that is not a recognized type.
 
 ### Expected array size
 
-```
+```text
 error: expected array size (integer literal or size parameter name)
   help: array sizes are written as `N`, `3`, `M + N`, or `N * 2`
 ```
@@ -69,7 +69,7 @@ The array size expression is invalid.
 
 ### Expected expression
 
-```
+```text
 error: expected expression, found <token>
   help: expressions include literals (42, true), variables, function calls, and operators
 ```
@@ -78,7 +78,7 @@ error: expected expression, found <token>
 
 ### Invalid field pattern
 
-```
+```text
 error: expected field pattern (identifier, literal, or _)
   help: use `field: var` to bind, `field: 0` to match, or `field: _` to ignore
 ```
@@ -89,7 +89,7 @@ A struct pattern field has an invalid pattern.
 
 ### Attribute validation
 
-```
+```text
 error: #[intrinsic] can only be applied to functions
 error: #[test] can only be applied to functions
 error: #[pure] can only be applied to functions
@@ -103,7 +103,7 @@ Attributes are only valid on function definitions.
 
 ### No wildcard import **(planned)**
 
-```
+```text
 error: wildcard import 'use merkle.*' is forbidden
   help: import the module name directly: `use merkle`
 ```
@@ -114,7 +114,7 @@ error: wildcard import 'use merkle.*' is forbidden
 
 ### No import renaming **(planned)**
 
-```
+```text
 error: import renaming 'use merkle as m' is forbidden
   help: use the original module name: `use merkle`
 ```
@@ -125,7 +125,7 @@ error: import renaming 'use merkle as m' is forbidden
 
 ### No else-if **(planned)**
 
-```
+```text
 error: 'else if' is not supported
   help: nest 'if' inside 'else': `else { if cond { ... } }`
 ```
@@ -136,7 +136,7 @@ error: 'else if' is not supported
 
 ### No while loop **(planned)**
 
-```
+```text
 error: 'while' is not supported
   help: use `for i in 0..n bounded N { }` with a declared bound
 ```
@@ -147,7 +147,7 @@ error: 'while' is not supported
 
 ### No loop keyword **(planned)**
 
-```
+```text
 error: 'loop' is not supported
   help: use `for` with a bounded range
 ```
@@ -158,7 +158,7 @@ error: 'loop' is not supported
 
 ### No break statement **(planned)**
 
-```
+```text
 error: 'break' is not supported in Trident
   help: all loops run for their full declared bound
 ```
@@ -169,7 +169,7 @@ error: 'break' is not supported in Trident
 
 ### No continue statement **(planned)**
 
-```
+```text
 error: 'continue' is not supported in Trident
 ```
 
@@ -179,7 +179,7 @@ error: 'continue' is not supported in Trident
 
 ### No enum declaration **(planned)**
 
-```
+```text
 error: 'enum' is not supported; Trident has no sum types
   help: use struct + integer tag for variant patterns
 ```
@@ -190,7 +190,7 @@ error: 'enum' is not supported; Trident has no sum types
 
 ### No trait declaration **(planned)**
 
-```
+```text
 error: 'trait' is not supported in Trident
 ```
 
@@ -200,7 +200,7 @@ error: 'trait' is not supported in Trident
 
 ### No impl block **(planned)**
 
-```
+```text
 error: 'impl' is not supported; use free functions
 ```
 
@@ -210,7 +210,7 @@ error: 'impl' is not supported; use free functions
 
 ### No macro declaration **(planned)**
 
-```
+```text
 error: macros are not supported in Trident
 ```
 
@@ -220,7 +220,7 @@ error: macros are not supported in Trident
 
 ### No closure syntax **(planned)**
 
-```
+```text
 error: closures are not supported in Trident
   help: use named functions instead
 ```
@@ -231,7 +231,7 @@ error: closures are not supported in Trident
 
 ### No method syntax **(planned)**
 
-```
+```text
 error: method syntax 'x.foo()' is not supported
   help: use `foo(x)` instead
 ```
@@ -244,7 +244,7 @@ Field access is `x.field`. Function calls must be free-standing.
 
 ### Missing type annotation on let **(planned)**
 
-```
+```text
 error: let binding requires a type annotation
   help: write `let x: Field = ...` not `let x = ...`
 ```
@@ -255,7 +255,7 @@ error: let binding requires a type annotation
 
 ### I/O declaration in module **(planned)**
 
-```
+```text
 error: I/O declarations ('pub input', 'sec input') are only allowed in program files
   help: move I/O declarations to a `program` file, not a `module`
 ```
@@ -266,7 +266,7 @@ error: I/O declarations ('pub input', 'sec input') are only allowed in program f
 
 ### No re-export **(planned)**
 
-```
+```text
 error: re-exports are not supported
   help: if A uses B, C cannot access B through A; import B directly
 ```
@@ -277,7 +277,7 @@ error: re-exports are not supported
 
 ### No exceptions **(planned)**
 
-```
+```text
 error: 'try'/'catch'/'throw' are not supported
   help: use `assert` for failure — proof generation becomes impossible on assert failure
 ```
@@ -288,7 +288,7 @@ error: 'try'/'catch'/'throw' are not supported
 
 ### No concurrency keywords **(planned)**
 
-```
+```text
 error: 'async'/'await'/'spawn' are not supported
   help: Trident execution is sequential; concurrency is handled at the runtime level
 ```
@@ -299,7 +299,7 @@ error: 'async'/'await'/'spawn' are not supported
 
 ### No pointers or references **(planned)**
 
-```
+```text
 error: pointers and references ('&', '*') are not supported
   help: all values are passed by copy on the stack
 ```
@@ -310,7 +310,7 @@ error: pointers and references ('&', '*') are not supported
 
 ### Unsupported visibility modifier **(planned)**
 
-```
+```text
 error: visibility modifier 'pub(crate)' is not supported
   help: Trident has only `pub` (public) or default (private)
 ```
@@ -324,7 +324,7 @@ No `pub(crate)`, `friend`, or `internal` modifiers. Visibility is binary:
 
 ### No heap allocation **(planned)**
 
-```
+```text
 error: 'alloc' is not supported; Trident has no heap
   help: use stack variables or RAM (ram_read/ram_write)
 ```

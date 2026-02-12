@@ -65,7 +65,7 @@ Everything else is either a **hook program** (reusable constraint logic), a **de
 
 ### 2.3 Layer Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │  APPLICATIONS                                        │
 │  Governance, Lending, Vaults, Stablecoins,           │
@@ -105,7 +105,7 @@ PLUMB is the architectural foundation that all Neptune token standards share. It
 
 ### 3.1 Config — Shared by All PLUMB Standards
 
-```
+```trident
 config = hash(admin_auth, pay_auth, lock_auth, mint_auth, burn_auth,
               pay_hook, lock_hook, update_hook, mint_hook, burn_hook)
 ```
@@ -188,7 +188,7 @@ A single Neptune transaction may update multiple Merkle trees:
 
 The block commits to ALL tree roots atomically via a **state commitment**:
 
-```
+```trident
 block_state = hash(
   token_tree_root_1, token_tree_root_2, ..., token_tree_root_N,
   tide_allocation_root,
@@ -257,7 +257,7 @@ The expensive resource is the circuit (AIR constraints). The cheap resource is l
 
 ### 5.1 Account Leaf — 10 field elements
 
-```
+```trident
 leaf = hash(account_id, balance, nonce, auth_hash, lock_until,
             controller, locked_by, lock_data, 0, 0)
 ```
@@ -297,7 +297,7 @@ This enables collateral patterns: "these tokens are locked as collateral for fun
 
 ### 5.2 Token Metadata
 
-```
+```trident
 metadata = hash(name_hash, ticker_hash, teaser_hash, site_hash, custom_hash,
                 price_oracle, volume_oracle, 0, 0, 0)
 ```
@@ -369,7 +369,7 @@ changes is what the circuit enforces inside each.
 
 ### 6.2 Asset Leaf — 10 field elements
 
-```
+```trident
 leaf = hash(asset_id, owner_id, nonce, auth_hash, lock_until,
             collection_id, metadata_hash, royalty_bps, creator_id, flags)
 ```
@@ -430,7 +430,7 @@ is always known and always paid.
 
 ### 6.3 Collection Metadata — 10 field elements
 
-```
+```trident
 metadata = hash(name_hash, description_hash, image_hash, site_hash, custom_hash,
                 max_supply, royalty_receiver, 0, 0, 0)
 ```
@@ -590,7 +590,7 @@ hooks, and application state trees.
 
 #### Uniq Marketplace (TSP-2 + TSP-1 + COMPASS)
 
-```
+```text
 Seller lists uniq at price P:
   1. TSP-2 Pay: seller → buyer (asset transfer)
      pay_hook = PAY_ROYALTY
@@ -603,7 +603,7 @@ Composed proof: TSP-2 ⊗ TSP-1(payment) ⊗ TSP-1(royalty) → single verificat
 
 #### Uniq-Collateralized Lending (TSP-2 + TSP-1 + COMPASS)
 
-```
+```text
 Borrow against a uniq:
   1. TSP-2 Lock: owner locks uniq (lock_until = loan_expiry)
   2. COMPASS proves uniq collection floor price = V
@@ -622,7 +622,7 @@ Liquidation (if borrower defaults):
 
 #### Burn-to-Redeem (TSP-2 → physical goods or new asset)
 
-```
+```text
 Burn uniq to claim:
   1. TSP-2 Burn: holder burns uniq
      burn_hook = BURN_REDEEM
@@ -634,7 +634,7 @@ Burn uniq to claim:
 
 #### Game Item Economy (TSP-2 with UPDATABLE flag)
 
-```
+```text
 Crafting: combine two items into one:
   1. TSP-2 Burn: destroy item_A (flags & BURNABLE)
   2. TSP-2 Burn: destroy item_B (flags & BURNABLE)
@@ -662,7 +662,7 @@ Uniswap V3 improved within-pool efficiency. Aqua (1inch, 2025) let one balance b
 
 PLUMB tokens live in user accounts. There is no pool to lock into. Swaps are two `pay` operations where the `pay_hook` enforces the pricing curve.
 
-```
+```text
 Alice swaps 100 TOKEN_A for TOKEN_B with maker Bob:
 
   TOKEN_A Pay: Alice → Bob, amount=100, pay_hook=STRATEGY
@@ -685,7 +685,7 @@ Atomic consistency without locks: if two strategies try to move same tokens in o
 
 ### 7.4 Strategy Registration
 
-```
+```trident
 strategy = hash(maker, token_a, token_b, program, parameters)
 ```
 
@@ -755,7 +755,7 @@ This requires its own state tree and its own circuit. It's a primitive.
 
 #### Attestation Leaf — 10 field elements
 
-```
+```trident
 leaf = hash(feed_id, value, timestamp, provider_id, nonce,
             confidence, source_hash, proof_hash, 0, 0)
 ```
@@ -773,7 +773,7 @@ leaf = hash(feed_id, value, timestamp, provider_id, nonce,
 
 #### Feed Config — 10 field elements
 
-```
+```trident
 config = hash(admin_auth, submit_auth, aggregate_auth, 0, 0,
               submit_hook, aggregate_hook, read_hook, 0, 0)
 ```
@@ -789,7 +789,7 @@ config = hash(admin_auth, submit_auth, aggregate_auth, 0, 0,
 
 #### Feed Metadata — 10 field elements
 
-```
+```trident
 metadata = hash(name_hash, pair_hash, decimals, heartbeat, deviation_threshold,
                 min_providers, max_staleness, 0, 0, 0)
 ```
@@ -908,7 +908,7 @@ This enforces royalties at the protocol level — not optional, not bypassable v
 #### Delegation Hook — Detail
 
 Maintains a delegation tree with leaves:
-```
+```trident
 delegation = hash(owner, delegate, token, limit, spent, expiry)
 ```
 
@@ -942,7 +942,7 @@ Without this hook, TSP-1 minting is uncapped. With it, the cap is cryptographica
 #### Vesting Hook — Detail
 
 Maintains a vesting schedule:
-```
+```trident
 schedule = hash(beneficiary, total_amount, start_time, cliff, duration, claimed)
 ```
 
@@ -968,7 +968,7 @@ On mint, the hook:
 A powerful pattern: burn a uniq to receive something else.
 
 The hook produces a receipt proof. This receipt composes with a mint operation on another token:
-```
+```text
 Burn(TSP-2 item) → receipt proof ⊗ Mint(TSP-1 reward token)
 ```
 
@@ -1009,7 +1009,7 @@ Documented configurations combining primitives + hooks.
 
 ### 10.1 Simple Coin
 
-```
+```trident
 Standard: TSP-1
 Config:
   admin_auth: hash(admin)
@@ -1024,7 +1024,7 @@ The simplest possible token. Anyone can transfer and burn. Admin can update conf
 
 ### 10.2 Immutable Money
 
-```
+```text
 Standard: TSP-1
 Config:
   admin_auth: 0                   // renounced — forever frozen
@@ -1037,7 +1037,7 @@ After genesis mint, nothing can change. Pure permissionless sound money. No admi
 
 ### 10.3 Regulated Token
 
-```
+```trident
 Standard: TSP-1
 Config:
   admin_auth: hash(admin)
@@ -1053,7 +1053,7 @@ Hooks:
 
 ### 10.4 Uniq Art Collection
 
-```
+```trident
 Standard: TSP-2
 Config:
   admin_auth: hash(collection_admin)
@@ -1069,7 +1069,7 @@ Flags per asset: transferable=1, burnable=1, updatable=0
 
 ### 10.5 Soulbound Credential
 
-```
+```trident
 Standard: TSP-2
 Config:
   admin_auth: hash(issuer)
@@ -1080,7 +1080,7 @@ Flags: transferable=0, burnable=0, updatable=0
 
 ### 10.6 Game Item Collection
 
-```
+```trident
 Standard: TSP-2
 Config:
   admin_auth: hash(game_admin)
@@ -1094,7 +1094,7 @@ Flags: transferable=1, burnable=1, updatable=1
 
 ### 10.7 Vault / Yield-Bearing Token
 
-```
+```trident
 Standard: TSP-1 (the share token)
 Config:
   mint_auth: hash(vault_program)
@@ -1110,7 +1110,7 @@ This is ERC-4626 as a deployment pattern, not a separate standard. The virtual s
 
 ### 10.8 Multisig
 
-```
+```text
 Standard: TSP-1 (membership token, supply = N)
 Config:
   mint_auth: 0                    // fixed membership
@@ -1126,7 +1126,7 @@ Not a primitive. Not a separate standard. Just a token + a hook.
 
 ### 10.9 Governance Token
 
-```
+```trident
 Standard: TSP-1
 Config:
   admin_auth: hash(governance_program)
@@ -1144,7 +1144,7 @@ Governance is an application that:
 
 ### 10.10 Stablecoin
 
-```
+```trident
 Standard: TSP-1
 Config:
   mint_auth: hash(minting_program)
@@ -1165,7 +1165,7 @@ The burn hook composes with:
 
 ### 10.11 Wrapped / Bridged Asset
 
-```
+```trident
 Standard: TSP-1
 Config:
   mint_auth: hash(bridge_program)
@@ -1177,7 +1177,7 @@ Hooks:
 
 ### 10.12 Liquid Staking Token
 
-```
+```trident
 Standard: TSP-1 (the LST)
 Config:
   mint_auth: hash(staking_program)
@@ -1190,7 +1190,7 @@ Combined with a vault pattern for the exchange rate. The LST appreciates as stak
 
 ### 10.13 Subscription / Streaming Payments
 
-```
+```text
 Standard: TSP-1
 Config:
   pay_hook: PAY_DELEGATION
@@ -1206,7 +1206,7 @@ Each month, service calls pay using delegation authority. Hook enforces rate lim
 
 The canonical DeFi pattern: supply one token, receive another based on oracle-evaluated price. Exercises all four primitives.
 
-```
+```trident
 Tokens:
   TOKEN_A: TSP-1 (collateral asset, e.g. ETH)
   TOKEN_B: TSP-1 (fund shares / stablecoin / synthetic)
@@ -1221,7 +1221,7 @@ Hooks:
 
 #### Supply flow (all four primitives composed)
 
-```
+```text
 1. Alice does TOKEN_A pay:
      From: Alice → fund_account
      fund_account.controller = FUND_PROGRAM
@@ -1243,7 +1243,7 @@ Hooks:
 
 #### Redemption flow
 
-```
+```text
 1. Alice does TOKEN_B burn (amount = shares to redeem)
 
 2. COMPASS proves current TOKEN_A price
@@ -1260,7 +1260,7 @@ All composed into single atomic proof.
 
 #### Liquidation flow
 
-```
+```text
 1. COMPASS proves TOKEN_A price dropped → health_factor < 1
 
 2. Liquidator provides TOKEN_B (partial debt coverage)
@@ -1354,7 +1354,7 @@ Name service is just a uniq collection with a specific metadata schema.
 
 ### 12.1 The Composition Stack
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │           Composed Transaction Proof     │
 │                                         │

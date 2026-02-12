@@ -64,7 +64,7 @@ cross-contract interaction, and events, see [OS Abstraction](os-abstraction.md).
 
 The stdlib has three tiers. Each trades portability for OS access:
 
-```
+```trident
 std.*          S0 — Proof primitives      All 20 VMs, all 25 OSes
 os.*           S1 — Portable OS           All blockchain + traditional OSes
 os.<os>.*      S2 — OS-native             One specific OS
@@ -107,7 +107,7 @@ or `os.neptune.*` for hash-preimage identity."*
 
 ### Choosing a Tier
 
-```
+```trident
 // S0 — pure math, any target
 use std.crypto.merkle
 fn verify(root: Digest, leaf: Digest, index: U32, depth: U32) {
@@ -141,7 +141,7 @@ For full `os.*` API specifications and per-OS lowering tables, see
 
 ## Data Flow
 
-```
+```text
 PROVER SIDE:                              VERIFIER SIDE:
 
 Program  ----hash---->  program_digest

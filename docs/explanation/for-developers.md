@@ -42,7 +42,7 @@ Each target VM uses its own prime. Triton VM (the default target) uses
 [Goldilocks prime](https://xn--2-umb.com/22/goldilocks/). Think of it as a
 64-bit integer where arithmetic wraps at `p` instead of at `2^64`:
 
-```
+```text
 0 + 1       = 1                  (same as normal)
 5 * 3       = 15                 (same as normal)
 0 - 1       = 18446744069414584320   (wraps to p - 1, not -1)
@@ -81,7 +81,7 @@ Trident does not allow this.
 
 Every loop in Trident requires an explicit maximum bound:
 
-```
+```trident
 for i in 0..n bounded 100 {
     process(i)
 }
@@ -117,7 +117,7 @@ Recursion is just an unbounded loop in disguise. A recursive function can call
 itself to arbitrary depth depending on runtime inputs. The compiler cannot
 predict the trace length, so it cannot set up the proof system.
 
-```
+```trident
 // This is NOT allowed in Trident:
 fn factorial(n: Field) -> Field {
     if n == 0 { return 1 }
@@ -127,7 +127,7 @@ fn factorial(n: Field) -> Field {
 
 The fix is always a bounded loop:
 
-```
+```trident
 fn factorial(n: Field) -> Field {
     let mut result: Field = 1
     for i in 1..n bounded 20 {
@@ -200,7 +200,7 @@ answer is correct. The teacher checks your work, not the whisper.
 
 Here is a concrete example:
 
-```
+```trident
 fn prove_knows_square_root(x: Field) {
     let s: Field = divine()       // prover whispers: "the answer is 7"
     assert(s * s == x)            // program proves: 7 * 7 = 49 = x
@@ -236,7 +236,7 @@ else in the collection.
 
 Here is what it looks like:
 
-```
+```text
                     Root
                    /    \
                   /      \
@@ -271,7 +271,7 @@ Triton VM has native instructions for Merkle tree operations (`merkle_step`),
 making them extremely efficient -- one hash instruction per tree level. In
 Trident:
 
-```
+```trident
 use std.crypto.merkle
 
 fn verify_membership(root: Digest, leaf: Digest, index: U32, depth: U32) {
@@ -333,7 +333,7 @@ Here is the full lifecycle of a Trident program, step by step.
 
 ### Step 1: Write your program
 
-```
+```trident
 program balance_check
 
 fn main() {
@@ -465,7 +465,7 @@ correct. The proof captures that the checks passed.
 
 Let us build a complete program from scratch, explaining every line.
 
-```
+```trident
 program my_first
 
 fn main() {
@@ -527,7 +527,7 @@ verifier can confirm the outputs (10 and 21) are correct for those inputs.
 
 Now let us add secret input:
 
-```
+```trident
 program secret_sum
 
 fn main() {

@@ -43,7 +43,7 @@ construction, from trace polynomials through FRI and Fiat-Shamir.
 
 The end-to-end pipeline from source code to proof:
 
-```
+```trident
 Trident source (.tri)
     |
     |  trident build        <-- Trident's responsibility
@@ -75,7 +75,7 @@ optimize the trace through your Trident code; the proof system is fixed.
 The **Claim** -- the public statement that accompanies every proof -- contains
 the program digest, the public inputs, and the public outputs:
 
-```
+```text
 Claim {
     program_digest: Digest,
     input:  Vec<Field>,

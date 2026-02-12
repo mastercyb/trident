@@ -18,7 +18,7 @@ Each VM family uses a specific lowering path from TIR to native output.
 
 Push, pop, dup, swap. TIR maps nearly 1:1 to native instructions.
 
-```
+```text
 TIR → StackLowering → assembly text → Linker → output
 ```
 
@@ -27,7 +27,7 @@ TIR → StackLowering → assembly text → Linker → output
 Registers or memory-addressed slots. TIR is first converted to LIR
 (register-addressed IR), then lowered to native instructions.
 
-```
+```text
 TIR → LIR → RegisterLowering → machine code → Linker → output
 ```
 
@@ -40,7 +40,7 @@ produces code for the zkVM, the other for bare metal.
 Combinator expressions on binary trees (nouns). TIR lowers directly to
 tree expressions.
 
-```
+```text
 TIR → TreeLowering → Noun → serialized output (.jam)
 ```
 
@@ -49,7 +49,7 @@ TIR → TreeLowering → Noun → serialized output (.jam)
 Programs compile to arithmetic circuits (gates/constraints) proved
 client-side. No sequential instruction execution.
 
-```
+```text
 TIR → AcirLowering → ACIR circuit → prover → proof
 ```
 

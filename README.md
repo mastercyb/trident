@@ -12,7 +12,7 @@ The compiler is designed for [multi-target compilation](docs/explanation/multi-t
 the same source will compile to Miden, Cairo, RISC-V zkVMs, EVM, WASM, and
 Nock as those backends ship. Write once, prove anywhere.
 
-```
+```trident
 program hello
 
 fn main() {
@@ -127,7 +127,7 @@ Full specification: [Language Reference](docs/reference/language.md)
 
 ### Functions and Modules
 
-```
+```trident
 // helpers.tri
 module helpers
 
@@ -136,7 +136,7 @@ pub fn double(x: Field) -> Field {
 }
 ```
 
-```
+```trident
 // main.tri
 program my_app
 
@@ -150,7 +150,7 @@ fn main() {
 
 ### Control Flow
 
-```
+```trident
 if balance > 0 {
     transfer(balance)
 } else {
@@ -170,7 +170,7 @@ match op_code {
 
 ### Events
 
-```
+```trident
 event Transfer { from: Digest, to: Digest, amount: Field }
 
 fn pay() {
@@ -184,7 +184,7 @@ digest is visible. Same event type, different privacy models.
 
 ### Inline Assembly
 
-```
+```trident
 fn custom_op(a: Field, b: Field) -> Field {
     asm(triton, -1) {
         hash
@@ -260,7 +260,7 @@ lowering tables.
 
 ## Source Tree
 
-```
+```text
 src/          Compiler in Rust            ~43K lines, 5 runtime dependencies
 vm/           VM intrinsics in Trident    Compiler primitives (hash, I/O, field ops)
 std/          Standard library in Trident Crypto algorithms (sha256, bigint, ecdsa)

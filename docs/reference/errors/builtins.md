@@ -10,7 +10,7 @@ target-dependent signatures that deserve explicit diagnostics.
 
 ### Builtin argument type mismatch **(planned)**
 
-```
+```text
 error: builtin 'sub' expects (Field, Field), got (U32, U32)
   help: sub() operates on Field values; convert with as_field() first
 ```
@@ -21,7 +21,7 @@ error: builtin 'sub' expects (Field, Field), got (U32, U32)
 
 ### Builtin argument count mismatch **(planned)**
 
-```
+```text
 error: builtin 'split' expects 1 argument, got 2
 ```
 
@@ -31,7 +31,7 @@ error: builtin 'split' expects 1 argument, got 2
 
 ### Assert argument type **(planned)**
 
-```
+```text
 error: assert() requires Bool argument, got Digest
 ```
 
@@ -41,7 +41,7 @@ error: assert() requires Bool argument, got Digest
 
 ### Assert_eq argument type **(planned)**
 
-```
+```text
 error: assert_eq() requires (Field, Field), got (Bool, Bool)
   help: use `assert(a == b)` for Bool equality
 ```
@@ -52,7 +52,7 @@ error: assert_eq() requires (Field, Field), got (Bool, Bool)
 
 ### Assert_digest argument type **(planned)**
 
-```
+```text
 error: assert_digest() requires (Digest, Digest), got (Field, Field)
 ```
 
@@ -62,7 +62,7 @@ error: assert_digest() requires (Digest, Digest), got (Field, Field)
 
 ### RAM address type **(planned)**
 
-```
+```text
 error: ram_read() address must be Field, got Bool
 ```
 
@@ -72,7 +72,7 @@ error: ram_read() address must be Field, got Bool
 
 ### Inverse of zero **(planned)**
 
-```
+```text
 error: inv(0) is undefined — zero has no multiplicative inverse
   help: guard with `assert(a == 0 == false)` before calling inv()
 ```

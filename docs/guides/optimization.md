@@ -49,7 +49,7 @@ The Hash table is often the tallest because each `hash` / [`tip5`](https://eprin
 
 - **Batch hashing**: Each `tip5` call costs 6 Hash Table rows regardless of how many of its 10 inputs you actually use. Batching 3 single-value hashes into 1 call saves 12 hash rows. Pack up to 10 field elements into a single `tip5` call:
 
-```
+```trident
 // Expensive: 3 hash calls = 18 hash rows
 let h1: Digest = tip5(a, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 let h2: Digest = tip5(b, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -61,7 +61,7 @@ let h: Digest = tip5(a, b, c, 0, 0, 0, 0, 0, 0, 0)
 
 - **Use sponge for streaming**: For more than 10 elements, use the sponge API instead of multiple `tip5` calls:
 
-```
+```trident
 sponge_init()
 sponge_absorb(e0, e1, e2, e3, e4, e5, e6, e7, e8, e9)
 sponge_absorb(e10, e11, e12, e13, e14, e15, e16, e17, e18, e19)
@@ -78,7 +78,7 @@ The Processor table grows with every instruction. Loops are the main contributor
 
 - **Minimize loop body size**: Move invariant computations outside the loop:
 
-```
+```trident
 // Before: constant recomputed each iteration
 for i in 0..100 bounded 100 {
     let threshold: Field = compute_threshold()  // same every time
@@ -104,7 +104,7 @@ U32 operations (range checks, bitwise ops) are relatively expensive. (The U32 ta
 
 - **Stay in Field when possible**: If you don't need range-checked 32-bit arithmetic, use `Field` instead of `U32`. Field operations use the Processor table (cheap) rather than the U32 table.
 
-```
+```trident
 // Expensive: U32 operations
 let a: U32 = as_u32(pub_read())
 let b: U32 = as_u32(pub_read())
@@ -142,7 +142,7 @@ Every function call adds 2 rows (call + return) to the Jump Stack table. Every i
 
 - **Reduce branching in loops**: Each if/else inside a loop adds jump stack overhead per iteration.
 
-```
+```trident
 // More jump stack overhead (2 calls per iteration)
 for i in 0..100 bounded 100 {
     if condition {
@@ -198,7 +198,7 @@ Merkle proofs are hash-heavy. Each level adds 6 hash rows + U32 table rows (Trit
 | 20 | 120 | High (can dominate) |
 | 32 | 192 | Very high |
 
-```
+```trident
 // Depth 3: 3 hash calls = 18 hash rows (Neptune default)
 std.crypto.merkle.verify3(leaf, root, idx)
 
@@ -219,7 +219,7 @@ Minimize the number of Merkle operations per transaction.
 
 Comparing digests requires comparing all 5 field elements:
 
-```
+```trident
 // Use the std.debug.assert.digest builtin (5 equality checks)
 std.debug.assert.digest(actual, expected)
 ```
@@ -230,7 +230,7 @@ This is cheaper than manual element-by-element comparison because it uses native
 
 When absorbing data that's already in RAM, prefer `sponge_absorb_mem` over reading to the stack first:
 
-```
+```trident
 // Expensive: 10 RAM reads + sponge_absorb = 10 cc + 10 RAM rows + 6 hash rows
 let a: Field = vm.io.mem.read(addr)
 // ... read 9 more values ...
