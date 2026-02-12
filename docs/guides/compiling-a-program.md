@@ -253,7 +253,7 @@ When the compiler encounters a `use` statement, it resolves the module name to a
 | Module prefix | Search path | Example |
 |---|---|---|
 | `std.*` | Standard library directory (`std/`) | `use std.crypto.merkle` resolves to `std/crypto/merkle.tri` |
-| `os.<os>.*` | Extension library directory (`ext/`) | `use os.neptune.xfield` resolves to `ext/neptune/xfield.tri` |
+| `os.<os>.*` | Extension library directory (`os/`) | `use os.neptune.xfield` resolves to `os/neptune/xfield.tri` |
 | (no prefix) | Project root directory | `use helpers` resolves to `helpers.tri` |
 | (dotted) | Project root, nested | `use crypto.sponge` resolves to `crypto/sponge.tri` |
 
@@ -263,7 +263,7 @@ The standard library directory is found by searching (in order):
 2. `std/` relative to the compiler binary
 3. `std/` in the current working directory
 
-The extension directory follows the same pattern using `TRIDENT_EXTLIB` and `ext/`.
+The extension directory follows the same pattern using `TRIDENT_OSLIB` and `os/`.
 
 ### Dependency Order
 

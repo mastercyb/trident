@@ -413,7 +413,7 @@ every target: types, field arithmetic, bounded loops, modules, functions. The
 I/O, hashing, Merkle operations, memory, events. **Backend extensions** (~22%)
 expose target-specific capabilities -- `XField` on Triton, account models on
 Miden, precompiles on SP1 -- through a uniform extension mechanism under
-`ext/<target>/`.
+`os/<target>/`.
 
 The `--target` flag selects the backend (default: `triton`):
 
@@ -450,13 +450,14 @@ inversely with complexity.
 The standard library mirrors the 3-layer architecture:
 
 ```
-std/
+vm/
 +-- core/               Universal -- zero VM dependencies
 |   +-- field.tri         Goldilocks field arithmetic
 |   +-- u32.tri           U32 operations
 |   +-- convert.tri       Type conversions (as_u32, as_field)
 |   +-- assert.tri        Assertions (is_true, eq, digest)
-|
+
+std/
 +-- io/                 Abstraction layer -- per-target intrinsic dispatch
 |   +-- io.tri            pub_read, pub_write, divine
 |   +-- mem.tri           ram_read, ram_write, block operations
@@ -467,18 +468,21 @@ std/
     +-- merkle.tri        Merkle tree verification
     +-- auth.tri          Hash-preimage authorization
 
-ext/
-+-- triton/             Backend extensions -- Triton VM specific
+os/
++-- neptune/            Backend extensions -- Neptune / Triton VM specific
     +-- xfield.tri        XField type, xx_add, xx_mul, x_invert
     +-- kernel.tri        Neptune kernel interface
     +-- utxo.tri          UTXO verification
+    +-- proof.tri         Recursive STARK verifier components
+    +-- recursive.tri     Recursive proof composition
+    +-- registry.tri      Registry operations
 ```
 
-Modules under `std/core/` compile identically to every target. Modules under
+Modules under `vm/core/` compile identically to every target. Modules under
 `std/io/` and `std/crypto/` use the same syntax everywhere but dispatch to
-target-native instructions. Modules under `ext/neptune/` are available only
-when compiling with `--target triton`. 52 `.tri` files across
-`std/`, `ext/`, and `examples/` form the current library and example surface.
+target-native instructions. Modules under `os/neptune/` are available only
+when compiling with `--target neptune`. 52 `.tri` files across
+`vm/`, `std/`, `os/`, and `examples/` form the current library and example surface.
 
 Every function in the standard library has a known, fixed cost in table rows.
 When you call `std.crypto.merkle.verify(root, leaf, index, depth)`, the
@@ -673,8 +677,8 @@ Trident fills that gap. Its universal compilation architecture -- a shared
 core, an abstraction layer, and per-target backend extensions -- means that
 programs written today for Triton VM are architecturally ready to compile to
 Miden, Cairo, and RISC-V zkVMs as those backends ship. The 3-layer design is
-implemented: `std/core/` for portable logic, `std/io/` and `std/crypto/` for
-abstracted primitives, and `ext/neptune/` for Triton-specific power. The
+implemented: `vm/core/` for portable logic, `std/io/` and `std/crypto/` for
+abstracted primitives, and `os/neptune/` for Triton-specific power. The
 `--target` flag selects the backend; `asm(triton) { ... }` blocks tag
 target-specific assembly. Write once, prove anywhere.
 
@@ -704,7 +708,7 @@ architecture ensures that choosing Trident is not choosing a single
 ecosystem -- it is choosing all of them.
 
 The token example is 530 lines. The compiler is ~43K lines of Rust. The
-test suite has 740+ tests. 52 `.tri` files span `std/`, `ext/`, and
+test suite has 740+ tests. 52 `.tri` files span `vm/`, `std/`, `os/`, and
 `examples/`. The cost model tracks 6 tables. Formal verification is
 decidable. Code is content-addressed.
 

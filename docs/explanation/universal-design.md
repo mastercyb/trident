@@ -28,7 +28,7 @@ The compiler is organized in three layers:
 +----------+----------+----------+-------+
 |  Triton  |  Miden   |  OpenVM  |  SP1  | ...
 |  Backend |  Backend  | Backend | Backend|
-|  + ext/  |  + ext/  |  + ext/  | + ext/|
+|  + os/   |  + os/   |  + os/   | + os/ |
 +----------+----------+----------+-------+
 ```
 
@@ -267,7 +267,7 @@ Backend extensions that expose target-unique capabilities. Programs that import
 from `os.<target>.*` are explicitly bound to that target.
 
 ```
-ext/neptune/
+os/neptune/
   xfield.tri      XField type (cubic extension), xx_add, xx_mul, x_invert
   kernel.tri      Neptune kernel interface (authenticate_field, tree_height)
   utxo.tri        UTXO verification
@@ -397,7 +397,7 @@ it in `create_cost_model()`.
 ### 4. Add extension modules
 
 If the target has unique capabilities (special types, native instructions, VM-
-specific APIs), add Trident library files under `ext/<name>/`.
+specific APIs), add Trident library files under `os/<name>/`.
 
 ### 5. Verify
 

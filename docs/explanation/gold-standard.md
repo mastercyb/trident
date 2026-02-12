@@ -9,13 +9,13 @@
 
 | Primitive | Status | Example Code |
 |-----------|--------|--------------|
-| **PLUMB framework** | Implemented | `ext/neptune/kernel.tri`, `ext/neptune/utxo.tri` |
+| **PLUMB framework** | Implemented | `os/neptune/kernel.tri`, `os/neptune/utxo.tri` |
 | **TSP-1** (Fungible tokens) | Implemented | `examples/neptune/type_custom_token.tri` |
 | **TSP-2** (NFTs) | Implemented | `examples/nft/nft.tri` |
 | **Native currency** | Implemented | `examples/neptune/type_native_currency.tri` |
 | **Lock scripts** | Implemented | `examples/neptune/lock_*.tri` (4 variants) |
 | **Transaction validation** | Implemented | `examples/neptune/transaction_validation.tri` |
-| **Proof composition** | Implemented | `ext/neptune/proof.tri`, `examples/neptune/proof_aggregator.tri` |
+| **Proof composition** | Implemented | `os/neptune/proof.tri`, `examples/neptune/proof_aggregator.tri` |
 | **TIDE** (Liquidity) | Design only | Specified below, not yet implemented |
 | **COMPASS** (Oracle) | Design only | Specified below, not yet implemented |
 | **Hook library** | Design only | Architecture specified, hooks not yet codified |

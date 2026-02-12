@@ -7,7 +7,7 @@
 ### Unknown target
 
 ```
-error: unknown target 'wasm' (looked for 'vm/wasm.toml')
+error: unknown target 'wasm' (looked for 'vm/wasm/target.toml')
   help: available targets: triton, miden, openvm, sp1, cairo
 ```
 
@@ -16,7 +16,7 @@ error: unknown target 'wasm' (looked for 'vm/wasm.toml')
 ### Cannot read target config
 
 ```
-error: cannot read target config 'vm/foo.toml': No such file
+error: cannot read target config 'vm/foo/target.toml': No such file
 ```
 
 ---

@@ -153,7 +153,7 @@ let m: U32 = n + n
 Extension field element (3 base field elements). Used for [FRI](https://eccc.weizmann.ac.il/report/2017/134/) and IPA operations. See [How STARK Proofs Work](../explanation/stark-proofs.md) for where extension fields appear in the proof system.
 
 ```
-let x: XField = std.core.xfield.new(1, 0, 0)
+let x: XField = os.neptune.xfield.new(1, 0, 0)
 ```
 
 ### Digest
@@ -317,7 +317,7 @@ let equal: Bool = a == b       // Field or U32
 let less: Bool = x < y         // U32 only
 ```
 
-There are no `!=`, `>`, `<=`, or `>=` operators. Compose them from `==`, `<`, and `not()`. There are no `&&` or `||` -- use boolean combinators from `std.core.bool`. This is deliberate: fewer operators means fewer things to audit in provable code. See the [Reference](../reference/language.md) for the full operator table and per-instruction costs.
+There are no `!=`, `>`, `<=`, or `>=` operators. Compose them from `==`, `<`, and `not()`. There are no `&&` or `||` -- use boolean combinators instead. This is deliberate: fewer operators means fewer things to audit in provable code. See the [Reference](../reference/language.md) for the full operator table and per-instruction costs.
 
 ---
 
@@ -837,7 +837,7 @@ These are not limitations -- they are properties required for provable computati
 | Floating point | No floats. `Field` is the native numeric type. | The VM operates over a prime field. Floats have no representation. |
 | Subtraction operator | No `-`. Use `vm.core.field.sub()`. | `1 - 2` in a prime field is `p - 1`, not `-1`. Explicit subtraction prevents this footgun. |
 | Many comparison operators | Only `==` and `<`. No `!=`, `>`, `<=`, `>=`. | Fewer primitives means a smaller, more auditable instruction set. |
-| Boolean connectives | No `&&` or `||`. Use `std.core.bool` combinators. | Same rationale: fewer primitives, easier audits. |
+| Boolean connectives | No `&&` or `||`. Use boolean combinators. | Same rationale: fewer primitives, easier audits. |
 | Garbage collection | No GC. All lifetimes are lexical. | There is no runtime; the program is a static trace. |
 
 These constraints make every Trident program a fixed, bounded computation -- exactly what a STARK prover requires.

@@ -82,7 +82,7 @@ describe what artifacts exist.
 |-------|------|----------|---------|
 | L0 | Declared | `os/<os>.toml` exists, `vm` field references a VM | All 25 OSes |
 | L1 | Documented | `docs/reference/os/<os>.md` exists | All 25 OSes |
-| L2 | Bound | `ext/<os>/*.tri` runtime bindings exist | Neptune |
+| L2 | Bound | `os/<os>/*.tri` runtime bindings exist | Neptune |
 | L3 | Tested | End-to-end OS-targeted compilation tests pass | None yet |
 
 ---
@@ -274,7 +274,7 @@ Only if using the legacy emitter pipeline. New VMs should prefer L3.
 
 ### L2 — Bind
 
-- [ ] Create `ext/<os>/` directory
+- [ ] Create `os/<os>/` directory
 - [ ] Write `.tri` binding modules (one per concern: storage, account,
   transfer, events, etc.)
 - [ ] Each file declares `module os.<os>.<name>`

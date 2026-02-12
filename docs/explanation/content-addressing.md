@@ -515,7 +515,7 @@ If signatures do not match, the checker reports `UNKNOWN` with a diagnostic mess
 
 ## 7. On-Chain Registry
 
-The file `ext/neptune/registry.tri` implements an on-chain registry as a Merkle tree
+The file `os/neptune/registry.tri` implements an on-chain registry as a Merkle tree
 of content-addressed definitions, written in Trident itself. It runs as a Triton VM
 program, providing trustless, on-chain code registration and verification.
 
