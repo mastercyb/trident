@@ -49,8 +49,29 @@ The alternative ecosystems are not alternatives at all:
   quantum-safe), zkApps get 8 fields of on-chain state, and the general-
   purpose VM is still on the roadmap.
 
+- **Nockchain** has the right instincts: UTXO model, Proof-of-Work, no
+  foundation gatekeeping. But it runs on a Hoon-derived VM that is not
+  quantum-resistant (no STARK-native hash, no algebraic field arithmetic),
+  has no privacy primitives, and has no general-purpose programming
+  language — just raw Nock combinators. The architecture is promising; the
+  cryptographic foundation is incomplete.
+
 Every one of these systems makes a compromise. Either you give up quantum
 safety, or privacy, or programmability, or permissionless participation.
+
+Four properties. Every existing system sacrifices at least one:
+
+| System | Quantum-Safe | Private | Programmable | Mineable |
+|--------|:---:|:---:|:---:|:---:|
+| StarkWare/Cairo | Yes | Yes | Yes | **No** (PoS L2) |
+| SP1 / RISC Zero | **No** (Groth16 wrap) | No (default) | Yes | **No** |
+| Aleo | **No** (Pasta curves) | Yes | Yes | **Partial** (stake-gated) |
+| Mina | **No** (Pasta curves) | Partial | **Partial** | **No** |
+| Nockchain | **No** (no STARK hash) | **No** | **No** (raw Nock) | Yes |
+| **Neptune/Triton VM** | **Yes** | **Yes** | **Yes** | **Yes** |
+
+Neptune is the only platform that passes all four tests today. Trident is
+the language that makes it accessible.
 
 Developers should not need a PhD in algebraic geometry to write provable
 programs. They should not need to pick which security property to sacrifice.
@@ -582,6 +603,7 @@ proofs.
 | RISC Zero | Yes (0STARK) | **No** (Groth16/BN254) | Fundamental redesign |
 | Aleo | **No** (Pasta curves) | **No** (Pasta curves) | Complete crypto migration |
 | Mina | **No** (Pasta curves) | **No** (Pasta curves) | Complete crypto migration |
+| Nockchain | **No** (no algebraic hash) | **No** | VM-level redesign |
 | **Triton VM** | **Yes** (FRI + Tip5) | **Yes** (native STARK) | **None needed** |
 
 [Triton VM](https://triton-vm.org/) uses no elliptic curves anywhere. The
@@ -603,6 +625,7 @@ against four requirements: quantum-safe, private, programmable, and mineable.
 | RISC Zero | No (Groth16) | Yes | Yes | No | **No** |
 | Aleo | No (Pasta) | Yes | Yes | Partial | **No** |
 | Mina | No (Pasta) | Partial | Partial | No | **No** |
+| Nockchain | No | No | No (raw Nock) | Yes | **No** |
 | **Triton VM** | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** |
 
 Triton VM is the only system that satisfies all four simultaneously, today,
@@ -628,13 +651,23 @@ projects, teams, and time. Two developers on different continents who write
 the same Merkle verifier with different variable names get the same hash --
 and share the same audit. See [Content-Addressed Code](content-addressing.md).
 
-### Write Once, Prove Anywhere
+### Write Once, Prove Anywhere — Including the Incomplete Platforms
 
 The universal core compiles to any target. Backend extensions add power
 without limiting portability. Choosing Trident is not choosing a single
-ecosystem -- it is choosing all of them. A program written today for Triton
-VM is architecturally ready to compile to Miden, Cairo, and RISC-V zkVMs as
-those backends ship.
+ecosystem — it is choosing all of them.
+
+This is the second half of the four-properties argument. Neptune/Triton VM
+is the only platform that satisfies all four requirements today. But Trident
+also compiles to the incomplete platforms — Cairo, SP1, Miden, EVM, Nock —
+when their tradeoffs are acceptable for your use case. You don't sacrifice
+portability to get the gold standard. You deploy to Neptune for quantum
+safety, privacy, programmability, and permissionless mining. You deploy the
+same source to Ethereum for liquidity and network effects. You deploy to
+Solana for throughput. The code is one. The tradeoffs are per-deployment.
+
+A program written today for Triton VM is architecturally ready to compile
+to Miden, Cairo, RISC-V zkVMs, EVM, WASM, and Nock as those backends ship.
 
 ### The Strategic Position
 
