@@ -62,8 +62,10 @@ Layout:
 - **Commit by default.** After completing a change, commit it. Don't wait
   for the user to say "commit". Only stage without committing when the user
   explicitly asks to stage.
-- **Atomic commits.** Each commit must be a clean, complete feature or fix.
-  Don't commit half-finished work. If unsure whether the change is complete,
+- **Atomic commits.** One logical change per commit. Never combine two
+  independent features, fixes, or refactors in a single commit. If you
+  made two separate changes, make two separate commits. Don't commit
+  half-finished work either — if unsure whether the change is complete,
   ask before committing.
 - **Conventional commits.** Use prefixes: `feat:`, `fix:`, `refactor:`,
   `docs:`, `test:`, `chore:`.
