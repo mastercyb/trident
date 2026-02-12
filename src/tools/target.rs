@@ -332,6 +332,184 @@ impl TargetConfig {
     }
 }
 
+// ─── OS Target Configuration ───────────────────────────────────────
+
+/// OS target configuration parsed from `os/<name>/target.toml`.
+///
+/// An OS target describes a blockchain or runtime environment that
+/// runs on top of a VM. The `vm` field maps the OS to its underlying
+/// VM (e.g. "neptune" → "triton", "starknet" → "cairo").
+#[derive(Clone, Debug)]
+pub struct OsConfig {
+    /// OS name (e.g. "neptune").
+    pub name: String,
+    /// Display name (e.g. "Neptune").
+    pub display_name: String,
+    /// Underlying VM name (e.g. "triton").
+    pub vm: String,
+    /// Runtime binding prefix (e.g. "os.neptune").
+    pub binding_prefix: String,
+    /// Account model (e.g. "utxo", "account").
+    pub account_model: String,
+    /// Storage model (e.g. "merkle-authenticated", "key-value").
+    pub storage_model: String,
+    /// Transaction model (e.g. "proof-based", "signed").
+    pub transaction_model: String,
+}
+
+impl OsConfig {
+    /// Try to resolve an OS config by name.
+    ///
+    /// Searches for `os/<name>/target.toml` relative to the compiler
+    /// binary and the current working directory.
+    /// Returns `Ok(None)` if no OS config file exists for this name.
+    /// Returns `Err` if the file exists but is malformed.
+    pub fn resolve(name: &str) -> Result<Option<Self>, Diagnostic> {
+        // Reject path traversal
+        if name.contains('/') || name.contains('\\') || name.contains("..") || name.starts_with('.')
+        {
+            return Ok(None);
+        }
+
+        let target_path = format!("os/{}/target.toml", name);
+
+        // 1. Relative to compiler binary
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                for ancestor in &[
+                    Some(dir.to_path_buf()),
+                    dir.parent().map(|p| p.to_path_buf()),
+                    dir.parent()
+                        .and_then(|p| p.parent())
+                        .map(|p| p.to_path_buf()),
+                ] {
+                    if let Some(base) = ancestor {
+                        let path = base.join(&target_path);
+                        if path.exists() {
+                            return Self::load(&path).map(Some);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Current working directory
+        let cwd_path = std::path::PathBuf::from(&target_path);
+        if cwd_path.exists() {
+            return Self::load(&cwd_path).map(Some);
+        }
+
+        Ok(None)
+    }
+
+    /// Load an OS config from a TOML file.
+    pub fn load(path: &Path) -> Result<Self, Diagnostic> {
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            Diagnostic::error(
+                format!("cannot read OS config '{}': {}", path.display(), e),
+                Span::dummy(),
+            )
+        })?;
+        Self::parse_toml(&content, path)
+    }
+
+    fn parse_toml(content: &str, path: &Path) -> Result<Self, Diagnostic> {
+        let err =
+            |msg: String| Diagnostic::error(format!("{}: {}", path.display(), msg), Span::dummy());
+
+        let mut name = String::new();
+        let mut display_name = String::new();
+        let mut vm = String::new();
+        let mut binding_prefix = String::new();
+        let mut account_model = String::new();
+        let mut storage_model = String::new();
+        let mut transaction_model = String::new();
+
+        let mut section = String::new();
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                section = trimmed[1..trimmed.len() - 1].trim().to_string();
+                continue;
+            }
+            if let Some((key, value)) = trimmed.split_once('=') {
+                let key = key.trim();
+                let unquoted = value.trim().trim_matches('"');
+
+                match (section.as_str(), key) {
+                    ("os", "name") => name = unquoted.to_string(),
+                    ("os", "display_name") => display_name = unquoted.to_string(),
+                    ("os", "vm") => vm = unquoted.to_string(),
+                    ("runtime", "binding_prefix") => binding_prefix = unquoted.to_string(),
+                    ("runtime", "account_model") => account_model = unquoted.to_string(),
+                    ("runtime", "storage_model") => storage_model = unquoted.to_string(),
+                    ("runtime", "transaction_model") => transaction_model = unquoted.to_string(),
+                    _ => {}
+                }
+            }
+        }
+
+        if name.is_empty() {
+            return Err(err("missing os.name".to_string()));
+        }
+        if vm.is_empty() {
+            return Err(err("missing os.vm".to_string()));
+        }
+
+        Ok(Self {
+            name,
+            display_name,
+            vm,
+            binding_prefix,
+            account_model,
+            storage_model,
+            transaction_model,
+        })
+    }
+}
+
+// ─── Combined Target Resolution ────────────────────────────────────
+
+/// Resolved target: either a bare VM or an OS+VM combination.
+///
+/// When the user passes `--target neptune`, we load the OS config first
+/// (which tells us the VM is "triton"), then load the VM config. When
+/// they pass `--target triton`, we load the VM config directly.
+#[derive(Clone, Debug)]
+pub struct ResolvedTarget {
+    /// VM configuration (always present).
+    pub vm: TargetConfig,
+    /// OS configuration (present only if the target name was an OS).
+    pub os: Option<OsConfig>,
+}
+
+impl ResolvedTarget {
+    /// Resolve a target name: try OS first, then fall back to VM.
+    ///
+    /// This matches the resolution order from `docs/reference/targets.md`:
+    /// 1. Is `<name>` an OS? Load `os/<name>/target.toml`, derive VM.
+    /// 2. Is `<name>` a VM? Load `vm/<name>/target.toml`.
+    /// 3. Neither? Error.
+    pub fn resolve(name: &str) -> Result<Self, Diagnostic> {
+        // 1. Try OS
+        if let Some(os_config) = OsConfig::resolve(name)? {
+            let vm = TargetConfig::resolve(&os_config.vm)?;
+            return Ok(ResolvedTarget {
+                vm,
+                os: Some(os_config),
+            });
+        }
+
+        // 2. Try VM
+        let vm = TargetConfig::resolve(name)?;
+        Ok(ResolvedTarget { vm, os: None })
+    }
+}
+
 /// Parse a minimal TOML string array: `["a", "b", "c"]` → `vec!["a", "b", "c"]`.
 fn parse_string_array(s: &str) -> Vec<String> {
     let s = s.trim();
@@ -498,5 +676,76 @@ limbs = 4
     fn test_resolve_unknown_target() {
         let result = TargetConfig::resolve("nonexistent_vm");
         assert!(result.is_err());
+    }
+
+    // ── OsConfig ───────────────────────────────────────────────
+
+    #[test]
+    fn test_os_config_parse_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("target.toml");
+        std::fs::write(
+            &path,
+            r#"
+[os]
+name = "test_os"
+display_name = "Test OS"
+vm = "triton"
+
+[runtime]
+binding_prefix = "os.test_os"
+account_model = "utxo"
+storage_model = "merkle-authenticated"
+transaction_model = "proof-based"
+"#,
+        )
+        .unwrap();
+
+        let config = OsConfig::load(&path).unwrap();
+        assert_eq!(config.name, "test_os");
+        assert_eq!(config.display_name, "Test OS");
+        assert_eq!(config.vm, "triton");
+        assert_eq!(config.binding_prefix, "os.test_os");
+        assert_eq!(config.account_model, "utxo");
+        assert_eq!(config.storage_model, "merkle-authenticated");
+        assert_eq!(config.transaction_model, "proof-based");
+    }
+
+    #[test]
+    fn test_os_config_missing_vm() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("target.toml");
+        std::fs::write(
+            &path,
+            r#"
+[os]
+name = "broken"
+display_name = "Broken"
+"#,
+        )
+        .unwrap();
+
+        assert!(OsConfig::load(&path).is_err());
+    }
+
+    #[test]
+    fn test_os_config_resolve_nonexistent() {
+        let result = OsConfig::resolve("definitely_not_an_os").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_os_config_resolve_rejects_traversal() {
+        let result = OsConfig::resolve("../etc/passwd").unwrap();
+        assert!(result.is_none());
+    }
+
+    // ── ResolvedTarget ─────────────────────────────────────────
+
+    #[test]
+    fn test_resolved_target_vm_only() {
+        let resolved = ResolvedTarget::resolve("triton").unwrap();
+        assert_eq!(resolved.vm.name, "triton");
+        assert!(resolved.os.is_none());
     }
 }

@@ -33,6 +33,7 @@ pub use pkgmgmt::poseidon2;
 pub use pkgmgmt::registry;
 pub use pkgmgmt::ucm;
 pub use tools::lsp;
+pub use tools::package as artifact;
 pub use tools::project;
 pub use tools::resolve;
 pub use tools::scaffold;

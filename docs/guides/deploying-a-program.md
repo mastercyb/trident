@@ -9,6 +9,102 @@ real system.
 
 ---
 
+## 🛠️ CLI Commands
+
+Trident provides two commands for the deployment pipeline:
+
+- **`trident package`** — compile, hash, and produce a self-contained artifact
+- **`trident deploy`** — package + publish to a registry server (or blockchain node)
+
+### `trident deploy` — Deploy to a Server
+
+The `deploy` command is the **last mile**. It compiles your program, packages
+the artifact, and deploys it to a registry server:
+
+```bash
+# Compile + package + deploy to default registry (localhost:8090)
+trident deploy lock.tri --target neptune
+
+# Deploy to a specific registry
+trident deploy my_project/ --registry http://prod-registry:8090
+
+# Verify before deploying (runs symbolic verification)
+trident deploy lock.tri --verify
+
+# Deploy a pre-packaged artifact directly
+trident deploy lock.deploy/
+
+# Dry run — see what would happen without deploying
+trident deploy lock.tri --dry-run
+```
+
+### `trident package` — Build an Artifact
+
+The `package` command produces a `.deploy/` directory without deploying it
+anywhere. Use this when you want to inspect the artifact, archive it, or
+deploy it later:
+
+```bash
+# Compile + hash + produce artifact
+trident package lock.tri --target neptune
+
+# Package with verification
+trident package lock.tri --verify
+
+# Output to a custom directory
+trident package lock.tri -o /artifacts/
+```
+
+### Artifact Format
+
+Both commands produce the same `.deploy/` directory:
+
+```
+my_program.deploy/
+  program.tasm        # Compiled TASM artifact
+  manifest.json       # Metadata (see below)
+```
+
+The `manifest.json` contains everything needed for integration:
+
+```json
+{
+  "name": "my_program",
+  "version": "0.1.0",
+  "program_digest": "a1b2c3...64hex",
+  "source_hash": "d4e5f6...64hex",
+  "target": {
+    "vm": "triton",
+    "os": "neptune",
+    "architecture": "stack"
+  },
+  "cost": {
+    "processor": 512,
+    "hash": 128,
+    "u32": 64,
+    "padded_height": 1024
+  },
+  "functions": [
+    { "name": "main", "hash": "abcdef...64hex", "signature": "fn main()" }
+  ],
+  "entry_point": "main",
+  "built_at": "2026-02-11T12:00:00Z",
+  "compiler_version": "0.1.0"
+}
+```
+
+Key fields:
+- **`program_digest`** — Poseidon2 hash of the compiled TASM. This is what
+  verifiers check proofs against. Same source always produces the same digest.
+- **`source_hash`** — BLAKE3 content hash of the source AST.
+- **`cost`** — table heights for proving cost estimation.
+- **`functions`** — per-function content hashes and signatures.
+
+Both commands default to `--profile release` (unlike `build` which defaults to
+`debug`), because deployment artifacts should be release-optimized.
+
+---
+
 ## 📦 What "Deployment" Means for ZK Programs
 
 A Trident program compiles to a `.tasm` file -- a sequence of Triton VM
@@ -86,12 +182,18 @@ fn main() {
 ### Deployment Flow for Neptune
 
 1. Write your lock script or type script as a Trident program.
-2. Compile it: `trident build lock.tri -o lock.tasm`
-3. The compiled TASM is hashed (Tip5) to produce the `lock_script_hash`.
+2. Deploy it: `trident deploy lock.tri --target neptune --registry <url>`
+3. The `program_digest` from `manifest.json` is the `lock_script_hash`.
 4. When creating a UTXO, embed the `lock_script_hash` in the UTXO data.
 5. When spending, the prover executes the TASM program with the appropriate
    inputs and produces a STARK proof.
 6. The network verifies the proof against the program hash and kernel hash.
+
+Or step by step:
+```bash
+trident package lock.tri --target neptune   # produce artifact
+trident deploy lock.deploy/                 # deploy pre-packaged artifact
+```
 
 The relevant standard library modules for Neptune deployment:
 
@@ -170,16 +272,27 @@ these steps in order:
 
 Complete the build pipeline: `trident check`, `trident test`, `trident build --costs`. See [Compiling a Program](compiling-a-program.md) and [Optimization Guide](optimization.md).
 
-### 2. Build the Final Artifact
+### 2. Package the Artifact
 
 ```bash
-trident build main.tri -o main.tasm
+trident package main.tri --target neptune --verify
 ```
 
-This is the artifact you deploy. The Tip5 hash of this TASM program is its
-identity -- the `program_digest` that verifiers will check proofs against.
+This compiles, verifies, and produces the `.deploy/` directory. The
+`program_digest` in `manifest.json` is the program's identity -- the hash
+that verifiers check proofs against.
 
-### 3. Integrate
+### 3. Deploy
+
+```bash
+# Deploy from source (packages automatically)
+trident deploy main.tri --target neptune --registry http://prod:8090
+
+# Or deploy the pre-packaged artifact
+trident deploy main.deploy/ --registry http://prod:8090
+```
+
+### 4. Integrate
 
 - **Neptune Cash**: Embed the `lock_script_hash` (Tip5 hash of the compiled
   TASM) in the UTXO you create. Provide the full TASM as witness data when
