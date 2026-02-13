@@ -73,7 +73,7 @@ Layout:
 
 ```
 cargo check          # type-check
-cargo test           # 743+ tests
+cargo test           # 756+ tests
 cargo build --release
 ```
 

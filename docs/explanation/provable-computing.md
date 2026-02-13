@@ -219,7 +219,7 @@ Systems are assessed on technical merit, maturity, ecosystem strength, and align
 - Neptune had an inflation bug — demonstrates the fragility of a tiny team doing security-critical work
 - Neptune token ($NPT) at ~$0.57 — no meaningful market, no liquidity, no institutional interest
 - No ecosystem to speak of — no package manager, no developer tools, no third-party libraries, no conferences, no community beyond Neptune's own users
-- Historically lacked a high-level language — programs had to be written in TASM (assembly) or use tasm-lib snippets. The Trident language now addresses this with a full compiler (43K lines of Rust, 743 tests), type checker, cost analyzer, formatter, LSP, and formal verification tools.
+- Historically lacked a high-level language — programs had to be written in TASM (assembly) or use tasm-lib snippets. The Trident language now addresses this with a full compiler (43K lines of Rust, 756 tests), type checker, cost analyzer, formatter, LSP, and formal verification tools.
 - RISC-V programs cannot run here — must rewrite everything targeting Triton's custom ISA
 - Proving times for large programs (millions of clock cycles) can reach minutes — acceptable for blockchain but slow for interactive applications
 - Limited documentation compared to Tier 1 systems
@@ -381,7 +381,7 @@ Triton's recursive proof-of-proof architecture is uniquely powerful here: rather
 | Cost visible | Static, compile-time* | Gas model | Transaction cost | No | Proving time | Undecidable |
 | Quantum-safe | Yes | Partial | No | No | No | Yes |
 | Trusted setup | None | None | MPC (universal SRS) | SRS | None (bulletproof) | None |
-| Maturity | **Implemented** (743 tests, 43K LOC) | Production | Production | Production | Production | Early |
+| Maturity | **Implemented** (756 tests, 43K LOC) | Production | Production | Production | Production | Early |
 
 *\*Trident's static cost visibility applies to the Triton VM target. If the compiler gains additional backends, cost tables and instruction weights will differ per target; the compiler must carry a separate cost model for each.*
 

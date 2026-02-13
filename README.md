@@ -105,6 +105,8 @@ trident check main.tri           # type-check without emitting
 trident fmt main.tri             # format source
 trident test main.tri            # run #[test] functions
 trident verify main.tri          # formal verification
+trident package main.tri         # produce .deploy/ artifact
+trident deploy main.tri          # package + deploy to registry
 ```
 
 ---

@@ -460,7 +460,7 @@ This creates a spectrum of trust: deploy the same logic directly (transparent, a
 
 ### What exists today
 
-- **Triton VM backend:** Production-quality. Full type system, bounded loops, modules, cost analysis, 743 tests.
+- **Triton VM backend:** Production-quality. Full type system, bounded loops, modules, cost analysis, 756 tests.
 - **Miden VM backend:** Lowering implemented. Inline `if.true/else/end` control flow, correct instruction set. Not validated against Miden runtime.
 - **TIR pipeline:** Operational. `TIRBuilder` produces `Vec<TIROp>` from AST. `TritonLowering` and `MidenLowering` produce assembly from TIR. Adding new lowerings is mechanical.
 - **20 VM + 25 OS configurations:** TOML configs with field parameters, stack depth, cost tables. Each lives in `vm/{name}/target.toml` and `os/{name}/target.toml`.

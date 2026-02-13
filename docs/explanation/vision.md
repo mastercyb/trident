@@ -57,7 +57,7 @@ what a STARK prover requires. See [For Offchain Devs](for-offchain-devs.md) for
 the full language model.
 
 The compiler is ~43K lines of Rust with 5 runtime dependencies. 25 standard
-library modules. 743 tests. 20 VM targets. 25 OS targets. 53 `.tri` files.
+library modules. 756 tests. 20 VM targets. 25 OS targets. 53 `.tri` files.
 
 For architecture details, see [Multi-Target Compilation](multi-target.md).
 For hash performance and quantum safety comparisons, see

@@ -77,7 +77,7 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 
 ## Test Coverage
 
-743 tests across all modules, including:
+756 tests across all modules, including:
 - Parser round-trip tests (parse -> format -> re-parse)
 - Type checker positive and negative cases
 - Code generation output validation per backend

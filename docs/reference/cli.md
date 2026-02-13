@@ -77,6 +77,11 @@ trident registry serve                  # Start local registry server
 trident registry publish                # Publish codebase to registry
 trident registry pull <hash>            # Pull definition by hash
 trident registry search <query>         # Search definitions
+trident registry onchain-init           # Initialize on-chain Merkle registry
+trident registry onchain-register <name>  # Register definition on-chain
+trident registry onchain-verify <name>  # Verify on-chain definition
+trident registry onchain-certify <name> -i <file>  # Certify with proof
+trident registry onchain-status         # Show on-chain registry status
 
 # Dependencies
 trident deps list                       # Show declared dependencies
