@@ -40,7 +40,8 @@ exists and what it's building toward.
 
 Every other ZK system trades away at least one of: quantum safety, privacy,
 programmability, or permissionless participation.
-[Neptune is the only OS that passes all four tests](docs/explanation/vision.md#the-problem).
+[Neptune](https://neptune.cash/) is the only OS that passes all four tests —
+and Trident is the language that makes it programmable.
 
 What you see is what you prove. Source compiles through a 54-operation
 [intermediate representation](docs/reference/ir.md) that maps nearly 1:1 to
