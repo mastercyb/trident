@@ -56,6 +56,16 @@ Layout:
 - `std/` — pure Trident library code (no `#[intrinsic]`)
 - Module resolution: `src/tools/resolve.rs`
 
+## Parallel Agents
+
+When a task touches many files across the repo (bold cleanup, renaming,
+cross-reference updates), split it into parallel agents with
+non-overlapping file scopes. Before launching agents, partition by
+directory or filename so no two agents edit the same file. Example
+partitions: `docs/explanation/` vs `docs/reference/` vs `docs/guides/`
+vs `os/` vs `vm/`. Never let scopes overlap — conflicting writes cause
+agents to revert each other's work.
+
 ## Git Workflow
 
 - Commit by default. After completing a change, commit it. Don't wait
