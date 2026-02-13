@@ -20,9 +20,9 @@ use crate::target::{Arch, OsConfig, TargetConfig};
 
 // ─── Data Types ────────────────────────────────────────────────────
 
-/// A deployment manifest — all metadata about a deployed program.
+/// Package manifest — all metadata about a packaged program artifact.
 #[derive(Clone, Debug)]
-pub struct DeployManifest {
+pub struct PackageManifest {
     pub name: String,
     pub version: String,
     /// Poseidon2 hash of the compiled TASM bytes (hex).
@@ -57,9 +57,9 @@ pub struct ManifestFunction {
     pub signature: String,
 }
 
-/// Result of a deploy operation.
-pub struct DeployResult {
-    pub manifest: DeployManifest,
+/// Result of a package operation.
+pub struct PackageResult {
+    pub manifest: PackageManifest,
     pub artifact_dir: PathBuf,
     pub tasm_path: PathBuf,
     pub manifest_path: PathBuf,
@@ -67,7 +67,7 @@ pub struct DeployResult {
 
 // ─── Artifact Generation ───────────────────────────────────────────
 
-/// Generate a deployment artifact from a compiled project.
+/// Generate a package artifact from a compiled project.
 ///
 /// Creates a `<name>.deploy/` directory under `output_base` containing
 /// `program.tasm` and `manifest.json`.
@@ -80,7 +80,7 @@ pub fn generate_artifact(
     target_vm: &TargetConfig,
     target_os: Option<&OsConfig>,
     output_base: &Path,
-) -> Result<DeployResult, String> {
+) -> Result<PackageResult, String> {
     // 1. Compute program_digest = Poseidon2(tasm bytes)
     let digest_bytes = crate::poseidon2::hash_bytes(tasm.as_bytes());
     let program_digest = ContentHash(digest_bytes);
@@ -104,7 +104,7 @@ pub fn generate_artifact(
     .to_string();
 
     // 6. Build manifest
-    let manifest = DeployManifest {
+    let manifest = PackageManifest {
         name: name.to_string(),
         version: version.to_string(),
         program_digest: program_digest.to_hex(),
@@ -139,7 +139,7 @@ pub fn generate_artifact(
     std::fs::write(&manifest_path, manifest.to_json())
         .map_err(|e| format!("cannot write '{}': {}", manifest_path.display(), e))?;
 
-    Ok(DeployResult {
+    Ok(PackageResult {
         manifest,
         artifact_dir,
         tasm_path,
@@ -149,7 +149,7 @@ pub fn generate_artifact(
 
 // ─── JSON Serialization ────────────────────────────────────────────
 
-impl DeployManifest {
+impl PackageManifest {
     /// Serialize to JSON (hand-rolled, no serde dependency).
     pub fn to_json(&self) -> String {
         let mut out = String::from("{\n");
@@ -420,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_manifest_to_json_structure() {
-        let manifest = DeployManifest {
+        let manifest = PackageManifest {
             name: "test".to_string(),
             version: "0.1.0".to_string(),
             program_digest: "aabb".to_string(),
@@ -457,7 +457,7 @@ mod tests {
 
     #[test]
     fn test_manifest_null_os() {
-        let manifest = DeployManifest {
+        let manifest = PackageManifest {
             name: "bare".to_string(),
             version: "0.1.0".to_string(),
             program_digest: "aa".to_string(),

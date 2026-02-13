@@ -16,6 +16,8 @@ trident build <file> --costs            # Print cost analysis
 trident build <file> --hotspots         # Top cost contributors
 trident build <file> --hints            # Optimization hints (H0001-H0004)
 trident build <file> --annotate         # Per-line cost annotations
+trident build <file> --save-costs <json>  # Save cost report to JSON
+trident build <file> --compare <json>   # Compare against baseline costs
 trident build <file> -o <out>           # Custom output path
 
 # Check

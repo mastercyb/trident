@@ -11,11 +11,22 @@ source.tri
     v
  typecheck/    type checking, borrow checking, generics
     |
-    v
- legacy/       old AST-to-assembly emitter (deprecated, comparison tests only)
+    +----> tir/       Trident IR: instruction selection + stack lowering
+    |        +----> triton.rs, miden.rs  (stack targets)
+    |
+    +----> lir/       Low IR: register allocation + native lowering
+    |        +----> x86_64.rs, arm64.rs, riscv.rs
+    |
+    +----> kir/       Kernel IR: GPU/accelerator lowering
+    |        +----> cuda.rs, metal.rs, vulkan.rs
+    |
+    +----> tree/      Tree IR: combinator-based lowering
+    |        +----> nock.rs
+    |
+    +----> legacy/    old AST-to-assembly emitter (deprecated)
     |
     v
- output.tasm
+ output.tasm / .masm / .nock / etc.
 ```
 
 Parallel to the main pipeline, several modules provide analysis, tooling, and package management:
@@ -34,6 +45,10 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 | [`common/`](common/) | 314 | Shared infrastructure: [source spans](common/span.rs), [diagnostics](common/diagnostic.rs), [type definitions](common/types.rs) |
 | [`frontend/`](frontend/) | 4,392 | [Lexer](frontend/lexer.rs), [parser](frontend/parser.rs), [token definitions](frontend/lexeme.rs), [pretty-printer/formatter](frontend/format.rs) |
 | [`typecheck/`](typecheck/) | 3,004 | [Type checker](typecheck/mod.rs) with borrow analysis, generics, and [builtin registration](typecheck/builtins.rs) |
+| [`tir/`](tir/) | 2,680 | Trident IR: [opcode definitions](tir/mod.rs), [AST→TIR builder](tir/builder/), stack [lowering](tir/lower/) for [Triton](tir/lower/triton.rs) and [Miden](tir/lower/miden.rs) |
+| [`lir/`](lir/) | 823 | Low IR: [register IR](lir/mod.rs), [TIR→LIR conversion](lir/convert.rs), native [lowering](lir/lower/) for [x86-64](lir/lower/x86_64.rs), [ARM64](lir/lower/arm64.rs), [RISC-V](lir/lower/riscv.rs) |
+| [`kir/`](kir/) | 98 | Kernel IR: GPU/accelerator [lowering](kir/lower/) for [CUDA](kir/lower/cuda.rs), [Metal](kir/lower/metal.rs), [Vulkan](kir/lower/vulkan.rs) |
+| [`tree/`](tree/) | 620 | Tree IR: combinator-based [lowering](tree/lower/) for [Nock](tree/lower/nock.rs) |
 | [`legacy/`](legacy/) | 4,189 | Old AST-to-assembly [emitter](legacy/emitter/), [backend trait](legacy/backend/) (deprecated) |
 | [`stack.rs`](stack.rs) | — | LRU [stack manager](stack.rs) with automatic RAM spill/reload |
 | [`linker.rs`](linker.rs) | — | Multi-module [linker](linker.rs) for cross-module calls |
@@ -42,7 +57,7 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 | [`cost/model/`](cost/model/) | 771 | [`CostModel`](cost/model/mod.rs) trait + four targets: [Triton](cost/model/triton.rs), [Miden](cost/model/miden.rs), [Cycle](cost/model/cycle.rs), [Cairo](cost/model/cairo.rs) |
 | [`verify/`](verify/) | 5,570 | [Symbolic execution](verify/sym.rs), [constraint solving](verify/solve.rs), [SMT encoding](verify/smt.rs), [equivalence checking](verify/equiv.rs), [invariant synthesis](verify/synthesize.rs), [JSON reports](verify/report.rs) |
 | [`pkgmgmt/`](pkgmgmt/) | 7,737 | [BLAKE3 hashing](pkgmgmt/hash.rs), [Poseidon2](pkgmgmt/poseidon2.rs), [UCM codebase](pkgmgmt/ucm.rs), [registry server/client](pkgmgmt/registry.rs), [on-chain Merkle registry](pkgmgmt/onchain.rs), [dependency manifests](pkgmgmt/manifest.rs), [compilation cache](pkgmgmt/cache.rs) |
-| [`tools/`](tools/) | 3,960 | [Language Server](tools/lsp.rs), [code scaffolding](tools/scaffold.rs), [definition viewer](tools/view.rs), [project config](tools/project.rs), [module resolution](tools/resolve.rs), [target configuration](tools/target.rs) |
+| [`tools/`](tools/) | 4,300 | [Language Server](tools/lsp.rs), [code scaffolding](tools/scaffold.rs), [definition viewer](tools/view.rs), [project config](tools/project.rs), [module resolution](tools/resolve.rs), [target configuration](tools/target.rs), [artifact packaging](tools/package.rs) |
 
 ## Top-Level Files
 

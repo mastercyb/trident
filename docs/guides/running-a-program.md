@@ -1,5 +1,8 @@
 # ▶️ Running a Program
 
+This is the third stage of the Trident program lifecycle:
+**Writing** -> **Compiling** -> **Running** -> **Deploying** -> **Generating Proofs** -> **Verifying Proofs**.
+
 Trident is a compiler, not a runtime. After `trident build` produces a `.tasm` file, execution happens inside [Triton VM](https://triton-vm.org/) -- a STARK-based zero-knowledge virtual machine. Trident's job ends at code generation; the VM takes it from there.
 
 This guide covers how compiled Trident programs execute, how to feed them input, and how to test and debug them using the tools available today.
