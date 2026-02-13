@@ -79,6 +79,8 @@ The model is also complete because tokens are both subjects and objects. A coin 
 
 A new standard would require a new conservation law — a third mathematical invariant incompatible with both divisible supply and unique ownership. No such invariant exists in token systems. Two is not a simplification. Two is the number.
 
+Both standards share the same foundation: 10-field leaves, same config, same hooks, same proof pipeline. Only constraint polynomials differ. Tooling that understands one understands 90% of the other.
+
 ### 2.4 Proven Price
 
 A token knows its supply — the circuit enforces `Σ balances = supply` on every operation. Price should work the same way. In a provable blockchain, every swap is a STARK proof. Price and volume are free byproducts of proven swaps. The question is how to aggregate them into a signal that the token itself can consume.
@@ -294,31 +296,11 @@ For delegated spending: `auth_hash` derived keys + Delegation skill tracking cum
 
 ---
 
-## 📐 4. Two Standards on PLUMB
-
-### 4.1 Why Two, Not One
-
-Coins and cards have incompatible conservation laws. Forcing both into one circuit creates branching that inflates the Algebraic Execution Table for every proof.
-
-A coin with `balance ∈ {0,1}` is not a card — it lacks uniqueness proofs, metadata binding, royalty enforcement. A card with `supply > 1` is not a coin — it lacks divisible arithmetic and range checks.
-
-Two lean circuits always outperform one bloated circuit with conditional branches.
-
-### 4.2 Why Not Three
-
-In Ethereum, ERC-1155 exists because contract deployment is expensive. In Neptune, creating a new token = new config + new tree. Negligible cost. Batching is proof aggregation, not a multi-token contract.
-
-### 4.3 Why This Works for Triton VM
-
-The expensive resource is the circuit (AIR constraints). The cheap resource is leaf data. Both standards use 10-field leaves, same config, same hooks, same proof pipeline. Only constraint polynomials differ. Tooling that understands one understands 90% of the other.
-
----
-
-## 🥇 5. TSP-1 — Coin Standard
+## 🥇 4. TSP-1 — Coin Standard
 
 *PLUMB implementation for divisible assets*
 
-### 5.1 Account Leaf — 10 field elements
+### 4.1 Account Leaf — 10 field elements
 
 ```trident
 leaf = hash(account_id, balance, nonce, auth_hash, lock_until,
@@ -354,14 +336,14 @@ When `locked_by ≠ 0`, the account's tokens are committed to a specific program
 
 Unlike `lock_until` (time-based), `locked_by` is program-based locking: only a proof from the `locked_by` program can unlock the account. The lock can be released before `lock_until` if the program authorizes it (e.g. on redemption).
 
-### 5.2 Token Metadata
+### 4.2 Token Metadata
 
 ```trident
 metadata = hash(name_hash, ticker_hash, teaser_hash, site_hash, custom_hash,
                 price_oracle, volume_oracle, 0, 0, 0)
 ```
 
-### 5.3 Circuit Constraints
+### 4.3 Circuit Constraints
 
 #### Op 0: Pay
 1. Config verified, `pay_auth` and `pay_hook` extracted
@@ -406,11 +388,11 @@ metadata = hash(name_hash, ticker_hash, teaser_hash, site_hash, custom_hash,
 
 ---
 
-## 🥇 6. TSP-2 — Card Standard
+## 🥇 5. TSP-2 — Card Standard
 
 *PLUMB implementation for unique assets*
 
-### 6.1 What Differs from TSP-1
+### 5.1 What Differs from TSP-1
 
 1. Leaf represents an asset (unique item), not an account balance
 2. Invariant: uniqueness (`owner_count(id) = 1`) not divisible supply
@@ -421,7 +403,7 @@ metadata = hash(name_hash, ticker_hash, teaser_hash, site_hash, custom_hash,
 
 Operations are still Pay, Lock, Update, Mint, Burn — PLUMB operations. What changes is what the circuit enforces inside each.
 
-### 6.2 Asset Leaf — 10 field elements
+### 5.2 Asset Leaf — 10 field elements
 
 ```trident
 leaf = hash(asset_id, owner_id, nonce, auth_hash, lock_until,
@@ -463,7 +445,7 @@ When `collection_id ≠ 0`, the asset belongs to a collection identified by its 
 
 `creator_id` is set at mint and can never change. Every subsequent operation preserves it. This provides an unforgeable provenance chain. The Royalties skill depends on this: hooks read `royalty_bps` from the leaf and `royalty_receiver` from collection metadata.
 
-### 6.3 Collection Metadata — 10 field elements
+### 5.3 Collection Metadata — 10 field elements
 
 ```trident
 metadata = hash(name_hash, description_hash, image_hash, site_hash, custom_hash,
@@ -481,7 +463,7 @@ metadata = hash(name_hash, description_hash, image_hash, site_hash, custom_hash,
 | `royalty_receiver` | Field | Account that receives royalties on transfers |
 | *reserved* | Field×3 | Extension space |
 
-### 6.4 Circuit Constraints
+### 5.4 Circuit Constraints
 
 All 5 operations follow the PLUMB proof envelope (section 3.2).
 
@@ -535,9 +517,9 @@ Metadata update: Owner auth, `flags & UPDATABLE`, only `metadata_hash` changes, 
 
 ---
 
-## 🧰 7. Skill Library
+## 🧰 6. Skill Library
 
-### 7.1 What Is a Skill
+### 6.1 What Is a Skill
 
 A skill is a composable package that teaches a token a new behavior. Every skill has the same anatomy:
 
@@ -551,7 +533,7 @@ A skill is a composable package that teaches a token a new behavior. Every skill
 
 A token with no skills is a bare TSP-1 or TSP-2 — it can pay, lock, update, mint, and burn. Each skill you add teaches it a new behavior.
 
-### 7.2 How Skills Compose
+### 6.2 How Skills Compose
 
 Multiple skills can be active on the same token simultaneously. When multiple skills install hooks on the same operation, their proofs compose independently:
 
@@ -566,7 +548,7 @@ Pay operation with Compliance + Fee-on-Transfer + Liquidity:
 
 Convention: access control hooks verify first, then financial hooks, then composition hooks.
 
-### 7.3 Skill Tiers
+### 6.3 Skill Tiers
 
 | Tier | Focus | Skills |
 |------|-------|-------------|
@@ -577,9 +559,9 @@ Convention: access control hooks verify first, then financial hooks, then compos
 
 ---
 
-## 🔧 8. Core Skills
+## 🔧 7. Core Skills
 
-### 8.1 Supply Cap
+### 7.1 Supply Cap
 
 | | |
 |---|---|
@@ -591,7 +573,7 @@ Convention: access control hooks verify first, then financial hooks, then compos
 
 The hook verifies: `new_supply <= max_supply` (read from metadata or hardcoded in hook parameters). Without this skill, TSP-1 minting is uncapped. With it, the cap is provably enforced.
 
-### 8.2 Delegation
+### 7.2 Delegation
 
 | | |
 |---|---|
@@ -610,7 +592,7 @@ delegation = hash(owner, delegate, token, limit, spent, expiry, 0, 0, 0, 0)
 
 On pay, the hook checks: if caller is delegate, verify `spent + amount ≤ limit` and `current_time < expiry`, then `spent += amount`. Owner revokes by changing `auth_hash`.
 
-### 8.3 Vesting
+### 7.3 Vesting
 
 | | |
 |---|---|
@@ -627,7 +609,7 @@ schedule = hash(beneficiary, total_amount, start_time, cliff, duration, claimed,
 
 On mint: `elapsed = current_time - start_time`. If `elapsed < cliff`: reject. `vested = total_amount × min(elapsed, duration) / duration`. `amount ≤ vested - claimed`. `claimed += amount`.
 
-### 8.4 Royalties (TSP-2)
+### 7.4 Royalties (TSP-2)
 
 | | |
 |---|---|
@@ -644,7 +626,7 @@ On every TSP-2 transfer, the hook:
 
 Enforced at the protocol level. No wrapper contract bypass.
 
-### 8.5 Multisig / Threshold
+### 7.5 Multisig / Threshold
 
 | | |
 |---|---|
@@ -656,7 +638,7 @@ Enforced at the protocol level. No wrapper contract bypass.
 
 Deploy a TSP-1 token with `supply = N`, one per signer. On config update, the threshold hook requires M composed pay proofs from token holders. The token IS the membership. The hook IS the threshold logic. Not a separate primitive.
 
-### 8.6 Timelock
+### 7.6 Timelock
 
 | | |
 |---|---|
@@ -670,9 +652,9 @@ Config changes are queued and can only execute after the delay period. Prevents 
 
 ---
 
-## 💰 9. Financial Skills
+## 💰 8. Financial Skills
 
-### 9.1 Liquidity (TIDE)
+### 8.1 Liquidity (TIDE)
 
 *Tokens In Direct Exchange*
 
@@ -754,7 +736,7 @@ Pluggable ZK circuits. Reference implementations:
 | Capital in governance | No | Yes | Yes |
 | MEV surface | Large | Reduced | Minimal |
 
-### 9.2 Oracle Pricing (COMPASS)
+### 8.2 Oracle Pricing (COMPASS)
 
 *External data attestation with STARK proofs*
 
@@ -807,7 +789,7 @@ In Chainlink or Pyth, oracle data comes with a signature — you trust the signe
 
 Oracle proofs are STARKs. They can be relayed to other chains and verified without trusting a bridge or multisig.
 
-### 9.3 Vault / Yield-Bearing
+### 8.3 Vault / Yield-Bearing
 
 | | |
 |---|---|
@@ -819,7 +801,7 @@ Oracle proofs are STARKs. They can be relayed to other chains and verified witho
 
 On deposit: mint shares proportional to deposited assets. On withdrawal: burn shares, release proportional assets. Inflation attack defense built into the hook (initial offset at deployment).
 
-### 9.4 Lending / Collateral
+### 8.4 Lending / Collateral
 
 | | |
 |---|---|
@@ -837,7 +819,7 @@ Supply flow:
 
 Liquidation: If `health_factor < 1` (checked via Oracle Pricing), anyone can prove the condition and execute — liquidator covers debt, receives collateral at discount.
 
-### 9.5 Staking
+### 8.5 Staking
 
 | | |
 |---|---|
@@ -849,7 +831,7 @@ Liquidation: If `health_factor < 1` (checked via Oracle Pricing), anyone can pro
 
 Combined with Vault skill for a liquid staking token (LST): deposit native token → receive LST that appreciates as staking rewards accrue.
 
-### 9.6 Stablecoin
+### 8.6 Stablecoin
 
 | | |
 |---|---|
@@ -863,9 +845,9 @@ Mint hook composes with: Oracle Pricing proof (collateral price), TSP-1 lock pro
 
 ---
 
-## 🔐 10. Access Control Skills
+## 🔐 9. Access Control Skills
 
-### 10.1 Compliance (Whitelist / Blacklist)
+### 9.1 Compliance (Whitelist / Blacklist)
 
 | | |
 |---|---|
@@ -881,7 +863,7 @@ Blacklist: Non-membership proofs — proves addresses are NOT in the blocked set
 
 Use cases: regulated tokens, accredited investor restrictions, sanctioned address blocking.
 
-### 10.2 KYC Gate
+### 9.2 KYC Gate
 
 | | |
 |---|---|
@@ -893,7 +875,7 @@ Use cases: regulated tokens, accredited investor restrictions, sanctioned addres
 
 The hook requires a composed proof that the recipient holds a valid soulbound credential (TSP-2 with `flags = 0`).
 
-### 10.3 Transfer Limits
+### 9.3 Transfer Limits
 
 | | |
 |---|---|
@@ -903,7 +885,7 @@ The hook requires a composed proof that the recipient holds a valid soulbound cr
 | Config | `pay_hook` must be set |
 | Composes with | Compliance, Delegation |
 
-### 10.4 Controller Gate
+### 9.4 Controller Gate
 
 | | |
 |---|---|
@@ -915,7 +897,7 @@ The hook requires a composed proof that the recipient holds a valid soulbound cr
 
 Verifies a composed proof from the leaf's `controller` program. Enables escrow, protocol treasuries, and program-controlled accounts.
 
-### 10.5 Soulbound (TSP-2)
+### 9.5 Soulbound (TSP-2)
 
 | | |
 |---|---|
@@ -927,7 +909,7 @@ Verifies a composed proof from the leaf's `controller` program. Enables escrow, 
 
 Also achievable without a hook: mint with `flags = 0` (TRANSFERABLE bit clear). The hook version works for TSP-1 tokens that lack per-leaf flags.
 
-### 10.6 Fee-on-Transfer
+### 9.6 Fee-on-Transfer
 
 | | |
 |---|---|
@@ -939,9 +921,9 @@ Also achievable without a hook: mint with `flags = 0` (TRANSFERABLE bit clear). 
 
 ---
 
-## 🔗 11. Composition Skills
+## 🔗 10. Composition Skills
 
-### 11.1 Bridging
+### 10.1 Bridging
 
 | | |
 |---|---|
@@ -953,7 +935,7 @@ Also achievable without a hook: mint with `flags = 0` (TRANSFERABLE bit clear). 
 
 Mint on destination chain requires STARK proof of lock on source chain. Burn on destination produces proof for release on source chain. No trusted bridge or multisig.
 
-### 11.2 Subscription / Streaming Payments
+### 10.2 Subscription / Streaming Payments
 
 | | |
 |---|---|
@@ -965,7 +947,7 @@ Mint on destination chain requires STARK proof of lock on source chain. Burn on 
 
 Service provider registers as delegate with monthly `limit` and `expiry`. Each period, service calls pay using delegation authority. Hook enforces rate limit. User revokes by changing `auth_hash`.
 
-### 11.3 Burn-to-Redeem
+### 10.3 Burn-to-Redeem
 
 | | |
 |---|---|
@@ -983,7 +965,7 @@ Burn(TSP-2 item) → receipt proof ⊗ Mint(TSP-1 reward token)
 
 Use cases: burn card to claim physical goods, burn ticket for event access, burn old token for upgraded version, crafting (burn materials → mint result).
 
-### 11.4 Governance
+### 10.4 Governance
 
 | | |
 |---|---|
@@ -1002,7 +984,7 @@ Uses historical Merkle roots as free balance snapshots. Flow:
 
 No governance primitive needed. Balance snapshots are free — every historical Merkle root is a snapshot.
 
-### 11.5 Batch Operations
+### 10.5 Batch Operations
 
 | | |
 |---|---|
@@ -1016,11 +998,11 @@ Multiple mints composed into a single recursive STARK proof. Useful for airdrops
 
 ---
 
-## 📋 12. Recipes
+## 📋 11. Recipes
 
 Recipes are documented configurations that combine a standard with skills to build specific token types. Pick a standard, pick skills, deploy.
 
-### 12.1 Simple Coin
+### 11.1 Simple Coin
 
 ```text
 Standard: TSP-1    Skills: none
@@ -1029,7 +1011,7 @@ Config: admin_auth=hash(admin), mint_auth=hash(minter), all others=0
 
 The simplest token. Anyone can transfer and burn. Admin can update config. Authorized minter mints.
 
-### 12.2 Immutable Money
+### 11.2 Immutable Money
 
 ```text
 Standard: TSP-1    Skills: none
@@ -1038,7 +1020,7 @@ Config: admin_auth=0 (renounced), mint_auth=0 (disabled), all others=0
 
 After genesis mint, nothing can change. Pure permissionless sound money. The config hash is verifiably immutable.
 
-### 12.3 Regulated Token
+### 11.3 Regulated Token
 
 ```text
 Standard: TSP-1    Skills: Compliance, KYC Gate, Multisig
@@ -1046,7 +1028,7 @@ Config: pay_auth=hash(compliance), pay_hook=PAY_WHITELIST,
         mint_hook=MINT_KYC, update_hook=UPDATE_THRESHOLD
 ```
 
-### 12.4 Art Collection
+### 11.4 Art Collection
 
 ```text
 Standard: TSP-2    Skills: Royalties, Supply Cap
@@ -1054,7 +1036,7 @@ Config: pay_hook=PAY_ROYALTY, mint_hook=MINT_CAP+MINT_UNIQUE
 Flags per asset: transferable=1, burnable=1, updatable=0
 ```
 
-### 12.5 Soulbound Credential
+### 11.5 Soulbound Credential
 
 ```text
 Standard: TSP-2    Skills: Soulbound
@@ -1062,7 +1044,7 @@ Config: mint_auth=hash(issuer), pay_hook=PAY_SOULBOUND
 Flags: transferable=0, burnable=0, updatable=0
 ```
 
-### 12.6 Game Item Collection
+### 11.6 Game Item Collection
 
 ```text
 Standard: TSP-2    Skills: Royalties, Burn-to-Redeem (crafting)
@@ -1071,7 +1053,7 @@ Config: mint_auth=hash(game_server), pay_hook=GAME_RULES,
 Flags: transferable=1, burnable=1, updatable=1
 ```
 
-### 12.7 Yield-Bearing Vault
+### 11.7 Yield-Bearing Vault
 
 ```text
 Standard: TSP-1    Skills: Vault
@@ -1079,7 +1061,7 @@ Config: mint_auth=hash(vault_program),
         mint_hook=VAULT_DEPOSIT, burn_hook=VAULT_WITHDRAW
 ```
 
-### 12.8 Governance Token
+### 11.8 Governance Token
 
 ```text
 Standard: TSP-1    Skills: Governance, Timelock, Multisig
@@ -1087,7 +1069,7 @@ Config: admin_auth=hash(governance_program),
         update_hook=UPDATE_TIMELOCK+UPDATE_THRESHOLD
 ```
 
-### 12.9 Stablecoin
+### 11.9 Stablecoin
 
 ```text
 Standard: TSP-1    Skills: Stablecoin, Oracle Pricing
@@ -1095,7 +1077,7 @@ Config: mint_auth=hash(minting_program),
         mint_hook=STABLECOIN_MINT, burn_hook=STABLECOIN_REDEEM
 ```
 
-### 12.10 Wrapped / Bridged Asset
+### 11.10 Wrapped / Bridged Asset
 
 ```text
 Standard: TSP-1    Skills: Bridging
@@ -1103,7 +1085,7 @@ Config: mint_auth=hash(bridge), burn_auth=hash(bridge),
         mint_hook=BRIDGE_LOCK_PROOF, burn_hook=BRIDGE_RELEASE_PROOF
 ```
 
-### 12.11 Liquid Staking Token
+### 11.11 Liquid Staking Token
 
 ```text
 Standard: TSP-1    Skills: Staking, Vault
@@ -1111,14 +1093,14 @@ Config: mint_auth=hash(staking_program),
         mint_hook=STAKE_DEPOSIT, burn_hook=STAKE_WITHDRAW
 ```
 
-### 12.12 Subscription Service
+### 11.12 Subscription Service
 
 ```text
 Standard: TSP-1    Skills: Delegation, Subscription
 Config: pay_hook=PAY_DELEGATION
 ```
 
-### 12.13 Collateralized Fund
+### 11.13 Collateralized Fund
 
 ```text
 Standard: TSP-1 (collateral) + TSP-1 (shares)
@@ -1130,7 +1112,7 @@ Redeem: TOKEN_B burn, Oracle price proof, TOKEN_A released from fund_account
 Liquidation: health_factor < 1 proven, liquidator covers debt, receives collateral
 ```
 
-### 12.14 Card Marketplace
+### 11.14 Card Marketplace
 
 ```text
 Standard: TSP-2 + TSP-1
@@ -1141,7 +1123,7 @@ Seller transfers card to buyer:
   Composed proof: TSP-2 ⊗ TSP-1(payment) ⊗ TSP-1(royalty) → single verification
 ```
 
-### 12.15 Prediction Market
+### 11.15 Prediction Market
 
 ```text
 Standard: N × TSP-1 (outcome tokens)
@@ -1153,7 +1135,7 @@ Resolve: Oracle attests outcome, winning token redeemable 1:1
 Redeem: burn winner (burn_hook verifies resolution), receive payout
 ```
 
-### 12.16 Name Service
+### 11.16 Name Service
 
 ```text
 Standard: TSP-2    Skills: none (just metadata schema)
@@ -1165,9 +1147,9 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 
 ---
 
-## 🧩 13. Proof Composition Architecture
+## 🧩 12. Proof Composition Architecture
 
-### 13.1 The Composition Stack
+### 12.1 The Composition Stack
 
 ```text
 ┌─────────────────────────────────────────┐
@@ -1197,7 +1179,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 └─────────────────────────────────────────┘
 ```
 
-### 13.2 Composition Rules
+### 12.2 Composition Rules
 
 1. All sub-proofs independently verifiable
 2. Public I/O consistent across sub-proofs (amounts, accounts, timestamps)
@@ -1207,7 +1189,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 
 ---
 
-## 🛡️ 14. What Neptune Fixes
+## 🛡️ 13. What Neptune Fixes
 
 ### vs. ERC-20
 
@@ -1249,7 +1231,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 
 ---
 
-## 🏷️ 15. Naming Convention
+## 🏷️ 14. Naming Convention
 
 | Component | Name | Role |
 |---|---|---|
@@ -1258,11 +1240,11 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 | Standard | TSP-2 (Card) | PLUMB implementation for unique assets |
 | Skill | Liquidity (TIDE) | Tokens In Direct Exchange — swaps without custody |
 | Skill | Oracle Pricing (COMPASS) | External data attestation with STARK proofs |
-| Skill | *[23 total]* | See Skill Library (sections 8-11) |
+| Skill | *[23 total]* | See Skill Library (sections 7-10) |
 
 ---
 
-## 🗺️ 16. Implementation Roadmap
+## 🗺️ 15. Implementation Roadmap
 
 ### Phase 0 — Genesis
 1. PLUMB framework (auth, config, hook composition)
@@ -1297,7 +1279,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 
 ---
 
-## ❓ 17. Open Questions
+## ❓ 16. Open Questions
 
 1. Tree depth: Depth 20 (~1M leaves). Fixed or variable?
 2. Multi-hop swaps: Atomic A→B→C or sequential?
