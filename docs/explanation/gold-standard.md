@@ -62,11 +62,20 @@ Capabilities are how tokens learn to do things beyond basic transfers. A coin th
 
 The hook system makes this possible. Every PLUMB operation has a hook slot. A capability installs hooks into those slots. Multiple capabilities can coexist on the same token — their hook proofs compose independently.
 
-### 2.3 Why Two Standards, Not Four Primitives
+### 2.3 Why This Is Complete
 
-The old model had four "primitives": TSP-1, TSP-2, TIDE (liquidity), COMPASS (oracle). But TIDE and COMPASS fail the standard test — they don't define conservation laws. They define behaviors. A liquidity protocol is something a token *does*, not something a token *is*. An oracle is a service that capabilities *consume*, not a peer of the token standards.
+Two conservation laws exist in token systems. Divisible supply: `Σ balances = supply`. Unique ownership: `owner_count(id) = 1`. These are mathematically incompatible — you cannot enforce both in one circuit without branching that inflates every proof. So there are exactly two standards: TSP-1 and TSP-2.
 
-The hook system already supports capability state trees (section 3.5). TIDE's allocation tree and COMPASS's attestation tree are just capability state trees — architecturally identical to any other. They are capabilities, not standards.
+Everything else a token does — liquidity, oracle pricing, governance, lending, compliance, royalties — is a behavior, not a conservation law. Behaviors compose. Conservation laws don't. A coin that provides liquidity is still a coin. A uniq that enforces royalties is still a uniq. The standard defines what the token *is*. Capabilities define what the token *does*.
+
+This is why two standards plus a capability library covers the entire design space:
+
+- Any divisible asset is TSP-1 + some subset of capabilities
+- Any unique asset is TSP-2 + some subset of capabilities
+- Any DeFi protocol is proof composition between tokens with capabilities
+- Any new financial primitive is a new capability, not a new standard
+
+A new standard would require a new conservation law — a third mathematical invariant incompatible with both divisible supply and unique ownership. No such invariant exists in token systems. Two is not a simplification. Two is the number.
 
 ### 2.4 Layer Architecture
 
