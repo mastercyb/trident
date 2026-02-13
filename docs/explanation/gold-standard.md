@@ -1,6 +1,6 @@
 # 🥇 Neptune Gold Standard
 
-## 🏛️ ZK-Native Token Standards and Capability Library
+## 🏛️ ZK-Native Token Standards and Skill Library
 
 Version: 0.6
 Date: February 12, 2026
@@ -16,7 +16,7 @@ Date: February 12, 2026
 | Lock scripts | Implemented | `examples/neptune/lock_*.tri` (4 variants) |
 | Transaction validation | Implemented | `examples/neptune/transaction_validation.tri` |
 | Proof composition | Implemented | `os/neptune/proof.tri`, `examples/neptune/proof_aggregator.tri` |
-| Capability library | Design only | 23 capabilities specified below |
+| Skill library | Design only | 23 skills specified below |
 
 See the [Tutorial](../tutorials/tutorial.md) for language basics, [Programming Model](programming-model.md) for the Neptune transaction model, and [Deploying a Program](../guides/deploying-a-program.md) for deployment workflows.
 
@@ -30,9 +30,9 @@ Three axioms drive every decision:
 
 1. Tokens are leaves, not contracts. A token is not a deployed program with storage. It is a leaf in a Merkle tree whose state transitions are constrained by a circuit. The circuit is the standard. The leaf is the instance.
 
-2. Liquidity is never locked. Capital remains in user accounts. DeFi protocols do not custody tokens — they prove valid transformations against user balances via capability composition. One balance can back many strategies simultaneously.
+2. Liquidity is never locked. Capital remains in user accounts. DeFi protocols do not custody tokens — they prove valid transformations against user balances via skill composition. One balance can back many strategies simultaneously.
 
-3. Proofs compose, programs don't call. There is no `msg.sender` calling a contract. There is a proof that a valid state transition occurred, composed with proofs from capability programs. Composition replaces invocation.
+3. Proofs compose, programs don't call. There is no `msg.sender` calling a contract. There is a proof that a valid state transition occurred, composed with proofs from skill programs. Composition replaces invocation.
 
 ---
 
@@ -47,44 +47,98 @@ Neptune has exactly two token standards. Both are built on PLUMB.
 | TSP-1 | Coin | Divisible value transfer | `Σ balances = supply` |
 | TSP-2 | Uniq | Unique asset ownership | `owner_count(id) = 1` |
 
-A standard earns its place by defining a conservation law — an invariant that the circuit enforces on every operation. Divisible supply and unique ownership are incompatible conservation laws, so they require separate circuits. Everything else is a capability.
+A standard earns its place by defining a conservation law — an invariant that the circuit enforces on every operation. Divisible supply and unique ownership are incompatible conservation laws, so they require separate circuits. Everything else is a skill.
 
-### 2.2 Capability Library
+### 2.2 Skill Library
 
-A capability is a skill that a token can acquire. It is a composable package:
+A skill is something a token can learn. It is a composable package:
 
 - Hooks it installs (which PLUMB operations it extends)
-- State tree it needs (if any — most capabilities are stateless)
+- State tree it needs (if any — most skills are stateless)
 - Config it requires (which authorities and hooks must be set)
-- Composes with other capabilities it works alongside
+- Composes with other skills it works alongside
 
-Capabilities are how tokens learn to do things beyond basic transfers. A coin that can provide liquidity has the Liquidity capability. A coin that enforces KYC has the Compliance capability. A uniq that pays creator royalties has the Royalties capability.
+Skills are how tokens learn to do things beyond basic transfers. A coin that can provide liquidity has the Liquidity skill. A coin that enforces KYC has the Compliance skill. A uniq that pays creator royalties has the Royalties skill.
 
-The hook system makes this possible. Every PLUMB operation has a hook slot. A capability installs hooks into those slots. Multiple capabilities can coexist on the same token — their hook proofs compose independently.
+The hook system makes this possible. Every PLUMB operation has a hook slot. A skill installs hooks into those slots. Multiple skills can coexist on the same token — their hook proofs compose independently.
 
 ### 2.3 Why This Is Complete
 
 Two conservation laws exist in token systems. Divisible supply: `Σ balances = supply`. Unique ownership: `owner_count(id) = 1`. These are mathematically incompatible — you cannot enforce both in one circuit without branching that inflates every proof. So there are exactly two standards: TSP-1 and TSP-2.
 
-Everything else a token does — liquidity, oracle pricing, governance, lending, compliance, royalties — is a behavior, not a conservation law. Behaviors compose. Conservation laws don't. A coin that provides liquidity is still a coin. A uniq that enforces royalties is still a uniq. The standard defines what the token *is*. Capabilities define what the token *does*.
+Everything else a token does — liquidity, oracle pricing, governance, lending, compliance, royalties — is a behavior, not a conservation law. Behaviors compose. Conservation laws don't. A coin that provides liquidity is still a coin. A uniq that enforces royalties is still a uniq. The standard defines what the token *is*. Skills define what the token *does*.
 
-This is why two standards plus a capability library covers the entire design space:
+This is why two standards plus a skill library covers the entire design space:
 
-- Any divisible asset is TSP-1 + some subset of capabilities
-- Any unique asset is TSP-2 + some subset of capabilities
-- Any DeFi protocol is proof composition between tokens with capabilities
-- Any new financial primitive is a new capability, not a new standard
+- Any divisible asset is TSP-1 + some subset of skills
+- Any unique asset is TSP-2 + some subset of skills
+- Any DeFi protocol is proof composition between tokens with skills
+- Any new financial primitive is a new skill, not a new standard
+
+The model is also complete because tokens are both subjects and objects. A TSP-1 token can be collateral (object of a Lending skill), a payment medium (object of a Liquidity skill), and a governance instrument (subject that votes). A TSP-2 token can be a credential (object of a KYC Gate), a membership proof (subject that authorizes), and a collectible (object of a marketplace). The same leaf participates in multiple roles simultaneously through proof composition. No additional primitives are needed because the two standards already cover both sides of every interaction.
 
 A new standard would require a new conservation law — a third mathematical invariant incompatible with both divisible supply and unique ownership. No such invariant exists in token systems. Two is not a simplification. Two is the number.
 
-### 2.4 Layer Architecture
+### 2.4 Proven Price
+
+A token knows its supply — the circuit enforces `Σ balances = supply` on every operation. Price should work the same way. In a provable blockchain, every swap is a STARK proof. Price and volume are free byproducts of proven swaps. The question is how to aggregate them into a signal that the token itself can consume.
+
+The answer is fees burned. Raw volume is trivially inflatable — trade with yourself, back and forth, infinite volume. But every Neptune swap burns 0.1% (10 basis points) of the trade value in NPT as a protocol fee. This burn is irrecoverable. Inflating volume costs real money. The proven metric is not "how much was traded" but "how much was spent to trade."
+
+Three proven properties of a Neptune token:
+
+| Property | Invariant | Source |
+|----------|-----------|--------|
+| Supply | `Σ balances = supply` | Conservation law (per-operation) |
+| Price | Fee-weighted TWAP against NPT | Derivation law (per-block aggregation) |
+| Liquidity depth | Cumulative fees burned in window | Economic signal (per-block aggregation) |
+
+Supply is a conservation law — enforced per operation. Price is a derivation law — computed per block from proven swap data. Both are circuit-enforced public inputs. Both are available to every hook and every skill without additional proof composition.
+
+#### How It Works
+
+1. Every Liquidity (TIDE) swap proves: token pair, amount in, amount out, fee burned
+2. The block circuit aggregates all swap proofs for each pair into a fee-weighted TWAP
+3. The resulting `proven_price` and `proven_fees` become public state for the next block
+4. Any skill can read proven price as a public input — no oracle composition required
+
+#### Why Fees Burned, Not Volume
+
+| Signal | Cost to fake | Sybil-resistant |
+|--------|-------------|-----------------|
+| Volume | Zero (wash trade with yourself) | No |
+| Fees paid to LPs | Low (recycle as LP) | Weak |
+| Fees burned | 0.1% of fake volume, irrecoverable | Yes |
+
+The burn is the unforgeable cost. A token with 1,000 NPT in proven fees burned has 1,000 NPT of economic skin behind its price. Skills that consume price (Lending, Stablecoin, Liquidation) can set minimum fee thresholds: "accept this price only if proven fees > X NPT over > N blocks."
+
+#### Protocol Fee
+
+Every swap burns 0.1% (10 basis points) of trade value in NPT. This is a global protocol constant — uniform across all pairs, not configurable per token.
+
+- On a 10,000 NPT swap: 10 NPT burned
+- To sustain a fake price for 1 hour (6 blocks at 10-minute intervals): 0.1% × volume × 6 blocks
+- Total trader cost: 0.1% protocol burn + strategy fee (0.1-0.3%) = 0.2-0.4% total
+- Competitive with Uniswap (0.3% + gas + MEV) — Neptune traders save on MEV and gas
+
+The burn creates deflationary pressure on NPT. The more the ecosystem is used, the more NPT is burned. Every swap across every token pair strengthens the economic signal for every other token.
+
+#### Bootstrap
+
+New tokens with no swap history have no proven price. Oracle Pricing (COMPASS) serves as the bootstrap mechanism — external attestation until on-chain fee volume is sufficient. The transition is not automatic — skills that consume price decide their own threshold for trusting execution-derived price over oracle-derived price.
+
+#### Price Pair Semantics
+
+All proven prices are denominated in the base blockchain currency (NPT for Neptune). In Trident, the base currency is a target configuration parameter — each OS defines its own base asset.
+
+### 2.5 Layer Architecture
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
 │  RECIPES                                                  │
-│  Documented configs: "to build X, use these capabilities" │
+│  Documented configs: "to build X, use these skills" │
 ├──────────────────────────────────────────────────────────┤
-│  CAPABILITY LIBRARY                                       │
+│  SKILL LIBRARY                                            │
 │  Composable skills: Liquidity, Oracle, Governance,        │
 │  Lending, Compliance, Delegation, Vesting, Royalties,     │
 │  Staking, Bridging, Subscription, ...                     │
@@ -114,7 +168,7 @@ PLUMB is the architectural foundation that all Neptune token standards share. It
 - Auth model — `auth_hash` per leaf + per-operation config-level dual authorization
 - Hook system — per-operation composable ZK programs
 - Nullifier scheme — `hash(id, nonce)` for replay prevention
-- Global public state — `state_root`, `supply`, `config_hash`, `metadata_hash`, `current_time`
+- Global public state — `state_root`, `supply`, `config_hash`, `metadata_hash`, `current_time`, `proven_price`, `proven_fees`
 
 ### 3.1 Config — Shared by All PLUMB Standards
 
@@ -168,7 +222,7 @@ Composition model: The token circuit proves state transition validity. The verif
 
 ### 3.4 Cross-Token Proof Composition
 
-Hooks are not limited to their own token's state. A hook can require proofs from any capability or token as input. The verifier composes all required proofs together.
+Hooks are not limited to their own token's state. A hook can require proofs from any skill or token as input. The verifier composes all required proofs together.
 
 Example: TOKEN_B's `mint_hook` requires:
 1. A valid TOKEN_A pay proof (collateral deposited)
@@ -177,17 +231,17 @@ Example: TOKEN_B's `mint_hook` requires:
 
 The hook circuit declares its required inputs. The verifier ensures all sub-proofs are valid and their public I/O is consistent (same accounts, same amounts, same timestamps).
 
-This is how DeFi works in Neptune: operations on one token compose with operations on other tokens, oracle feeds, and capability state — all in a single atomic proof.
+This is how DeFi works in Neptune: operations on one token compose with operations on other tokens, oracle feeds, and skill state — all in a single atomic proof.
 
-### 3.5 Capability State Trees
+### 3.5 Skill State Trees
 
-Capabilities that need persistent state maintain their own Merkle trees. A capability state tree follows the same pattern as standard trees:
+Skills that need persistent state maintain their own Merkle trees. A skill state tree follows the same pattern as standard trees:
 - 10-field leaves hashed to Digest
 - Binary Merkle tree
 - State root committed on-chain
 - Operations produce STARK proofs
 
-The Liquidity capability's allocation tree, the Oracle Pricing capability's attestation tree, a Governance capability's proposal tree — all are capability state trees. What IS standardized is how capability proofs compose with token proofs through the hook system.
+The Liquidity skill's allocation tree, the Oracle Pricing skill's attestation tree, a Governance skill's proposal tree — all are skill state trees. What IS standardized is how skill proofs compose with token proofs through the hook system.
 
 ### 3.6 Atomic Multi-Tree Commitment
 
@@ -195,14 +249,14 @@ A single Neptune transaction may update multiple Merkle trees:
 - TOKEN_A tree (collateral deposited)
 - TOKEN_B tree (shares minted)
 - Oracle attestation tree (price read)
-- Capability state tree (position recorded)
+- Skill state tree (position recorded)
 
 The block commits to ALL tree roots atomically via a state commitment:
 
 ```trident
 block_state = hash(
   token_tree_root_1, token_tree_root_2, ..., token_tree_root_N,
-  capability_tree_root_1, ..., capability_tree_root_M
+  skill_tree_root_1, ..., skill_tree_root_M
 )
 ```
 
@@ -214,13 +268,13 @@ PLUMB has no `approve`, `allowance`, or `transferFrom`. The approve/transferFrom
 
 | Ethereum pattern | Neptune solution |
 |---|---|
-| DEX swap via `transferFrom` | Two coordinated `pay` ops (Liquidity capability) |
+| DEX swap via `transferFrom` | Two coordinated `pay` ops (Liquidity skill) |
 | Lending deposit via `transferFrom` | `pay` to lending account, or `lock` with hook |
 | Subscription / recurring payment | Derived auth key satisfying `auth_hash` |
 | Meta-transaction / relayer | Anyone with auth secret constructs the proof |
 | Multi-step DeFi | Proof composition — all movements proven atomically |
 
-For delegated spending: `auth_hash` derived keys + Delegation capability tracking cumulative spending per delegate. Strictly more powerful, strictly safer than approve.
+For delegated spending: `auth_hash` derived keys + Delegation skill tracking cumulative spending per delegate. Strictly more powerful, strictly safer than approve.
 
 ### 3.8 Security Properties
 
@@ -407,7 +461,7 @@ When `collection_id ≠ 0`, the asset belongs to a collection identified by its 
 
 #### Creator Immutability
 
-`creator_id` is set at mint and can never change. Every subsequent operation preserves it. This provides an unforgeable provenance chain. The Royalties capability depends on this: hooks read `royalty_bps` from the leaf and `royalty_receiver` from collection metadata.
+`creator_id` is set at mint and can never change. Every subsequent operation preserves it. This provides an unforgeable provenance chain. The Royalties skill depends on this: hooks read `royalty_bps` from the leaf and `royalty_receiver` from collection metadata.
 
 ### 6.3 Collection Metadata — 10 field elements
 
@@ -481,11 +535,11 @@ Metadata update: Owner auth, `flags & UPDATABLE`, only `metadata_hash` changes, 
 
 ---
 
-## 🧰 7. Capability Library
+## 🧰 7. Skill Library
 
-### 7.1 What Is a Capability
+### 7.1 What Is a Skill
 
-A capability is a composable package that gives a token a new skill. Every capability has the same anatomy:
+A skill is a composable package that teaches a token a new behavior. Every skill has the same anatomy:
 
 | Component | Description |
 |-----------|-------------|
@@ -493,13 +547,13 @@ A capability is a composable package that gives a token a new skill. Every capab
 | Hooks | Which PLUMB hooks it installs |
 | State tree | Whether it needs its own Merkle tree |
 | Config | What authorities/hooks must be set |
-| Composes with | Which other capabilities it works alongside |
+| Composes with | Which other skills it works alongside |
 
-A token with no capabilities is a bare TSP-1 or TSP-2 — it can pay, lock, update, mint, and burn. Each capability you add teaches it a new skill.
+A token with no skills is a bare TSP-1 or TSP-2 — it can pay, lock, update, mint, and burn. Each skill you add teaches it a new behavior.
 
-### 7.2 How Capabilities Compose
+### 7.2 How Skills Compose
 
-Multiple capabilities can be active on the same token simultaneously. When multiple capabilities install hooks on the same operation, their proofs compose independently:
+Multiple skills can be active on the same token simultaneously. When multiple skills install hooks on the same operation, their proofs compose independently:
 
 ```text
 Pay operation with Compliance + Fee-on-Transfer + Liquidity:
@@ -512,9 +566,9 @@ Pay operation with Compliance + Fee-on-Transfer + Liquidity:
 
 Convention: access control hooks verify first, then financial hooks, then composition hooks.
 
-### 7.3 Capability Tiers
+### 7.3 Skill Tiers
 
-| Tier | Focus | Capabilities |
+| Tier | Focus | Skills |
 |------|-------|-------------|
 | Core | Skills most tokens want | Supply Cap, Delegation, Vesting, Royalties, Multisig, Timelock |
 | Financial | DeFi use cases | Liquidity, Oracle Pricing, Vault, Lending, Staking, Stablecoin |
@@ -523,7 +577,7 @@ Convention: access control hooks verify first, then financial hooks, then compos
 
 ---
 
-## 🔧 8. Core Capabilities
+## 🔧 8. Core Skills
 
 ### 8.1 Supply Cap
 
@@ -535,7 +589,7 @@ Convention: access control hooks verify first, then financial hooks, then compos
 | Config | `mint_auth` must be set (minting enabled) |
 | Composes with | Everything — most fundamental financial constraint |
 
-The hook verifies: `new_supply <= max_supply` (read from metadata or hardcoded in hook parameters). Without this capability, TSP-1 minting is uncapped. With it, the cap is provably enforced.
+The hook verifies: `new_supply <= max_supply` (read from metadata or hardcoded in hook parameters). Without this skill, TSP-1 minting is uncapped. With it, the cap is provably enforced.
 
 ### 8.2 Delegation
 
@@ -616,7 +670,7 @@ Config changes are queued and can only execute after the delay period. Prevents 
 
 ---
 
-## 💰 9. Financial Capabilities
+## 💰 9. Financial Skills
 
 ### 9.1 Liquidity (TIDE)
 
@@ -632,7 +686,7 @@ Config changes are queued and can only execute after the delay period. Prevents 
 
 #### How It Works
 
-Traditional AMMs lock tokens in custodial pool contracts. The Liquidity capability eliminates custody entirely. Swaps are two `pay` operations where the `pay_hook` enforces the pricing curve:
+Traditional AMMs lock tokens in custodial pool contracts. The Liquidity skill eliminates custody entirely. Swaps are two `pay` operations where the `pay_hook` enforces the pricing curve:
 
 ```text
 Alice swaps 100 TOKEN_A for TOKEN_B with maker Bob:
@@ -645,11 +699,17 @@ Alice swaps 100 TOKEN_A for TOKEN_B with maker Bob:
 
 No tokens leave user accounts. No approvals. No router.
 
+#### Protocol Burn Fee
+
+Every swap burns 0.1% (10 basis points) of trade value in NPT. This is a global protocol constant, not configurable per token or per strategy. The burn serves two purposes: Sybil-resistant price discovery (section 2.4) and deflationary pressure on NPT.
+
+The strategy fee (paid to LPs) is separate and set per-strategy. Total trader cost: 0.1% protocol burn + 0.1-0.3% strategy fee = 0.2-0.4% total.
+
 #### Shared Liquidity
 
 Because the AMM is a hook, Bob's balance simultaneously:
 - Backs AMM Strategy X and Y
-- Serves as lending collateral (via Lending capability)
+- Serves as lending collateral (via Lending skill)
 - Counts for governance votes
 - Earns staking rewards
 
@@ -701,7 +761,7 @@ Pluggable ZK circuits. Reference implementations:
 | | |
 |---|---|
 | Skill | Price feeds with STARK-proven aggregation — verified, not trusted |
-| Hooks | Consumed by other capabilities (mint_hook, pay_hook compose with oracle proofs) |
+| Hooks | Consumed by other skills (mint_hook, pay_hook compose with oracle proofs) |
 | State tree | Yes — attestation tree |
 | Config | Feed config (submit_auth, aggregate_auth, hooks) |
 | Composes with | Liquidity, Lending, Stablecoin, Bridging |
@@ -737,7 +797,7 @@ Submit: A provider submits a new attestation. Constraints: provider authorizatio
 
 Aggregate: Combine multiple attestations into a canonical value. Constraints: N leaves from tree, `N >= min_providers`, all within `max_staleness`. The `aggregate_hook` determines the function: median, TWAP, weighted average, outlier-filtered.
 
-Read: Produce a STARK proof that feed F has value V at time T. Not an on-chain operation — a proof that any capability can compose with.
+Read: Produce a STARK proof that feed F has value V at time T. Not an on-chain operation — a proof that any skill can compose with.
 
 #### The Neptune-Unique Property
 
@@ -751,7 +811,7 @@ Oracle proofs are STARKs. They can be relayed to other chains and verified witho
 
 | | |
 |---|---|
-| Skill | Deposit asset, receive shares at exchange rate (ERC-4626 as a capability) |
+| Skill | Deposit asset, receive shares at exchange rate (ERC-4626 as a skill) |
 | Hooks | `mint_hook` = `VAULT_DEPOSIT`, `burn_hook` = `VAULT_WITHDRAW` |
 | State tree | No — exchange rate derived from `total_assets / total_shares` |
 | Config | `mint_auth` = vault program |
@@ -787,7 +847,7 @@ Liquidation: If `health_factor < 1` (checked via Oracle Pricing), anyone can pro
 | Config | `lock_auth` may be set for mandatory staking |
 | Composes with | Liquidity (staked tokens back strategies), Governance |
 
-Combined with Vault capability for a liquid staking token (LST): deposit native token → receive LST that appreciates as staking rewards accrue.
+Combined with Vault skill for a liquid staking token (LST): deposit native token → receive LST that appreciates as staking rewards accrue.
 
 ### 9.6 Stablecoin
 
@@ -803,7 +863,7 @@ Mint hook composes with: Oracle Pricing proof (collateral price), TSP-1 lock pro
 
 ---
 
-## 🔐 10. Access Control Capabilities
+## 🔐 10. Access Control Skills
 
 ### 10.1 Compliance (Whitelist / Blacklist)
 
@@ -879,7 +939,7 @@ Also achievable without a hook: mint with `flags = 0` (TRANSFERABLE bit clear). 
 
 ---
 
-## 🔗 11. Composition Capabilities
+## 🔗 11. Composition Skills
 
 ### 11.1 Bridging
 
@@ -899,7 +959,7 @@ Mint on destination chain requires STARK proof of lock on source chain. Burn on 
 |---|---|
 | Skill | Recurring authorized payments on a schedule |
 | Hooks | `pay_hook` = `PAY_DELEGATION` (with rate-limiting) |
-| State tree | Delegation tree (reuses Delegation capability) |
+| State tree | Delegation tree (reuses Delegation skill) |
 | Config | `pay_hook` set |
 | Composes with | Delegation (required) |
 
@@ -958,12 +1018,12 @@ Multiple mints composed into a single recursive STARK proof. Useful for airdrops
 
 ## 📋 12. Recipes
 
-Recipes are documented configurations that combine a standard with capabilities to build specific token types. Pick a standard, pick capabilities, deploy.
+Recipes are documented configurations that combine a standard with skills to build specific token types. Pick a standard, pick skills, deploy.
 
 ### 12.1 Simple Coin
 
 ```text
-Standard: TSP-1    Capabilities: none
+Standard: TSP-1    Skills: none
 Config: admin_auth=hash(admin), mint_auth=hash(minter), all others=0
 ```
 
@@ -972,7 +1032,7 @@ The simplest token. Anyone can transfer and burn. Admin can update config. Autho
 ### 12.2 Immutable Money
 
 ```text
-Standard: TSP-1    Capabilities: none
+Standard: TSP-1    Skills: none
 Config: admin_auth=0 (renounced), mint_auth=0 (disabled), all others=0
 ```
 
@@ -981,7 +1041,7 @@ After genesis mint, nothing can change. Pure permissionless sound money. The con
 ### 12.3 Regulated Token
 
 ```text
-Standard: TSP-1    Capabilities: Compliance, KYC Gate, Multisig
+Standard: TSP-1    Skills: Compliance, KYC Gate, Multisig
 Config: pay_auth=hash(compliance), pay_hook=PAY_WHITELIST,
         mint_hook=MINT_KYC, update_hook=UPDATE_THRESHOLD
 ```
@@ -989,7 +1049,7 @@ Config: pay_auth=hash(compliance), pay_hook=PAY_WHITELIST,
 ### 12.4 Art Collection
 
 ```text
-Standard: TSP-2    Capabilities: Royalties, Supply Cap
+Standard: TSP-2    Skills: Royalties, Supply Cap
 Config: pay_hook=PAY_ROYALTY, mint_hook=MINT_CAP+MINT_UNIQUE
 Flags per asset: transferable=1, burnable=1, updatable=0
 ```
@@ -997,7 +1057,7 @@ Flags per asset: transferable=1, burnable=1, updatable=0
 ### 12.5 Soulbound Credential
 
 ```text
-Standard: TSP-2    Capabilities: Soulbound
+Standard: TSP-2    Skills: Soulbound
 Config: mint_auth=hash(issuer), pay_hook=PAY_SOULBOUND
 Flags: transferable=0, burnable=0, updatable=0
 ```
@@ -1005,7 +1065,7 @@ Flags: transferable=0, burnable=0, updatable=0
 ### 12.6 Game Item Collection
 
 ```text
-Standard: TSP-2    Capabilities: Royalties, Burn-to-Redeem (crafting)
+Standard: TSP-2    Skills: Royalties, Burn-to-Redeem (crafting)
 Config: mint_auth=hash(game_server), pay_hook=GAME_RULES,
         mint_hook=ITEM_GEN, update_hook=ITEM_EVOLUTION
 Flags: transferable=1, burnable=1, updatable=1
@@ -1014,7 +1074,7 @@ Flags: transferable=1, burnable=1, updatable=1
 ### 12.7 Yield-Bearing Vault
 
 ```text
-Standard: TSP-1    Capabilities: Vault
+Standard: TSP-1    Skills: Vault
 Config: mint_auth=hash(vault_program),
         mint_hook=VAULT_DEPOSIT, burn_hook=VAULT_WITHDRAW
 ```
@@ -1022,7 +1082,7 @@ Config: mint_auth=hash(vault_program),
 ### 12.8 Governance Token
 
 ```text
-Standard: TSP-1    Capabilities: Governance, Timelock, Multisig
+Standard: TSP-1    Skills: Governance, Timelock, Multisig
 Config: admin_auth=hash(governance_program),
         update_hook=UPDATE_TIMELOCK+UPDATE_THRESHOLD
 ```
@@ -1030,7 +1090,7 @@ Config: admin_auth=hash(governance_program),
 ### 12.9 Stablecoin
 
 ```text
-Standard: TSP-1    Capabilities: Stablecoin, Oracle Pricing
+Standard: TSP-1    Skills: Stablecoin, Oracle Pricing
 Config: mint_auth=hash(minting_program),
         mint_hook=STABLECOIN_MINT, burn_hook=STABLECOIN_REDEEM
 ```
@@ -1038,7 +1098,7 @@ Config: mint_auth=hash(minting_program),
 ### 12.10 Wrapped / Bridged Asset
 
 ```text
-Standard: TSP-1    Capabilities: Bridging
+Standard: TSP-1    Skills: Bridging
 Config: mint_auth=hash(bridge), burn_auth=hash(bridge),
         mint_hook=BRIDGE_LOCK_PROOF, burn_hook=BRIDGE_RELEASE_PROOF
 ```
@@ -1046,7 +1106,7 @@ Config: mint_auth=hash(bridge), burn_auth=hash(bridge),
 ### 12.11 Liquid Staking Token
 
 ```text
-Standard: TSP-1    Capabilities: Staking, Vault
+Standard: TSP-1    Skills: Staking, Vault
 Config: mint_auth=hash(staking_program),
         mint_hook=STAKE_DEPOSIT, burn_hook=STAKE_WITHDRAW
 ```
@@ -1054,7 +1114,7 @@ Config: mint_auth=hash(staking_program),
 ### 12.12 Subscription Service
 
 ```text
-Standard: TSP-1    Capabilities: Delegation, Subscription
+Standard: TSP-1    Skills: Delegation, Subscription
 Config: pay_hook=PAY_DELEGATION
 ```
 
@@ -1062,7 +1122,7 @@ Config: pay_hook=PAY_DELEGATION
 
 ```text
 Standard: TSP-1 (collateral) + TSP-1 (shares)
-Capabilities: Lending, Oracle Pricing, Liquidity
+Skills: Lending, Oracle Pricing, Liquidity
 
 Supply: TOKEN_A pay → fund_account (controller=FUND), Oracle price proof,
         fund state recorded, TOKEN_B minted to supplier
@@ -1074,7 +1134,7 @@ Liquidation: health_factor < 1 proven, liquidator covers debt, receives collater
 
 ```text
 Standard: TSP-2 + TSP-1
-Capabilities: Royalties, Oracle Pricing, Liquidity
+Skills: Royalties, Oracle Pricing, Liquidity
 
 Seller transfers uniq to buyer:
   TSP-2 Pay (asset transfer) + TSP-1 Pay (payment) + TSP-1 Pay (royalty)
@@ -1085,7 +1145,7 @@ Seller transfers uniq to buyer:
 
 ```text
 Standard: N × TSP-1 (outcome tokens)
-Capabilities: Oracle Pricing, Liquidity, Burn-to-Redeem
+Skills: Oracle Pricing, Liquidity, Burn-to-Redeem
 
 Create: deploy N tokens (one per outcome), mint requires equal buy-in
 Trade: Liquidity strategies for outcome pairs
@@ -1096,7 +1156,7 @@ Redeem: burn winner (burn_hook verifies resolution), receive payout
 ### 12.16 Name Service
 
 ```text
-Standard: TSP-2    Capabilities: none (just metadata schema)
+Standard: TSP-2    Skills: none (just metadata schema)
 Register: mint TSP-2 where asset_id=hash(name), metadata_hash=hash(resolution)
 Resolve: Merkle inclusion proof for hash(name) in collection tree
 Transfer: standard TSP-2 pay
@@ -1121,13 +1181,13 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 │       └──────┬───────┘                   │
 │              │                           │
 │       ┌──────▼──────┐                    │
-│       │ Capability  │                    │
+│       │ Skill  │                    │
 │       │   Proof     │                    │
 │       └──────┬──────┘                    │
 │              │                           │
 │  ┌───────────▼───────────┐              │
 │  │   Oracle Pricing      │              │
-│  │    Capability Proof   │              │
+│  │    Skill Proof   │              │
 │  └───────────┬───────────┘              │
 │              │                           │
 │       ┌──────▼──────┐                    │
@@ -1153,7 +1213,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 
 | Problem | Solution |
 |---|---|
-| `approve()` race condition | No approvals — `auth_hash` + Delegation capability |
+| `approve()` race condition | No approvals — `auth_hash` + Delegation skill |
 | Unlimited approval risk | No approvals exist |
 | No time-locks | `lock_until` first-class |
 | No mint/burn access control | Per-operation authorities |
@@ -1165,7 +1225,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 
 | Problem | Solution |
 |---|---|
-| Royalties not enforceable | `royalty_bps` + Royalties capability |
+| Royalties not enforceable | `royalty_bps` + Royalties skill |
 | No native collections | `collection_id` in leaf |
 | Metadata frozen | `flags.updatable` per asset |
 | Separate standard | Same PLUMB framework |
@@ -1174,16 +1234,16 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 
 | Problem | Solution |
 |---|---|
-| Liquidity locked | Stays in maker accounts (Liquidity capability) |
+| Liquidity locked | Stays in maker accounts (Liquidity skill) |
 | Fragmentation | Same capital backs multiple strategies |
-| Impermanent loss | Oracle-priced strategies via Oracle Pricing capability |
+| Impermanent loss | Oracle-priced strategies via Oracle Pricing skill |
 | MEV | Proof-based, no public mempool |
 
 ### vs. Chainlink
 
 | Problem | Solution |
 |---|---|
-| Trust oracle signers | STARK proof of aggregation (Oracle Pricing capability) |
+| Trust oracle signers | STARK proof of aggregation (Oracle Pricing skill) |
 | Opaque computation | Provable derivation chain |
 | Chain-specific | Cross-chain via proof relay |
 
@@ -1196,9 +1256,9 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 | Framework | PLUMB | Pay, Lock, Update, Mint, Burn |
 | Standard | TSP-1 (Coin) | PLUMB implementation for divisible assets |
 | Standard | TSP-2 (Uniq) | PLUMB implementation for unique assets |
-| Capability | Liquidity (TIDE) | Tokens In Direct Exchange — swaps without custody |
-| Capability | Oracle Pricing (COMPASS) | External data attestation with STARK proofs |
-| Capability | *[23 total]* | See Capability Library (sections 8-11) |
+| Skill | Liquidity (TIDE) | Tokens In Direct Exchange — swaps without custody |
+| Skill | Oracle Pricing (COMPASS) | External data attestation with STARK proofs |
+| Skill | *[23 total]* | See Skill Library (sections 8-11) |
 
 ---
 
@@ -1208,30 +1268,30 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 1. PLUMB framework (auth, config, hook composition)
 2. TSP-1 circuit
 3. Token deployment tooling
-4. Core capabilities: Supply Cap, Compliance, Soulbound
+4. Core skills: Supply Cap, Compliance, Soulbound
 
 ### Phase 1 — Ownership
 5. TSP-2 circuit
-6. Capabilities: Royalties, Delegation, Supply Cap (for collections)
+6. Skills: Royalties, Delegation, Supply Cap (for collections)
 7. Wallet integration (both standards)
 
 ### Phase 2 — Financial
-8. Liquidity capability (allocation tree, constant product, stable swap)
-9. Vault capability
-10. Staking capability
+8. Liquidity skill (allocation tree, constant product, stable swap)
+9. Vault skill
+10. Staking skill
 
 ### Phase 3 — Oracle
-11. Oracle Pricing capability (attestation tree, submit, aggregate, read)
+11. Oracle Pricing skill (attestation tree, submit, aggregate, read)
 12. Median + TWAP aggregation hooks
 
 ### Phase 4 — Composition
 13. Oracle-priced Liquidity strategy
-14. Lending capability
-15. Stablecoin capability
+14. Lending skill
+15. Stablecoin skill
 16. Cross-chain proof relay (Bridging)
 
 ### Phase 5 — Ecosystem
-17. Remaining capabilities (Governance, Timelock, Multisig, Vesting, Batch, Burn-to-Redeem, Subscription)
+17. Remaining skills (Governance, Timelock, Multisig, Vesting, Batch, Burn-to-Redeem, Subscription)
 18. Recipe tooling and deployment templates
 19. Reference implementations for all recipes
 
@@ -1244,10 +1304,10 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 3. Privacy: How far to push shielded transfers?
 4. State rent: Should leaves expire?
 5. Strategy liveness: Keeper mechanism for dead strategies?
-6. Capability versioning: Can a capability be upgraded, or must you deploy a new one?
-7. Capability discovery: How does a wallet know which capabilities a token has?
-8. Hook chaining: When multiple capabilities install hooks on the same operation, what is the proof composition order?
-9. Capability dependencies: Should the system enforce that Lending requires Oracle Pricing, or is that the deployer's responsibility?
+6. Skill versioning: Can a skill be upgraded, or must you deploy a new one?
+7. Skill discovery: How does a wallet know which skills a token has?
+8. Hook chaining: When multiple skills install hooks on the same operation, what is the proof composition order?
+9. Skill dependencies: Should the system enforce that Lending requires Oracle Pricing, or is that the deployer's responsibility?
 10. Controller recursion: Can a controller program delegate to another controller?
 11. Fund share pricing: Should fund shares use Oracle Pricing feeds for their own price, creating a feedback loop?
 
@@ -1260,27 +1320,30 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 | PLUMB | Pay, Lock, Update, Mint, Burn — the token framework |
 | TSP-1 | Coin standard (PLUMB implementation for divisible assets) |
 | TSP-2 | Uniq standard (PLUMB implementation for unique assets) |
-| Capability | A composable package of hooks + optional state tree + config that gives a token a new skill |
-| Recipe | A documented configuration combining a standard + capabilities to build a specific token type |
-| TIDE | Codename for the Liquidity capability — Tokens In Direct Exchange |
-| COMPASS | Codename for the Oracle Pricing capability |
+| Skill | A composable package of hooks + optional state tree + config that teaches a token a new behavior |
+| Recipe | A documented configuration combining a standard + skills to build a specific token type |
+| TIDE | Codename for the Liquidity skill — Tokens In Direct Exchange |
+| COMPASS | Codename for the Oracle Pricing skill |
+| Proven price | Fee-weighted TWAP derived from swap execution, denominated in base currency |
+| Proven fees | Cumulative protocol fees burned in aggregation window — economic signal for price confidence |
+| Protocol burn fee | 0.1% (10 bps) of every swap, burned in NPT, global constant |
 | Circuit | AIR constraints defining valid state transitions |
 | Config | Hashed commitment binding authorities and hooks |
 | Hook | Reusable ZK program composed with token proof |
 | Leaf | Merkle tree node — account (TSP-1) or asset (TSP-2) |
 | Proof composition | Verifying multiple proofs with shared public inputs |
-| Strategy | Pricing program defining an AMM curve (Liquidity capability) |
+| Strategy | Pricing program defining an AMM curve (Liquidity skill) |
 | Allocation | Virtual balance assigned to a strategy |
 | Attestation | Oracle data point with provenance proof |
 | Feed | An Oracle Pricing data stream (e.g. BTC/USD price) |
 | Controller | Program ID that must co-authorize operations on a leaf |
 | State commitment | Block-level hash of all Merkle tree roots |
 
-## 📋 Appendix B: Capability Quick Reference
+## 📋 Appendix B: Skill Quick Reference
 
 ### Core
 
-| Capability | Hooks | State Tree | Composes With |
+| Skill | Hooks | State Tree | Composes With |
 |---|---|---|---|
 | Supply Cap | `mint_hook` | No | Everything |
 | Delegation | `pay_hook` | Yes (delegation tree) | Subscription, Compliance |
@@ -1291,7 +1354,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 
 ### Financial
 
-| Capability | Hooks | State Tree | Composes With |
+| Skill | Hooks | State Tree | Composes With |
 |---|---|---|---|
 | Liquidity (TIDE) | `pay_hook` | Yes (allocation tree) | Oracle Pricing, Staking, Governance |
 | Oracle Pricing (COMPASS) | — | Yes (attestation tree) | Liquidity, Lending, Stablecoin, Bridging |
@@ -1302,7 +1365,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 
 ### Access Control
 
-| Capability | Hooks | State Tree | Composes With |
+| Skill | Hooks | State Tree | Composes With |
 |---|---|---|---|
 | Compliance | `pay_hook` | Yes (address set) | KYC Gate, Delegation |
 | KYC Gate | `mint_hook` | No | Compliance, Soulbound |
@@ -1313,7 +1376,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 
 ### Composition
 
-| Capability | Hooks | State Tree | Composes With |
+| Skill | Hooks | State Tree | Composes With |
 |---|---|---|---|
 | Bridging | `mint_hook`, `burn_hook` | No | Oracle Pricing |
 | Subscription | `pay_hook` | Yes (delegation tree) | Delegation |
@@ -1324,7 +1387,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 ## 📋 Appendix C: Hook ID Reference
 
 ### Pay Hooks
-| ID | Capability |
+| ID | Skill |
 |---|---|
 | `PAY_WHITELIST` | Compliance |
 | `PAY_BLACKLIST` | Compliance |
@@ -1338,7 +1401,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 | `PAY_COLLATERAL` | Lending (collateral release) |
 
 ### Mint Hooks
-| ID | Capability |
+| ID | Skill |
 |---|---|
 | `MINT_CAP` | Supply Cap |
 | `MINT_UNIQUE` | TSP-2 uniqueness check |
@@ -1353,7 +1416,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 | `BRIDGE_LOCK_PROOF` | Bridging |
 
 ### Burn Hooks
-| ID | Capability |
+| ID | Skill |
 |---|---|
 | `BURN_TAX` | Fee-on-Transfer (burn-side) |
 | `BURN_REDEEM` | Burn-to-Redeem |
@@ -1366,7 +1429,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 | `BRIDGE_RELEASE_PROOF` | Bridging |
 
 ### Lock Hooks
-| ID | Capability |
+| ID | Skill |
 |---|---|
 | `LOCK_MAX` | Transfer Limits (max lock duration) |
 | `LOCK_REWARDS` | Staking |
@@ -1374,7 +1437,7 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 | `LOCK_PROGRAM` | Controller Gate (program lock) |
 
 ### Update Hooks
-| ID | Capability |
+| ID | Skill |
 |---|---|
 | `UPDATE_TIMELOCK` | Timelock |
 | `UPDATE_THRESHOLD` | Multisig |
