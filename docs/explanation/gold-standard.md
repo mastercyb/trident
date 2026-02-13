@@ -99,7 +99,7 @@ Supply is a conservation law — enforced per operation. Price is a derivation l
 
 1. Every Liquidity (TIDE) swap proves: token pair, amount in, amount out, fee collected
 2. The block circuit aggregates all swap proofs for each pair into a fee-weighted TWAP
-3. The resulting `proven_price` and `proven_fees` become public state for the next block
+3. The resulting `price` and `fees` become public state for the next block
 4. Any skill can read proven price as a public input — no oracle composition required
 
 #### Why Protocol Fees, Not Volume
@@ -168,7 +168,7 @@ PLUMB is the architectural foundation that all Neptune token standards share. It
 - Auth model — `auth_hash` per leaf + per-operation config-level dual authorization
 - Hook system — per-operation composable ZK programs
 - Nullifier scheme — `hash(id, nonce)` for replay prevention
-- Global public state — `state_root`, `supply`, `config_hash`, `metadata_hash`, `current_time`, `proven_price`, `proven_fees`
+- Global public state — `state_root`, `supply`, `config_hash`, `metadata_hash`, `current_time`, `price`, `fees`
 
 ### 3.1 Config — Shared by All PLUMB Standards
 
