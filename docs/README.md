@@ -69,7 +69,7 @@ Per-target documentation lives alongside its config:
 | [Provable Computing](explanation/provable-computing.md) | Comparative analysis of ZK systems |
 | [Formal Verification](explanation/formal-verification.md) | Symbolic execution, SMT, invariant synthesis |
 | [Content-Addressed Code](explanation/content-addressing.md) | Hashing, caching, registry, equivalence |
-| [Neptune Gold Standard](explanation/gold-standard.md) | Token standards and capability library |
+| [The Gold Standard](explanation/gold-standard.md) | Token standards and capability library |
 | [For Offchain Devs](explanation/for-offchain-devs.md) | Zero-knowledge from scratch |
 | [For Onchain Devs](explanation/for-onchain-devs.md) | Mental model migration from Solidity/Anchor/CosmWasm |
 | [Quantum Computing](explanation/quantum.md) | Why prime field arithmetic is quantum-native |

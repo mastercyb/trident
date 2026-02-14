@@ -1,6 +1,6 @@
-# 🥇 Neptune Gold Standard
+# 🥇 The Gold Standard
 
-## 🏛️ ZK-Native Token Standards and Skill Library
+## ZK-Native Token Standards and Skill Library
 
 Version: 0.1-draft
 Date: February 14, 2026
@@ -15,16 +15,19 @@ design-phase catalog — none of the 23 skills are implemented yet.
 The 0.1 release target is: deploy basic tokens and interact with them.
 Skills and capabilities come later, after the foundation is battle-tested.
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| PLUMB framework | Compiler support | `os/neptune/kernel.tri`, `os/neptune/utxo.tri` |
-| TSP-1 (Coin) | Compiler support | `examples/neptune/type_custom_token.tri` |
-| TSP-2 (Card) | Compiler support | `examples/uniq/uniq.tri` |
-| Native currency | Compiler support | `examples/neptune/type_native_currency.tri` |
-| Lock scripts | Compiler support | `examples/neptune/lock_*.tri` (4 variants) |
-| Transaction validation | Compiler support | `examples/neptune/transaction_validation.tri` |
-| Proof composition | Compiler support | `os/neptune/proof.tri`, `examples/neptune/proof_aggregator.tri` |
-| Skill library | Design only | 23 skills specified, 0 implemented |
+The Gold Standard is a Trident-level specification. While the reference
+implementation targets Neptune, the standards (PLUMB, TSP-1, TSP-2) and
+skill architecture are designed to work on any OS that supports Trident's
+Level 2 (provable computation).
+
+| Layer | What | Status | Files |
+|-------|------|--------|-------|
+| OS bindings | Neptune runtime modules | Compiler support | `os/neptune/kernel.tri`, `utxo.tri`, `proof.tri`, `xfield.tri`, `recursive.tri`, `registry.tri` |
+| Type scripts | Value conservation rules | Compiler support | `examples/neptune/type_native_currency.tri` (NPT), `type_custom_token.tri` (TSP-1) |
+| Lock scripts | Spending authorization | Compiler support | `examples/neptune/lock_generation.tri`, `lock_symmetric.tri`, `lock_timelock.tri`, `lock_multisig.tri` |
+| Transaction validation | Full transaction verification | Compiler support | `examples/neptune/transaction_validation.tri` |
+| Proof composition | Recursive STARK verification | Compiler support | `examples/neptune/proof_aggregator.tri`, `proof_relay.tri` |
+| Skill library | Token capabilities (DeFi, access control) | Design only | 23 skills specified, 0 implemented |
 
 See the [Tutorial](../tutorials/tutorial.md) for language basics, [Programming Model](programming-model.md) for the Neptune transaction model, and [Deploying a Program](../guides/deploying-a-program.md) for deployment workflows.
 
@@ -32,7 +35,9 @@ See the [Tutorial](../tutorials/tutorial.md) for language basics, [Programming M
 
 ## 🔭 1. Philosophy
 
-Neptune's financial layer is not a port of Ethereum's ERC standards. It is designed from first principles for a STARK-provable virtual machine where every state transition produces a cryptographic proof.
+The Gold Standard is not a port of Ethereum's ERC standards. It is
+designed from first principles for STARK-provable virtual machines where
+every state transition produces a cryptographic proof.
 
 Three axioms drive every decision:
 
@@ -48,7 +53,7 @@ Three axioms drive every decision:
 
 ### 2.1 Two Standards
 
-Neptune has exactly two token standards. Both are built on PLUMB.
+The Gold Standard defines exactly two token standards. Both are built on PLUMB.
 
 | Standard | Name | What it defines | Conservation law |
 |----------|------|-----------------|------------------|
@@ -95,7 +100,7 @@ A token knows its supply — the circuit enforces `Σ balances = supply` on ever
 
 The answer is protocol fees. Raw volume is trivially inflatable — trade with yourself, back and forth, infinite volume. But every Neptune swap deducts 0.1% (10 basis points) of the trade value in NPT as a protocol fee. Inflating volume costs real money. The proven metric is not "how much was traded" but "how much was paid to trade."
 
-Three proven properties of a Neptune token:
+Three proven properties of a Gold Standard token (Neptune reference):
 
 | Property | Invariant | Source |
 |----------|-----------|--------|
@@ -181,7 +186,7 @@ All proven prices are denominated in the base blockchain currency (NPT for Neptu
 
 Pay, Lock, Update, Mint, Burn
 
-PLUMB is the architectural foundation that all Neptune token standards share. It defines:
+PLUMB is the architectural foundation that all Gold Standard token standards share. It defines:
 
 - Leaf format — 10 field elements, hashed to Digest, stored in a binary Merkle tree
 - Config commitment — 5 authorities + 5 hooks, hashed to Digest
@@ -286,9 +291,9 @@ A transaction's composed proof references the old and new state commitment. The 
 
 ### 3.7 No Approvals
 
-PLUMB has no `approve`, `allowance`, or `transferFrom`. The approve/transferFrom pattern is the largest attack surface in ERC-20. In Neptune:
+PLUMB has no `approve`, `allowance`, or `transferFrom`. The approve/transferFrom pattern is the largest attack surface in ERC-20. In the Gold Standard:
 
-| Ethereum pattern | Neptune solution |
+| Ethereum pattern | Gold Standard solution |
 |---|---|
 | DEX swap via `transferFrom` | Two coordinated `pay` ops (Liquidity skill) |
 | Lending deposit via `transferFrom` | `pay` to lending account, or `lock` with hook |
@@ -834,9 +839,9 @@ Aggregate: Combine multiple attestations into a canonical value. Constraints: N 
 
 Read: Produce a STARK proof that feed F has value V at time T. Not an on-chain operation — a proof that any skill can compose with.
 
-#### The Neptune-Unique Property
+#### The STARK-Unique Property
 
-In Chainlink or Pyth, oracle data comes with a signature — you trust the signers. In Neptune, oracle data comes with a STARK proof of its derivation. The aggregation circuit proves the median was correctly computed from N submissions. The composed proof covers the entire chain from raw data to aggregated value. Swap prices are not trusted — they are mathematically verified.
+In Chainlink or Pyth, oracle data comes with a signature — you trust the signers. In the Gold Standard, oracle data comes with a STARK proof of its derivation. The aggregation circuit proves the median was correctly computed from N submissions. The composed proof covers the entire chain from raw data to aggregated value. Swap prices are not trusted — they are mathematically verified.
 
 #### Cross-Chain Oracle
 
