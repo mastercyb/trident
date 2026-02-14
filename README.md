@@ -1,7 +1,7 @@
 # 🔱 Trident
 
 <p align="center">
-  <img src="assets/trident.jpg" width="420" alt="Trident" />
+  <video src="assets/trident.mp4" width="420" autoplay loop muted playsinline></video>
 </p>
 
 *Write once. Prove anywhere.*
