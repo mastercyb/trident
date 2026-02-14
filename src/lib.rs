@@ -1217,6 +1217,12 @@ mod integration_tests {
             assert_count
         );
 
+        // Verify Merkle root authentication is present
+        assert!(
+            tasm.contains("merkle_step"),
+            "should authenticate leaves against Merkle root"
+        );
+
         eprintln!(
             "Token TASM: {} lines, {} instructions",
             tasm.lines().count(),
@@ -2730,6 +2736,12 @@ fn main() {
         assert!(
             tasm.contains("__verify_config:"),
             "missing verify_config function"
+        );
+
+        // Verify Merkle root authentication is present
+        assert!(
+            tasm.contains("merkle_step"),
+            "should authenticate leaves against Merkle root"
         );
     }
 }
