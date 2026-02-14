@@ -85,7 +85,8 @@ Multi-target by design. The [universal compilation architecture](docs/explanatio
 compiles through TIR to 4 lowering paths: stack machines (Triton, Miden),
 register machines (x86-64, ARM64, RISC-V), tree machines (Nock), and GPU
 kernels (CUDA, Metal). 20 VM targets, 25 OS targets are
-[specified](docs/reference/targets.md). Triton is production-ready today.
+[specified](docs/reference/targets.md). Triton is nearing production
+readiness, and other compilation targets are coming.
 
 ---
 
