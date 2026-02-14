@@ -274,15 +274,6 @@ enum UcmAction {
 
 #[derive(Subcommand)]
 enum RegistryAction {
-    /// Start a registry server
-    Serve {
-        /// Bind address (default: 127.0.0.1:8090)
-        #[arg(long, default_value = "127.0.0.1:8090")]
-        bind: String,
-        /// Storage directory (default: ~/.trident/registry)
-        #[arg(long)]
-        storage: Option<PathBuf>,
-    },
     /// Publish local UCM definitions to a registry
     Publish {
         /// Registry URL (default: $TRIDENT_REGISTRY_URL or http://127.0.0.1:8090)
@@ -1696,7 +1687,6 @@ fn cmd_ucm_deps(name: String) {
 
 fn cmd_registry(action: RegistryAction) {
     match action {
-        RegistryAction::Serve { bind, storage } => cmd_registry_serve(bind, storage),
         RegistryAction::Publish {
             registry,
             tag,
@@ -1710,27 +1700,6 @@ fn cmd_registry(action: RegistryAction) {
             tag,
             verified: _,
         } => cmd_registry_search(query, registry, r#type, tag),
-    }
-}
-
-fn cmd_registry_serve(bind: String, storage: Option<PathBuf>) {
-    let config = trident::registry::RegistryConfig {
-        bind_addr: bind,
-        storage_dir: storage.unwrap_or_else(|| {
-            std::env::var("TRIDENT_REGISTRY_DIR")
-                .map(PathBuf::from)
-                .unwrap_or_else(|_| {
-                    std::env::var("HOME")
-                        .map(|h| PathBuf::from(h).join(".trident").join("registry"))
-                        .unwrap_or_else(|_| PathBuf::from(".trident-registry"))
-                })
-        }),
-        max_body_size: 1024 * 1024,
-    };
-
-    if let Err(e) = trident::registry::run_server(&config) {
-        eprintln!("error: registry server failed: {}", e);
-        process::exit(1);
     }
 }
 

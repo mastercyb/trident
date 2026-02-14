@@ -1,13 +1,7 @@
-pub mod cairo;
-pub mod cycle;
-pub mod miden;
 pub mod triton;
 
 use crate::ast::BinOp;
 
-pub(crate) use cairo::CairoCostModel;
-pub(crate) use cycle::CycleCostModel;
-pub(crate) use miden::MidenCostModel;
 pub(crate) use triton::TritonCostModel;
 
 // ---------------------------------------------------------------------------
@@ -19,7 +13,6 @@ pub(crate) use triton::TritonCostModel;
 /// Each target VM implements this to provide table names, per-instruction
 /// costs, and formatting for cost reports. The cost analyzer delegates all
 /// target-specific knowledge through this trait.
-#[allow(dead_code)] // Methods will be used by future cost model implementations.
 pub(crate) trait CostModel {
     /// Names of the execution tables (e.g. ["processor", "hash", "u32", ...]).
     fn table_names(&self) -> &[&str];
@@ -208,19 +201,4 @@ impl TableCost {
 /// Used by LSP and other callers that don't have a CostModel reference.
 pub(crate) fn cost_builtin(name: &str) -> TableCost {
     TritonCostModel.builtin_cost(name)
-}
-
-// ─── Cost Model Factory ───────────────────────────────────────────
-
-/// Create the appropriate cost model for a target name.
-#[allow(dead_code)]
-pub(crate) fn create_cost_model(target_name: &str) -> Box<dyn CostModel> {
-    match target_name {
-        "triton" => Box::new(TritonCostModel),
-        "miden" => Box::new(MidenCostModel),
-        "openvm" => Box::new(CycleCostModel::openvm()),
-        "sp1" => Box::new(CycleCostModel::sp1()),
-        "cairo" => Box::new(CairoCostModel),
-        _ => Box::new(TritonCostModel),
-    }
 }

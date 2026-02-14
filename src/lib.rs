@@ -19,7 +19,6 @@ pub use frontend::lexeme;
 pub use frontend::lexer;
 pub use frontend::parser;
 pub use pkgmgmt::cache;
-#[allow(unused_imports)]
 pub use pkgmgmt::hash;
 pub use pkgmgmt::manifest as package;
 pub use pkgmgmt::poseidon2;
