@@ -1,9 +1,7 @@
 # 🔱 Trident
 
 <p align="center">
-  <a href="https://github.com/mastercyb/trident/raw/master/assets/trident.mp4">
-    <img src="assets/trident.jpg" width="420" alt="Trident" />
-  </a>
+  <img src="assets/trident.gif" width="420" alt="Trident" />
 </p>
 
 *Write once. Prove anywhere.*
