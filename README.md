@@ -6,15 +6,18 @@
   <img src="assets/trident-girl.gif" width="100%" alt="Trident" />
 </p>
 
-Trident is a minimal, security-first programming language for provable
-computation. Today it compiles to [Triton VM](https://triton-vm.org/) —
-the only quantum-safe, STARK-native virtual machine in production — powering
-[Neptune Cash](https://neptune.cash/), the only blockchain that satisfies
-all four requirements: quantum-safe, private, programmable, and mineable.
+Trident is a programming language for provable virtual machines.
 
-The compiler is designed for [multi-target compilation](docs/explanation/multi-target.md):
-the same source will compile to Miden, Cairo, RISC-V zkVMs, EVM, WASM, and
-Nock as those backends ship. Write once, prove anywhere.
+Provable VMs are a new kind of machine. They execute over finite fields,
+not bytes. Every instruction is a polynomial constraint. Programs produce
+cryptographic proofs, not return values. This is fundamentally different
+from conventional computing — and it needs a language built for how the
+machine actually works.
+
+Today Trident compiles to [Triton VM](https://triton-vm.org/), powering
+[Neptune Cash](https://neptune.cash/). The architecture supports
+[multi-target compilation](docs/explanation/multi-target.md) — the same
+source will compile to other proving backends as they ship.
 
 ```trident
 program hello
@@ -40,30 +43,36 @@ exists and what it's building toward.
 
 ---
 
-## 🧬 Why Trident
+## 🧬 Why a New Language
 
-Every other ZK system trades away at least one of: quantum safety, privacy,
-programmability, or permissionless participation.
-[Neptune](https://neptune.cash/) is the only OS that passes all four tests —
-and Trident is the language that makes it programmable.
+Provable VMs need a language designed for how they work. Four structural
+facts drive every design decision in Trident:
 
-Quantum-native by structural necessity. Trident's prime field arithmetic
-is not just an implementation choice for STARK proofs — it is the same
-algebraic structure required for optimal quantum computation.
-Every Trident program is an arithmetic circuit over a prime field: `Field`
-maps to a qudit register, `divine()` maps to a quantum oracle, bounded loops
-map to fixed-depth quantum circuits. The same program that proves on Triton VM
-today can be quantum-accelerated tomorrow — zero source changes. Post-quantum
-secure AND pre-quantum-advantage ready, from the same design choice. See the
-[Quantum Computing paper](docs/explanation/quantum.md).
+**Arithmetic circuits are not programs.** The machine word is a field
+element, not a byte. A language that treats `Field`, `Digest`, and
+extension fields as first-class types generates native circuits. One that
+wraps byte-oriented code in ZK proofs fights the machine at every step.
+
+**Proofs compose, calls don't.** There is no `msg.sender` calling a
+contract. Programs produce independent proofs that a verifier checks
+together. Trident is designed for proof composition — not invocation.
+
+**Bounded execution is a feature.** Circuits must terminate. Loops must
+be bounded. This isn't a limitation — it's what makes proofs finite and
+costs predictable. The compiler computes exact proving cost from source,
+before execution.
+
+**The field is the type system.** Goldilocks prime (2^64 - 2^32 + 1),
+cubic extension fields, 5-element digests — these are the native machine
+words. The same algebraic structure required for STARK proofs is also
+optimal for [quantum computation](docs/explanation/quantum.md). One
+design choice, two futures.
+
+### What follows from these facts
 
 What you see is what you prove. Source compiles through a 54-operation
 [intermediate representation](docs/reference/ir.md) that maps nearly 1:1 to
 target instructions. No optimization engine reorders your operations.
-
-Bounded execution, predictable cost. All loops require explicit bounds.
-No recursion. No heap. The compiler computes exact proving cost from source —
-before execution. See the [Optimization Guide](docs/guides/optimization.md).
 
 Hash performance dominance. Triton VM executes
 [Tip5](https://eprint.iacr.org/2023/107) in 1 clock cycle. SP1 needs ~3,000
@@ -71,20 +80,14 @@ cycles for SHA-256. RISC Zero needs ~1,000. For hash-heavy applications —
 Merkle trees, content addressing, token transfers — this is decisive.
 See the [Comparative Analysis](docs/explanation/provable-computing.md).
 
-Formal verification. Annotate with `#[requires]` and `#[ensures]`, run
-`trident verify`, get a proof of correctness for all inputs — or a concrete
-counterexample. See [Formal Verification](docs/explanation/formal-verification.md).
+Formal verification built in. Annotate with `#[requires]` and
+`#[ensures]`, run `trident verify`, get a proof of correctness for all
+inputs — or a concrete counterexample.
+See [Formal Verification](docs/explanation/formal-verification.md).
 
 Content-addressed code. Every function has a unique cryptographic
 identity derived from its normalized AST. Audit certificates travel with
 the code. See [Content-Addressed Code](docs/explanation/content-addressing.md).
-
-Multi-target by design. The [universal compilation architecture](docs/explanation/multi-target.md)
-compiles through TIR to 4 lowering paths: stack machines (Triton, Miden),
-register machines (x86-64, ARM64, RISC-V), tree machines (Nock), and GPU
-kernels (CUDA, Metal). 20 VM targets, 25 OS targets are
-[specified](docs/reference/targets.md). Triton is nearing production
-readiness, and other compilation targets are coming.
 
 ---
 
