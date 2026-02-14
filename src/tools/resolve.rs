@@ -167,14 +167,14 @@ fn legacy_stdlib_fallback(name: &str) -> Option<&'static str> {
         "ext.triton.utxo" => Some("os.neptune.utxo"),
         "ext.triton.proof" => Some("os.neptune.proof"),
         "ext.triton.recursive" => Some("os.neptune.recursive"),
-        "ext.triton.registry" => Some("os.neptune.registry"),
+
         // Backward compatibility: <os>.ext.* → os.<os>.*
         "neptune.ext.kernel" => Some("os.neptune.kernel"),
         "neptune.ext.utxo" => Some("os.neptune.utxo"),
         "neptune.ext.xfield" => Some("os.neptune.xfield"),
         "neptune.ext.proof" => Some("os.neptune.proof"),
         "neptune.ext.recursive" => Some("os.neptune.recursive"),
-        "neptune.ext.registry" => Some("os.neptune.registry"),
+
         // Backward compatibility: ext.<os>.* → os.<os>.*
         _ if name.starts_with("ext.") => {
             None // handled by resolve_path directly

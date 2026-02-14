@@ -22,7 +22,7 @@ Level 2 (provable computation).
 
 | Layer | What | Status | Files |
 |-------|------|--------|-------|
-| OS bindings | Neptune runtime modules | Compiler support | `os/neptune/kernel.tri`, `utxo.tri`, `proof.tri`, `xfield.tri`, `recursive.tri`, `registry.tri` |
+| OS bindings | Neptune runtime modules | Compiler support | `os/neptune/kernel.tri`, `utxo.tri`, `proof.tri`, `xfield.tri`, `recursive.tri` |
 | Type scripts | Value conservation rules | Compiler support | `examples/neptune/type_native_currency.tri` (NPT), `type_custom_token.tri` (TSP-1) |
 | Lock scripts | Spending authorization | Compiler support | `examples/neptune/lock_generation.tri`, `lock_symmetric.tri`, `lock_timelock.tri`, `lock_multisig.tri` |
 | Transaction validation | Full transaction verification | Compiler support | `examples/neptune/transaction_validation.tri` |

@@ -498,7 +498,7 @@ The proof bridge is a natural extension. Because Level 1 already requires field 
 - Architecture: 16-element operand stack, Goldilocks field, Tip5 hash.
 - Output: `.tasm` files (Triton Assembly).
 - Extensions: `os.neptune.xfield`, `os.neptune.kernel`, `os.neptune.utxo`,
-  `os.neptune.proof`, `os.neptune.recursive`, `os.neptune.registry`.
+  `os.neptune.proof`, `os.neptune.recursive`.
 - Cost model: 6-table model (processor, hash, u32, op_stack, ram,
   jump_stack) with padded-height estimation, boundary warnings, and hotspot
   analysis.

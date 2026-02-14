@@ -318,18 +318,14 @@ verification, UTXO structure access, or other Neptune-specific features. See
 | | `xb_inner_product(ptr_a, ptr_b, count)` | XField * BField inner product |
 | | `read_claim()` | Read (program_digest, num_inputs, num_outputs) |
 | | `verify_commitment(expected)` | Authenticate FRI commitment roots |
-| `os.neptune.registry` | Op 0: `REGISTER` | Add definition to on-chain registry |
-| | Op 1: `VERIFY` | Prove definition is registered + verified |
-| | Op 2: `UPDATE` | Update verification certificate |
-| | Op 3: `LOOKUP` | Authenticate definition against registry |
-| | Op 4: `EQUIV` | Register equivalence claim between definitions |
+
 
 ---
 
 ## Notes
 
 Neptune is the reference implementation of the Trident OS model. It is the
-only OS with fully implemented `os.neptune.*` bindings (6 modules, ~500 lines of
+only OS with fully implemented `os.neptune.*` bindings (5 modules, ~400 lines of
 Trident code in `ext/neptune/`). All other OS bindings are designed but not
 yet implemented.
 

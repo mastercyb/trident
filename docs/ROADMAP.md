@@ -21,7 +21,7 @@ are the remaining roadmap.
 
 ## Milestone 3: Content-Addressed Codebase
 
-- [x] Complete — AST normalization, content hashing, UCM (add/list/view/rename/stats/history/deps), compilation caching, global registry (HTTP API, publish/pull, search, certificate sharing), semantic equivalence checking, on-chain Merkle registry with proof generation
+- [x] Complete — AST normalization, content hashing, UCM (add/list/view/rename/stats/history/deps), compilation caching, global registry (HTTP API, publish/pull, search, certificate sharing), semantic equivalence checking
 
 ## Milestone 4: Multi-Target Backends
 

@@ -56,7 +56,7 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 | [`cost/`](cost/) | 2,335 | Static cost [analyzer](cost/analyzer.rs), per-function breakdown, [optimization hints and reports](cost/report.rs) |
 | [`cost/model/`](cost/model/) | 771 | [`CostModel`](cost/model/mod.rs) trait + four targets: [Triton](cost/model/triton.rs), [Miden](cost/model/miden.rs), [Cycle](cost/model/cycle.rs), [Cairo](cost/model/cairo.rs) |
 | [`verify/`](verify/) | 5,570 | [Symbolic execution](verify/sym.rs), [constraint solving](verify/solve.rs), [SMT encoding](verify/smt.rs), [equivalence checking](verify/equiv.rs), [invariant synthesis](verify/synthesize.rs), [JSON reports](verify/report.rs) |
-| [`pkgmgmt/`](pkgmgmt/) | 7,737 | [BLAKE3 hashing](pkgmgmt/hash.rs), [Poseidon2](pkgmgmt/poseidon2.rs), [UCM codebase](pkgmgmt/ucm.rs), [registry server/client](pkgmgmt/registry.rs), [on-chain Merkle registry](pkgmgmt/onchain.rs), [dependency manifests](pkgmgmt/manifest.rs), [compilation cache](pkgmgmt/cache.rs) |
+| [`pkgmgmt/`](pkgmgmt/) | 6,500 | [BLAKE3 hashing](pkgmgmt/hash.rs), [Poseidon2](pkgmgmt/poseidon2.rs), [UCM codebase](pkgmgmt/ucm.rs), [registry server/client](pkgmgmt/registry.rs), [dependency manifests](pkgmgmt/manifest.rs), [compilation cache](pkgmgmt/cache.rs) |
 | [`tools/`](tools/) | 4,300 | [Language Server](tools/lsp.rs), [code scaffolding](tools/scaffold.rs), [definition viewer](tools/view.rs), [project config](tools/project.rs), [module resolution](tools/resolve.rs), [target configuration](tools/target.rs), [artifact packaging](tools/package.rs) |
 
 ## Top-Level Files
@@ -80,7 +80,7 @@ Cost Analysis ([`cost/`](cost/)). The [analyzer](cost/analyzer.rs) walks the AST
 
 Formal Verification ([`verify/`](verify/)). The [symbolic executor](verify/sym.rs) builds path constraints over the AST. The [solver](verify/solve.rs) uses Schwartz-Zippel randomized testing and bounded model checking. The [SMT module](verify/smt.rs) encodes constraints in SMT-LIB2 for external solvers. The [equivalence checker](verify/equiv.rs) proves two functions compute the same result. The [synthesizer](verify/synthesize.rs) infers loop invariants automatically.
 
-Package Management ([`pkgmgmt/`](pkgmgmt/)). Content-addressed storage using BLAKE3 [hashing](pkgmgmt/hash.rs) with [Poseidon2](pkgmgmt/poseidon2.rs) for in-proof verification. The [UCM](pkgmgmt/ucm.rs) manages a local codebase of named, versioned definitions. The [registry](pkgmgmt/registry.rs) provides an HTTP server and client for publishing and pulling definitions. The [on-chain module](pkgmgmt/onchain.rs) implements a Merkle-tree registry for blockchain-anchored code.
+Package Management ([`pkgmgmt/`](pkgmgmt/)). Content-addressed storage using BLAKE3 [hashing](pkgmgmt/hash.rs) with [Poseidon2](pkgmgmt/poseidon2.rs) for in-proof verification. The [UCM](pkgmgmt/ucm.rs) manages a local codebase of named, versioned definitions. The [registry](pkgmgmt/registry.rs) provides an HTTP server and client for publishing and pulling definitions.
 
 ## Design Principles
 

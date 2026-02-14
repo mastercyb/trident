@@ -407,7 +407,7 @@ cross-OS imports.
 | `os.neptune.xfield` | Extension field arithmetic intrinsics | [neptune.md](../../os/neptune/README.md) |
 | `os.neptune.proof` | Recursive STARK verification | [neptune.md](../../os/neptune/README.md) |
 | `os.neptune.recursive` | Low-level recursive proof primitives | [neptune.md](../../os/neptune/README.md) |
-| `os.neptune.registry` | On-chain definition registry (5 ops) | [neptune.md](../../os/neptune/README.md) |
+
 
 ### Designed (not yet implemented)
 

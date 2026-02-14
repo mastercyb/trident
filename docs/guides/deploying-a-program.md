@@ -327,12 +327,6 @@ Trident includes standard token implementations ready for deployment:
 - Native currency: Neptune's built-in currency type script.
   See `examples/neptune/type_native_currency.tri`.
 
-### On-Chain Registry
-
-The `os.neptune.registry` module provides an on-chain Merkle-tree registry
-for content-addressed definitions. Programs can be registered, verified,
-looked up, and updated via provable operations.
-
 ### Proof Composition
 
 A Trident program can verify another program's proof internally using the

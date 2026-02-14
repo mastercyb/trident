@@ -28,7 +28,6 @@ pub use pkgmgmt::cache;
 #[allow(unused_imports)]
 pub use pkgmgmt::hash;
 pub use pkgmgmt::manifest as package;
-pub use pkgmgmt::onchain;
 pub use pkgmgmt::poseidon2;
 pub use pkgmgmt::registry;
 pub use pkgmgmt::ucm;
