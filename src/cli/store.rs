@@ -3,7 +3,7 @@ use std::process;
 
 use clap::Subcommand;
 
-use super::{collect_tri_files, open_codebase, try_load_and_parse};
+use super::{open_codebase, resolve_tri_files, try_load_and_parse};
 
 #[derive(Subcommand)]
 pub enum StoreAction {
@@ -55,15 +55,7 @@ pub fn cmd_store(action: StoreAction) {
 fn cmd_store_add(input: PathBuf) {
     let mut cb = open_codebase();
 
-    let files = if input.is_dir() {
-        collect_tri_files(&input)
-    } else if input.extension().is_some_and(|e| e == "tri") {
-        vec![input.clone()]
-    } else {
-        eprintln!("error: input must be a .tri file or directory");
-        process::exit(1);
-    };
-
+    let files = resolve_tri_files(&input);
     if files.is_empty() {
         eprintln!("No .tri files found in '{}'", input.display());
         return;
@@ -173,14 +165,8 @@ fn cmd_store_history(name: String) {
 fn cmd_store_deps(name: String) {
     let cb = open_codebase();
 
-    let hash = if let Some(_def) = cb.lookup(&name) {
-        match cb.list_names().iter().find(|(n, _)| *n == name.as_str()) {
-            Some((_, h)) => **h,
-            None => {
-                eprintln!("error: '{}' not found", name);
-                process::exit(1);
-            }
-        }
+    let hash = if let Some((_, h)) = cb.list_names().iter().find(|(n, _)| *n == name.as_str()) {
+        **h
     } else if let Some((h, _)) = cb.lookup_by_prefix(&name) {
         *h
     } else {

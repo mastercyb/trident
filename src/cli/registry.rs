@@ -3,7 +3,7 @@ use std::process;
 
 use clap::Subcommand;
 
-use super::{collect_tri_files, open_codebase, registry_client, registry_url, try_load_and_parse};
+use super::{open_codebase, registry_client, registry_url, resolve_tri_files, try_load_and_parse};
 
 #[derive(Subcommand)]
 pub enum RegistryAction {
@@ -69,15 +69,7 @@ fn cmd_registry_publish(registry: Option<String>, tags: Vec<String>, input: Opti
     let mut cb = open_codebase();
 
     if let Some(ref input_path) = input {
-        let files = if input_path.is_dir() {
-            collect_tri_files(input_path)
-        } else if input_path.extension().is_some_and(|e| e == "tri") {
-            vec![input_path.clone()]
-        } else {
-            eprintln!("error: input must be a .tri file or directory");
-            process::exit(1);
-        };
-
+        let files = resolve_tri_files(input_path);
         for file_path in &files {
             if let Some((_, file)) = try_load_and_parse(file_path) {
                 cb.add_file(&file);

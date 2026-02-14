@@ -76,75 +76,76 @@ pub fn cmd_build(args: BuildArgs) {
     }
     eprintln!("Compiled -> {}", out_path.display());
 
-    // --annotate: print per-line cost annotations
     if annotate {
         if let Some(source_path) = find_program_source(&input) {
             let source = std::fs::read_to_string(&source_path).unwrap_or_default();
             let filename = source_path.to_string_lossy().to_string();
             match trident::annotate_source(&source, &filename) {
-                Ok(annotated) => {
-                    println!("{}", annotated);
-                }
-                Err(_) => {
-                    eprintln!("error: could not annotate source (compilation errors)");
-                }
+                Ok(annotated) => println!("{}", annotated),
+                Err(_) => eprintln!("error: could not annotate source (compilation errors)"),
             }
         }
     }
 
-    // Cost analysis, hotspots, and optimization hints
-    if costs || hotspots || hints || save_costs.is_some() || compare.is_some() {
-        if let Some(source_path) = find_program_source(&input) {
-            let cost_options = resolve_options(&target, &profile, None);
-            if let Ok(program_cost) = trident::analyze_costs_project(&source_path, &cost_options) {
-                if costs || hotspots {
-                    eprintln!("\n{}", program_cost.format_report());
-                    if hotspots {
-                        eprintln!("{}", program_cost.format_hotspots(5));
-                    }
-                }
-                if hints {
-                    let opt_hints = program_cost.optimization_hints();
-                    let boundary = program_cost.boundary_warnings();
-                    let all_hints: Vec<_> = opt_hints.into_iter().chain(boundary).collect();
-                    if all_hints.is_empty() {
-                        eprintln!("\nNo optimization hints.");
-                    } else {
-                        eprintln!("\nOptimization hints:");
-                        for hint in &all_hints {
-                            eprintln!("  {}", hint.message);
-                            for note in &hint.notes {
-                                eprintln!("    note: {}", note);
-                            }
-                            if let Some(help) = &hint.help {
-                                eprintln!("    help: {}", help);
-                            }
-                        }
-                    }
-                }
+    let need_costs = costs || hotspots || hints || save_costs.is_some() || compare.is_some();
+    if !need_costs {
+        return;
+    }
+    let source_path = match find_program_source(&input) {
+        Some(p) => p,
+        None => return,
+    };
+    let cost_options = resolve_options(&target, &profile, None);
+    let program_cost = match trident::analyze_costs_project(&source_path, &cost_options) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
 
-                // --save-costs: write cost JSON to file
-                if let Some(ref save_path) = save_costs {
-                    if let Err(e) = program_cost.save_json(save_path) {
-                        eprintln!("error: {}", e);
-                        process::exit(1);
-                    }
-                    eprintln!("Saved costs -> {}", save_path.display());
-                }
-
-                // --compare: load previous costs and show diff
-                if let Some(ref compare_path) = compare {
-                    match trident::cost::ProgramCost::load_json(compare_path) {
-                        Ok(old_cost) => {
-                            eprintln!("\n{}", old_cost.format_comparison(&program_cost));
-                        }
-                        Err(e) => {
-                            eprintln!("error: {}", e);
-                            process::exit(1);
-                        }
-                    }
-                }
+    if costs || hotspots {
+        eprintln!("\n{}", program_cost.format_report());
+        if hotspots {
+            eprintln!("{}", program_cost.format_hotspots(5));
+        }
+    }
+    if hints {
+        print_hints(&program_cost);
+    }
+    if let Some(ref save_path) = save_costs {
+        if let Err(e) = program_cost.save_json(save_path) {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+        eprintln!("Saved costs -> {}", save_path.display());
+    }
+    if let Some(ref compare_path) = compare {
+        match trident::cost::ProgramCost::load_json(compare_path) {
+            Ok(old_cost) => eprintln!("\n{}", old_cost.format_comparison(&program_cost)),
+            Err(e) => {
+                eprintln!("error: {}", e);
+                process::exit(1);
             }
+        }
+    }
+}
+
+fn print_hints(cost: &trident::cost::ProgramCost) {
+    let all: Vec<_> = cost
+        .optimization_hints()
+        .into_iter()
+        .chain(cost.boundary_warnings())
+        .collect();
+    if all.is_empty() {
+        eprintln!("\nNo optimization hints.");
+        return;
+    }
+    eprintln!("\nOptimization hints:");
+    for hint in &all {
+        eprintln!("  {}", hint.message);
+        for note in &hint.notes {
+            eprintln!("    note: {}", note);
+        }
+        if let Some(help) = &hint.help {
+            eprintln!("    help: {}", help);
         }
     }
 }

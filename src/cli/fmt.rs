@@ -3,7 +3,7 @@ use std::process;
 
 use clap::Args;
 
-use super::collect_tri_files;
+use super::resolve_tri_files;
 
 #[derive(Args)]
 pub struct FmtArgs {
@@ -17,45 +17,23 @@ pub struct FmtArgs {
 pub fn cmd_fmt(args: FmtArgs) {
     let FmtArgs { input, check } = args;
     let input = input.unwrap_or_else(|| PathBuf::from("."));
+    let files = resolve_tri_files(&input);
 
-    if input.is_dir() {
-        let files = collect_tri_files(&input);
-        if files.is_empty() {
-            eprintln!("No .tri files found in '{}'", input.display());
-            return;
-        }
+    if files.is_empty() {
+        eprintln!("No .tri files found in '{}'", input.display());
+        return;
+    }
 
-        let mut any_unformatted = false;
-        for file in &files {
-            match format_single_file(file, check) {
-                Ok(changed) => {
-                    if changed {
-                        any_unformatted = true;
-                    }
-                }
-                Err(msg) => {
-                    eprintln!("error: {}", msg);
-                }
-            }
+    let mut any_unformatted = false;
+    for file in &files {
+        match format_single_file(file, check) {
+            Ok(changed) if changed => any_unformatted = true,
+            Err(msg) => eprintln!("error: {}", msg),
+            _ => {}
         }
+    }
 
-        if check && any_unformatted {
-            process::exit(1);
-        }
-    } else if input.extension().is_some_and(|e| e == "tri") {
-        match format_single_file(&input, check) {
-            Ok(changed) => {
-                if check && changed {
-                    process::exit(1);
-                }
-            }
-            Err(msg) => {
-                eprintln!("error: {}", msg);
-                process::exit(1);
-            }
-        }
-    } else {
-        eprintln!("error: input must be a .tri file or directory");
+    if check && any_unformatted {
         process::exit(1);
     }
 }

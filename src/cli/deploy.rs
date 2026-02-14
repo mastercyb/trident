@@ -113,23 +113,15 @@ pub fn cmd_deploy(args: DeployArgs) {
 fn deploy_to_registry(artifact_dir: &Path, client: &trident::registry::RegistryClient) {
     eprintln!("Deploying...");
 
-    let tasm_path = artifact_dir.join("program.tasm");
-    if !artifact_dir.join("manifest.json").exists() || !tasm_path.exists() {
+    if !artifact_dir.join("manifest.json").exists() || !artifact_dir.join("program.tasm").exists() {
         eprintln!(
-            "error: artifact directory '{}' missing manifest.json or program.tasm",
+            "error: artifact '{}' missing manifest.json or program.tasm",
             artifact_dir.display()
         );
         process::exit(1);
     }
 
-    let tasm = match std::fs::read_to_string(&tasm_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: cannot read program.tasm: {}", e);
-            process::exit(1);
-        }
-    };
-
+    // Try to find and add source to codebase
     let source_path = artifact_dir.parent().and_then(|parent| {
         let stem = artifact_dir
             .file_stem()
@@ -141,7 +133,6 @@ fn deploy_to_registry(artifact_dir: &Path, client: &trident::registry::RegistryC
     });
 
     let mut cb = open_codebase();
-
     if let Some(source_file) = source_path {
         if let Some((_, file)) = try_load_and_parse(&source_file) {
             cb.add_file(&file);
@@ -152,15 +143,7 @@ fn deploy_to_registry(artifact_dir: &Path, client: &trident::registry::RegistryC
         }
     }
 
-    publish_and_report(client, &cb, &tasm);
-}
-
-fn publish_and_report(
-    client: &trident::registry::RegistryClient,
-    cb: &trident::store::Codebase,
-    _tasm: &str,
-) {
-    match trident::registry::publish_codebase(cb, client, &[]) {
+    match trident::registry::publish_codebase(&cb, client, &[]) {
         Ok(results) => {
             let created = results.iter().filter(|r| r.created).count();
             eprintln!("Deployed: {} definitions ({} new)", results.len(), created);

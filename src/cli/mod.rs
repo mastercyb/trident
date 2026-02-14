@@ -24,9 +24,17 @@ pub struct ResolvedInput {
     pub project: Option<trident::project::Project>,
 }
 
+fn load_project(toml_path: &Path) -> trident::project::Project {
+    match trident::project::Project::load(toml_path) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: {}", e.message);
+            process::exit(1);
+        }
+    }
+}
+
 /// Resolve an input path (file or project directory) to an entry file and optional project.
-///
-/// This is the common "is-it-a-dir? find-toml? load-project?" boilerplate.
 pub fn resolve_input(input: &Path) -> ResolvedInput {
     if input.is_dir() {
         let toml_path = input.join("trident.toml");
@@ -34,63 +42,47 @@ pub fn resolve_input(input: &Path) -> ResolvedInput {
             eprintln!("error: no trident.toml found in '{}'", input.display());
             process::exit(1);
         }
-        let project = match trident::project::Project::load(&toml_path) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("error: {}", e.message);
-                process::exit(1);
-            }
-        };
+        let project = load_project(&toml_path);
         let entry = project.entry.clone();
-        ResolvedInput {
+        return ResolvedInput {
             entry,
             project: Some(project),
-        }
-    } else if input.extension().is_some_and(|e| e == "tri") {
-        if let Some(toml_path) =
-            trident::project::Project::find(input.parent().unwrap_or(Path::new(".")))
-        {
-            let project = match trident::project::Project::load(&toml_path) {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("error: {}", e.message);
-                    process::exit(1);
-                }
-            };
+        };
+    }
+
+    if !input.extension().is_some_and(|e| e == "tri") {
+        eprintln!("error: input must be a .tri file or project directory");
+        process::exit(1);
+    }
+
+    let toml_path = trident::project::Project::find(input.parent().unwrap_or(Path::new(".")));
+    match toml_path {
+        Some(p) => {
+            let project = load_project(&p);
             let entry = project.entry.clone();
             ResolvedInput {
                 entry,
                 project: Some(project),
             }
-        } else {
-            ResolvedInput {
-                entry: input.to_path_buf(),
-                project: None,
-            }
         }
-    } else {
-        eprintln!("error: input must be a .tri file or project directory");
-        process::exit(1);
+        None => ResolvedInput {
+            entry: input.to_path_buf(),
+            project: None,
+        },
     }
 }
 
 /// Resolve a VM target + profile to CompileOptions.
-///
-/// - `target`: VM target name (e.g. "triton"). For backward compat, if
-///   "debug" or "release" is passed as target, treat it as profile with a
-///   deprecation warning.
-/// - `profile`: compilation profile for cfg flags (e.g. "debug", "release").
 pub fn resolve_options(
     target: &str,
     profile: &str,
     project: Option<&trident::project::Project>,
 ) -> trident::CompileOptions {
-    // Backward compatibility: if --target was "debug" or "release", the user
-    // is using the old semantics where --target meant profile.
+    // Backward compat: --target debug/release → treat as profile
     let (vm_target, actual_profile) = match target {
         "debug" | "release" => {
             eprintln!(
-                "warning: --target {} is deprecated for profile selection; use --profile {} --target triton",
+                "warning: --target {} is deprecated; use --profile {} --target triton",
                 target, target
             );
             ("triton", target)
@@ -98,22 +90,12 @@ pub fn resolve_options(
         _ => (target, profile),
     };
 
-    // Use project's target if CLI target is the default and project specifies one
-    let effective_target = if vm_target == "triton" {
-        if let Some(proj) = project {
-            if let Some(ref proj_target) = proj.target {
-                proj_target.as_str()
-            } else {
-                vm_target
-            }
-        } else {
-            vm_target
-        }
-    } else {
-        vm_target
+    // Project may override the default "triton" target
+    let effective_target = match (vm_target, project) {
+        ("triton", Some(proj)) if proj.target.is_some() => proj.target.as_deref().unwrap(),
+        _ => vm_target,
     };
 
-    // Resolve the VM target config
     let target_config = if effective_target == "triton" {
         trident::target::TargetConfig::triton()
     } else {
@@ -126,18 +108,10 @@ pub fn resolve_options(
         }
     };
 
-    // Resolve cfg flags from project targets or default to profile name
-    let cfg_flags = if let Some(proj) = project {
-        // Check project [target] field first
-        // Then check project [targets.PROFILE] for cfg flags
-        if let Some(flags) = proj.targets.get(actual_profile) {
-            flags.iter().cloned().collect()
-        } else {
-            std::collections::HashSet::from([actual_profile.to_string()])
-        }
-    } else {
-        std::collections::HashSet::from([actual_profile.to_string()])
-    };
+    let cfg_flags = project
+        .and_then(|proj| proj.targets.get(actual_profile))
+        .map(|flags| flags.iter().cloned().collect())
+        .unwrap_or_else(|| std::collections::HashSet::from([actual_profile.to_string()]));
 
     trident::CompileOptions {
         profile: actual_profile.to_string(),
@@ -147,8 +121,7 @@ pub fn resolve_options(
     }
 }
 
-/// Result of the shared compile → analyze → parse → verify pipeline
-/// used by both `package` and `deploy` commands.
+/// Result of the shared compile → analyze → parse → verify pipeline.
 pub struct PreparedArtifact {
     pub project: Option<trident::project::Project>,
     pub entry: PathBuf,
@@ -160,20 +133,17 @@ pub struct PreparedArtifact {
     pub resolved: trident::target::ResolvedTarget,
 }
 
-/// Shared pipeline for package and deploy: resolve input, compile, analyze costs,
-/// parse source, determine name/version, optionally verify.
+/// Shared pipeline for package and deploy.
 pub fn prepare_artifact(
     input: &Path,
     target: &str,
     profile: &str,
     verify: bool,
 ) -> PreparedArtifact {
-    // 1. Resolve input
     let ri = resolve_input(input);
     let project = ri.project;
     let entry = ri.entry;
 
-    // 2. Resolve target (OS-aware)
     let resolved = match trident::target::ResolvedTarget::resolve(target) {
         Ok(r) => r,
         Err(e) => {
@@ -182,14 +152,12 @@ pub fn prepare_artifact(
         }
     };
 
-    // 3. Build CompileOptions
     let mut options = resolve_options(&resolved.vm.name, profile, project.as_ref());
     options.target_config = resolved.vm.clone();
     if let Some(ref proj) = project {
         options.dep_dirs = load_dep_dirs(proj);
     }
 
-    // 4. Compile
     eprintln!("Compiling {}...", entry.display());
     let tasm = match trident::compile_project_with_options(&entry, &options) {
         Ok(t) => t,
@@ -199,55 +167,34 @@ pub fn prepare_artifact(
         }
     };
 
-    // 5. Cost analysis
-    let cost = match trident::analyze_costs_project(&entry, &options) {
-        Ok(c) => c,
-        Err(_) => {
-            eprintln!("warning: cost analysis failed, using zeros");
-            trident::cost::ProgramCost {
-                program_name: String::new(),
-                functions: Vec::new(),
-                total: trident::cost::TableCost::ZERO,
-                attestation_hash_rows: 0,
-                padded_height: 0,
-                estimated_proving_secs: 0.0,
-                loop_bound_waste: Vec::new(),
-            }
+    let cost = trident::analyze_costs_project(&entry, &options).unwrap_or_else(|_| {
+        eprintln!("warning: cost analysis failed, using zeros");
+        trident::cost::ProgramCost {
+            program_name: String::new(),
+            functions: Vec::new(),
+            total: trident::cost::TableCost::ZERO,
+            attestation_hash_rows: 0,
+            padded_height: 0,
+            estimated_proving_secs: 0.0,
+            loop_bound_waste: Vec::new(),
         }
-    };
+    });
 
-    // 6. Parse source for function signatures
     let (_, file) = load_and_parse(&entry);
 
-    // 7. Determine name and version
-    let (name, version) = if let Some(ref proj) = project {
-        (proj.name.clone(), proj.version.clone())
-    } else {
-        let stem = entry
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("program")
-            .to_string();
-        (stem, "0.1.0".to_string())
+    let (name, version) = match project {
+        Some(ref proj) => (proj.name.clone(), proj.version.clone()),
+        None => {
+            let stem = entry
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("program");
+            (stem.to_string(), "0.1.0".to_string())
+        }
     };
 
-    // 8. Optional verification
     if verify {
-        eprintln!("Verifying {}...", entry.display());
-        match trident::verify_project(&entry) {
-            Ok(report) => {
-                if !report.is_safe() {
-                    eprintln!("error: verification failed");
-                    eprintln!("{}", report.format_report());
-                    process::exit(1);
-                }
-                eprintln!("Verification: OK");
-            }
-            Err(_) => {
-                eprintln!("error: verification failed");
-                process::exit(1);
-            }
-        }
+        verify_or_exit(&entry);
     }
 
     PreparedArtifact {
@@ -259,6 +206,21 @@ pub fn prepare_artifact(
         name,
         version,
         resolved,
+    }
+}
+
+fn verify_or_exit(entry: &Path) {
+    eprintln!("Verifying {}...", entry.display());
+    match trident::verify_project(entry) {
+        Ok(report) if report.is_safe() => eprintln!("Verification: OK"),
+        Ok(report) => {
+            eprintln!("error: verification failed\n{}", report.format_report());
+            process::exit(1);
+        }
+        Err(_) => {
+            eprintln!("error: verification failed");
+            process::exit(1);
+        }
     }
 }
 
@@ -348,8 +310,19 @@ pub fn find_program_source(input: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Recursively collect all .tri files in a directory, skipping hidden dirs and target/.
-pub fn collect_tri_files(dir: &Path) -> Vec<PathBuf> {
+/// Resolve an input path to a list of .tri files (file or directory), exiting on error.
+pub fn resolve_tri_files(input: &Path) -> Vec<PathBuf> {
+    if input.is_dir() {
+        collect_tri_files(input)
+    } else if input.extension().is_some_and(|e| e == "tri") {
+        vec![input.to_path_buf()]
+    } else {
+        eprintln!("error: input must be a .tri file or directory");
+        process::exit(1);
+    }
+}
+
+fn collect_tri_files(dir: &Path) -> Vec<PathBuf> {
     let mut result = Vec::new();
     collect_tri_files_recursive(dir, &mut result);
     result.sort();
