@@ -94,11 +94,11 @@ the code. See [Content-Addressed Code](docs/explanation/content-addressing.md).
 
 ---
 
-## 🏗️ Examples
+## 🏗️ Apps
 
-Everything below compiles to TASM with `trident build` today.
+Production programs that compile to TASM with `trident build` today.
 
-[Coin](os/neptune/standards/coin.tri) — 535-line fungible token (TSP-1).
+[Coin](os/neptune/standards/coin.tri) — Fungible token (TSP-1).
 Five operations (Pay, Lock, Update, Mint, Burn), time-locks, nullifiers,
 configurable authorities, composable hooks.
 
