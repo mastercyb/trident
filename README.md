@@ -1,10 +1,10 @@
 # 🔱 Trident
 
+*Write once. Prove anywhere.*
+
 <p align="center">
   <img src="assets/trident-girl.gif" width="420" alt="Trident" />
 </p>
-
-*Write once. Prove anywhere.*
 
 Trident is a minimal, security-first programming language for provable
 computation. Today it compiles to [Triton VM](https://triton-vm.org/) —
