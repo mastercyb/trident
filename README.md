@@ -1,6 +1,6 @@
 # 🔱 Trident
 
-*Write once. Prove anywhere.*
+## Write once. Prove anywhere
 
 <p align="center">
   <img src="assets/trident-girl.gif" width="100%" alt="Trident" />
