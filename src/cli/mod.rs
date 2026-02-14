@@ -270,6 +270,59 @@ pub fn prepare_artifact(
     }
 }
 
+/// Load and parse a .tri file, exiting on error.
+pub fn load_and_parse(path: &Path) -> (String, trident::ast::File) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read '{}': {}", path.display(), e);
+            process::exit(1);
+        }
+    };
+    let filename = path.to_string_lossy().to_string();
+    match trident::parse_source_silent(&source, &filename) {
+        Ok(f) => (source, f),
+        Err(_) => {
+            eprintln!("error: parse errors in '{}'", path.display());
+            process::exit(1);
+        }
+    }
+}
+
+/// Open the UCM codebase, exiting on error.
+pub fn open_codebase() -> trident::ucm::Codebase {
+    match trident::ucm::Codebase::open() {
+        Ok(cb) => cb,
+        Err(e) => {
+            eprintln!("error: cannot open codebase: {}", e);
+            process::exit(1);
+        }
+    }
+}
+
+/// Create a registry client with health check, exiting on error.
+pub fn registry_client(url: Option<String>) -> trident::registry::RegistryClient {
+    let url = url.unwrap_or_else(trident::registry::RegistryClient::default_url);
+    let client = trident::registry::RegistryClient::new(&url);
+    match client.health() {
+        Ok(true) => {}
+        Ok(false) => {
+            eprintln!("error: registry at {} is not healthy", url);
+            process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("error: cannot reach registry at {}: {}", url, e);
+            process::exit(1);
+        }
+    }
+    client
+}
+
+/// Resolve a registry URL to its default if None.
+pub fn registry_url(url: Option<String>) -> String {
+    url.unwrap_or_else(trident::registry::RegistryClient::default_url)
+}
+
 /// Load dependency search directories from a project's lockfile (if present).
 pub fn load_dep_dirs(project: &trident::project::Project) -> Vec<PathBuf> {
     let lock_path = project.root_dir.join("trident.lock");

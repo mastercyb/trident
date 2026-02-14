@@ -3,6 +3,10 @@ mod cli;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+use cli::deps::DepsAction;
+use cli::registry::RegistryAction;
+use cli::ucm::UcmAction;
+
 #[derive(Parser)]
 #[command(
     name = "trident",
@@ -222,96 +226,6 @@ enum Command {
     },
     /// Start the Language Server Protocol server
     Lsp,
-}
-
-#[derive(Subcommand)]
-enum DepsAction {
-    /// Show declared dependencies and lock status
-    List,
-    /// Resolve and fetch all dependencies
-    Fetch {
-        /// Registry URL (default: http://127.0.0.1:8090)
-        #[arg(long, default_value = "http://127.0.0.1:8090")]
-        registry: String,
-    },
-    /// Verify all locked dependencies are cached and valid
-    Check,
-}
-
-#[derive(Subcommand)]
-enum UcmAction {
-    /// Add a file to the codebase
-    Add {
-        /// Input .tri file or directory
-        input: PathBuf,
-    },
-    /// List all named definitions
-    List,
-    /// View a definition by name or hash prefix
-    View {
-        /// Name or hash prefix
-        name: String,
-    },
-    /// Rename a definition
-    Rename {
-        /// Current name
-        from: String,
-        /// New name
-        to: String,
-    },
-    /// Show codebase statistics
-    Stats,
-    /// Show history of a name
-    History {
-        /// Name to show history for
-        name: String,
-    },
-    /// Show dependencies of a definition
-    Deps {
-        /// Name or hash prefix
-        name: String,
-    },
-}
-
-#[derive(Subcommand)]
-enum RegistryAction {
-    /// Publish local UCM definitions to a registry
-    Publish {
-        /// Registry URL (default: $TRIDENT_REGISTRY_URL or http://127.0.0.1:8090)
-        #[arg(long)]
-        registry: Option<String>,
-        /// Tags to attach to published definitions
-        #[arg(long)]
-        tag: Vec<String>,
-        /// Input .tri file or directory (adds to UCM first, then publishes)
-        #[arg(short, long)]
-        input: Option<PathBuf>,
-    },
-    /// Pull a definition from a registry into local UCM
-    Pull {
-        /// Name or content hash to pull
-        name: String,
-        /// Registry URL
-        #[arg(long)]
-        registry: Option<String>,
-    },
-    /// Search a registry for definitions
-    Search {
-        /// Search query (name, module, or type signature)
-        query: String,
-        /// Registry URL
-        #[arg(long)]
-        registry: Option<String>,
-        /// Search by type signature instead of name
-        #[arg(long)]
-        r#type: bool,
-        /// Search by tag
-        #[arg(long)]
-        tag: bool,
-        /// Only show verified definitions
-        #[arg(long)]
-        verified: bool,
-    },
 }
 
 fn main() {

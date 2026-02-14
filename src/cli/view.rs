@@ -1,76 +1,19 @@
 use std::path::PathBuf;
 use std::process;
 
+use super::{load_and_parse, resolve_input};
+
 pub fn cmd_view(name: String, input: Option<PathBuf>, full: bool) {
-    // Resolve the source file to parse
-    let source_path = if let Some(ref path) = input {
-        if path.is_dir() {
-            let toml_path = path.join("trident.toml");
-            if !toml_path.exists() {
-                eprintln!("error: no trident.toml found in '{}'", path.display());
-                process::exit(1);
-            }
-            let project = match trident::project::Project::load(&toml_path) {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("error: {}", e.message);
-                    process::exit(1);
-                }
-            };
-            project.entry
-        } else if path.extension().is_some_and(|e| e == "tri") {
-            path.clone()
-        } else {
-            eprintln!("error: input must be a .tri file or project directory");
-            process::exit(1);
-        }
-    } else {
-        // Try current directory for trident.toml, then look for .tri files
-        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let toml_path = cwd.join("trident.toml");
-        if toml_path.exists() {
-            let project = match trident::project::Project::load(&toml_path) {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("error: {}", e.message);
-                    process::exit(1);
-                }
-            };
-            project.entry
-        } else {
-            let main_tri = cwd.join("main.tri");
-            if main_tri.exists() {
-                main_tri
-            } else {
-                eprintln!("error: no trident.toml or main.tri found in current directory");
-                eprintln!("  use --input to specify a .tri file or project directory");
-                process::exit(1);
-            }
-        }
-    };
-
-    let source = match std::fs::read_to_string(&source_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: cannot read '{}': {}", source_path.display(), e);
-            process::exit(1);
-        }
-    };
-
-    let filename = source_path.to_string_lossy().to_string();
-    let file = match trident::parse_source_silent(&source, &filename) {
-        Ok(f) => f,
-        Err(_) => {
-            eprintln!("error: parse errors in '{}'", source_path.display());
-            process::exit(1);
-        }
-    };
+    let input =
+        input.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let ri = resolve_input(&input);
+    let (_, file) = load_and_parse(&ri.entry);
+    let filename = ri.entry.to_string_lossy().to_string();
 
     let fn_hashes = trident::hash::hash_file(&file);
 
     // Try to find the function: by hash prefix or by name
     let (fn_name, func) = if trident::view::looks_like_hash(&name) {
-        // Try hash prefix first, fall back to name lookup
         if let Some((found_name, found_func)) =
             trident::view::find_function_by_hash(&file, &fn_hashes, &name)
         {
@@ -96,10 +39,8 @@ pub fn cmd_view(name: String, input: Option<PathBuf>, full: bool) {
         process::exit(1);
     };
 
-    // Pretty-print the function
     let formatted = trident::view::format_function(&func);
 
-    // Show hash
     if let Some(hash) = fn_hashes.get(&fn_name) {
         if full {
             eprintln!("Hash: {}", hash.to_hex());

@@ -1,8 +1,50 @@
 use std::path::PathBuf;
 use std::process;
 
-use super::collect_tri_files;
-use crate::RegistryAction;
+use clap::Subcommand;
+
+use super::{collect_tri_files, open_codebase, registry_client, registry_url};
+
+#[derive(Subcommand)]
+pub enum RegistryAction {
+    /// Publish local UCM definitions to a registry
+    Publish {
+        /// Registry URL (default: $TRIDENT_REGISTRY_URL or http://127.0.0.1:8090)
+        #[arg(long)]
+        registry: Option<String>,
+        /// Tags to attach to published definitions
+        #[arg(long)]
+        tag: Vec<String>,
+        /// Input .tri file or directory (adds to UCM first, then publishes)
+        #[arg(short, long)]
+        input: Option<PathBuf>,
+    },
+    /// Pull a definition from a registry into local UCM
+    Pull {
+        /// Name or content hash to pull
+        name: String,
+        /// Registry URL
+        #[arg(long)]
+        registry: Option<String>,
+    },
+    /// Search a registry for definitions
+    Search {
+        /// Search query (name, module, or type signature)
+        query: String,
+        /// Registry URL
+        #[arg(long)]
+        registry: Option<String>,
+        /// Search by type signature instead of name
+        #[arg(long)]
+        r#type: bool,
+        /// Search by tag
+        #[arg(long)]
+        tag: bool,
+        /// Only show verified definitions
+        #[arg(long)]
+        verified: bool,
+    },
+}
 
 pub fn cmd_registry(action: RegistryAction) {
     match action {
@@ -23,31 +65,9 @@ pub fn cmd_registry(action: RegistryAction) {
 }
 
 fn cmd_registry_publish(registry: Option<String>, tags: Vec<String>, input: Option<PathBuf>) {
-    let url = registry.unwrap_or_else(trident::registry::RegistryClient::default_url);
-    let client = trident::registry::RegistryClient::new(&url);
+    let client = registry_client(registry);
+    let mut cb = open_codebase();
 
-    // Check health first.
-    match client.health() {
-        Ok(true) => {}
-        Ok(false) => {
-            eprintln!("error: registry at {} is not healthy", url);
-            process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("error: cannot connect to registry at {}: {}", url, e);
-            process::exit(1);
-        }
-    }
-
-    let mut cb = match trident::ucm::Codebase::open() {
-        Ok(cb) => cb,
-        Err(e) => {
-            eprintln!("error: cannot open codebase: {}", e);
-            process::exit(1);
-        }
-    };
-
-    // If input is provided, add to UCM first.
     if let Some(ref input_path) = input {
         let files = if input_path.is_dir() {
             collect_tri_files(input_path)
@@ -76,7 +96,7 @@ fn cmd_registry_publish(registry: Option<String>, tags: Vec<String>, input: Opti
         }
     }
 
-    eprintln!("Publishing to {}...", url);
+    eprintln!("Publishing...");
     match trident::registry::publish_codebase(&cb, &client, &tags) {
         Ok(results) => {
             let created = results.iter().filter(|r| r.created).count();
@@ -95,16 +115,9 @@ fn cmd_registry_publish(registry: Option<String>, tags: Vec<String>, input: Opti
 }
 
 fn cmd_registry_pull(name: String, registry: Option<String>) {
-    let url = registry.unwrap_or_else(trident::registry::RegistryClient::default_url);
+    let url = registry_url(registry);
     let client = trident::registry::RegistryClient::new(&url);
-
-    let mut cb = match trident::ucm::Codebase::open() {
-        Ok(cb) => cb,
-        Err(e) => {
-            eprintln!("error: cannot open codebase: {}", e);
-            process::exit(1);
-        }
-    };
+    let mut cb = open_codebase();
 
     eprintln!("Pulling '{}' from {}...", name, url);
     match trident::registry::pull_into_codebase(&mut cb, &client, &name) {
@@ -134,7 +147,7 @@ fn cmd_registry_pull(name: String, registry: Option<String>) {
 }
 
 fn cmd_registry_search(query: String, registry: Option<String>, by_type: bool, by_tag: bool) {
-    let url = registry.unwrap_or_else(trident::registry::RegistryClient::default_url);
+    let url = registry_url(registry);
     let client = trident::registry::RegistryClient::new(&url);
 
     let results = if by_type {

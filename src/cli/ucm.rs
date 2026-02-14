@@ -1,8 +1,44 @@
 use std::path::PathBuf;
 use std::process;
 
-use super::collect_tri_files;
-use crate::UcmAction;
+use clap::Subcommand;
+
+use super::{collect_tri_files, open_codebase};
+
+#[derive(Subcommand)]
+pub enum UcmAction {
+    /// Add a file to the codebase
+    Add {
+        /// Input .tri file or directory
+        input: PathBuf,
+    },
+    /// List all named definitions
+    List,
+    /// View a definition by name or hash prefix
+    View {
+        /// Name or hash prefix
+        name: String,
+    },
+    /// Rename a definition
+    Rename {
+        /// Current name
+        from: String,
+        /// New name
+        to: String,
+    },
+    /// Show codebase statistics
+    Stats,
+    /// Show history of a name
+    History {
+        /// Name to show history for
+        name: String,
+    },
+    /// Show dependencies of a definition
+    Deps {
+        /// Name or hash prefix
+        name: String,
+    },
+}
 
 pub fn cmd_ucm(action: UcmAction) {
     match action {
@@ -17,13 +53,7 @@ pub fn cmd_ucm(action: UcmAction) {
 }
 
 fn cmd_ucm_add(input: PathBuf) {
-    let mut cb = match trident::ucm::Codebase::open() {
-        Ok(cb) => cb,
-        Err(e) => {
-            eprintln!("error: cannot open codebase: {}", e);
-            process::exit(1);
-        }
-    };
+    let mut cb = open_codebase();
 
     let files = if input.is_dir() {
         collect_tri_files(&input)
@@ -89,20 +119,12 @@ fn cmd_ucm_add(input: PathBuf) {
 }
 
 fn cmd_ucm_list() {
-    let cb = match trident::ucm::Codebase::open() {
-        Ok(cb) => cb,
-        Err(e) => {
-            eprintln!("error: cannot open codebase: {}", e);
-            process::exit(1);
-        }
-    };
-
+    let cb = open_codebase();
     let names = cb.list_names();
     if names.is_empty() {
         eprintln!("Codebase is empty. Use `trident ucm add <file>` to add definitions.");
         return;
     }
-
     for (name, hash) in &names {
         println!("  {}  {}", hash, name);
     }
@@ -110,19 +132,10 @@ fn cmd_ucm_list() {
 }
 
 fn cmd_ucm_view(name: String) {
-    let cb = match trident::ucm::Codebase::open() {
-        Ok(cb) => cb,
-        Err(e) => {
-            eprintln!("error: cannot open codebase: {}", e);
-            process::exit(1);
-        }
-    };
-
-    // Try by name first, then by hash prefix.
+    let cb = open_codebase();
     if let Some(view) = cb.view(&name) {
         print!("{}", view);
     } else if let Some((hash, def)) = cb.lookup_by_prefix(&name) {
-        // Find a name for this hash.
         let names = cb.names_for_hash(hash);
         let display_name = names.first().copied().unwrap_or("<unnamed>");
         println!("-- {} {}", display_name, hash);
@@ -134,36 +147,20 @@ fn cmd_ucm_view(name: String) {
 }
 
 fn cmd_ucm_rename(from: String, to: String) {
-    let mut cb = match trident::ucm::Codebase::open() {
-        Ok(cb) => cb,
-        Err(e) => {
-            eprintln!("error: cannot open codebase: {}", e);
-            process::exit(1);
-        }
-    };
-
+    let mut cb = open_codebase();
     if let Err(e) = cb.rename(&from, &to) {
         eprintln!("error: {}", e);
         process::exit(1);
     }
-
     if let Err(e) = cb.save() {
         eprintln!("error: cannot save codebase: {}", e);
         process::exit(1);
     }
-
     eprintln!("Renamed '{}' -> '{}'", from, to);
 }
 
 fn cmd_ucm_stats() {
-    let cb = match trident::ucm::Codebase::open() {
-        Ok(cb) => cb,
-        Err(e) => {
-            eprintln!("error: cannot open codebase: {}", e);
-            process::exit(1);
-        }
-    };
-
+    let cb = open_codebase();
     let stats = cb.stats();
     eprintln!("Codebase statistics:");
     eprintln!("  Definitions: {}", stats.definitions);
@@ -172,20 +169,12 @@ fn cmd_ucm_stats() {
 }
 
 fn cmd_ucm_history(name: String) {
-    let cb = match trident::ucm::Codebase::open() {
-        Ok(cb) => cb,
-        Err(e) => {
-            eprintln!("error: cannot open codebase: {}", e);
-            process::exit(1);
-        }
-    };
-
+    let cb = open_codebase();
     let history = cb.name_history(&name);
     if history.is_empty() {
         eprintln!("No history for '{}'", name);
         return;
     }
-
     eprintln!("History of '{}':", name);
     for (hash, timestamp) in &history {
         println!("  {} at {}", hash, timestamp);
@@ -193,18 +182,9 @@ fn cmd_ucm_history(name: String) {
 }
 
 fn cmd_ucm_deps(name: String) {
-    let cb = match trident::ucm::Codebase::open() {
-        Ok(cb) => cb,
-        Err(e) => {
-            eprintln!("error: cannot open codebase: {}", e);
-            process::exit(1);
-        }
-    };
+    let cb = open_codebase();
 
-    // Look up the hash for this name.
-    let hash = if let Some(def) = cb.lookup(&name) {
-        // Get hash from names map by looking it up through the definition.
-        let _ = def;
+    let hash = if let Some(_def) = cb.lookup(&name) {
         match cb.list_names().iter().find(|(n, _)| *n == name.as_str()) {
             Some((_, h)) => **h,
             None => {

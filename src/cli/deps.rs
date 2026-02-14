@@ -1,7 +1,21 @@
 use std::path::PathBuf;
 use std::process;
 
-use crate::DepsAction;
+use clap::Subcommand;
+
+#[derive(Subcommand)]
+pub enum DepsAction {
+    /// Show declared dependencies and lock status
+    List,
+    /// Resolve and fetch all dependencies
+    Fetch {
+        /// Registry URL (default: http://127.0.0.1:8090)
+        #[arg(long, default_value = "http://127.0.0.1:8090")]
+        registry: String,
+    },
+    /// Verify all locked dependencies are cached and valid
+    Check,
+}
 
 pub fn cmd_deps(action: DepsAction) {
     // Find project root
