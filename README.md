@@ -1,7 +1,7 @@
 # 🔱 Trident
 
 <p align="center">
-  <img src="assets/trident.gif" width="420" alt="Trident" />
+  <img src="assets/trident-girl.gif" width="420" alt="Trident" />
 </p>
 
 *Write once. Prove anywhere.*
