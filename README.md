@@ -56,7 +56,9 @@ wraps byte-oriented code in ZK proofs fights the machine at every step.
 
 **Proofs compose, calls don't.** There is no `msg.sender` calling a
 contract. Programs produce independent proofs that a verifier checks
-together. Trident is designed for proof composition — not invocation.
+together. Composition is recursive — a proof can verify another proof
+inside it, so any chain of proofs collapses into a single proof. Trident
+is designed for recursive proof composition — not invocation.
 
 **Bounded execution is a feature.** Circuits must terminate. Loops must
 be bounded. This isn't a limitation — it's what makes proofs finite and
