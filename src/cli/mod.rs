@@ -147,6 +147,129 @@ pub fn resolve_options(
     }
 }
 
+/// Result of the shared compile → analyze → parse → verify pipeline
+/// used by both `package` and `deploy` commands.
+pub struct PreparedArtifact {
+    pub project: Option<trident::project::Project>,
+    pub entry: PathBuf,
+    pub tasm: String,
+    pub cost: trident::cost::ProgramCost,
+    pub file: trident::ast::File,
+    pub name: String,
+    pub version: String,
+    pub resolved: trident::target::ResolvedTarget,
+}
+
+/// Shared pipeline for package and deploy: resolve input, compile, analyze costs,
+/// parse source, determine name/version, optionally verify.
+pub fn prepare_artifact(
+    input: &Path,
+    target: &str,
+    profile: &str,
+    verify: bool,
+) -> PreparedArtifact {
+    // 1. Resolve input
+    let ri = resolve_input(input);
+    let project = ri.project;
+    let entry = ri.entry;
+
+    // 2. Resolve target (OS-aware)
+    let resolved = match trident::target::ResolvedTarget::resolve(target) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {}", e.message);
+            process::exit(1);
+        }
+    };
+
+    // 3. Build CompileOptions
+    let mut options = resolve_options(&resolved.vm.name, profile, project.as_ref());
+    options.target_config = resolved.vm.clone();
+    if let Some(ref proj) = project {
+        options.dep_dirs = load_dep_dirs(proj);
+    }
+
+    // 4. Compile
+    eprintln!("Compiling {}...", entry.display());
+    let tasm = match trident::compile_project_with_options(&entry, &options) {
+        Ok(t) => t,
+        Err(_) => {
+            eprintln!("error: compilation failed");
+            process::exit(1);
+        }
+    };
+
+    // 5. Cost analysis
+    let cost = match trident::analyze_costs_project(&entry, &options) {
+        Ok(c) => c,
+        Err(_) => {
+            eprintln!("warning: cost analysis failed, using zeros");
+            trident::cost::ProgramCost {
+                program_name: String::new(),
+                functions: Vec::new(),
+                total: trident::cost::TableCost::ZERO,
+                attestation_hash_rows: 0,
+                padded_height: 0,
+                estimated_proving_secs: 0.0,
+                loop_bound_waste: Vec::new(),
+            }
+        }
+    };
+
+    // 6. Parse source for function signatures
+    let source = std::fs::read_to_string(&entry).unwrap_or_default();
+    let filename = entry.to_string_lossy().to_string();
+    let file = match trident::parse_source_silent(&source, &filename) {
+        Ok(f) => f,
+        Err(_) => {
+            eprintln!("error: cannot parse source for manifest");
+            process::exit(1);
+        }
+    };
+
+    // 7. Determine name and version
+    let (name, version) = if let Some(ref proj) = project {
+        (proj.name.clone(), proj.version.clone())
+    } else {
+        let stem = entry
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("program")
+            .to_string();
+        (stem, "0.1.0".to_string())
+    };
+
+    // 8. Optional verification
+    if verify {
+        eprintln!("Verifying {}...", entry.display());
+        match trident::verify_project(&entry) {
+            Ok(report) => {
+                if !report.is_safe() {
+                    eprintln!("error: verification failed");
+                    eprintln!("{}", report.format_report());
+                    process::exit(1);
+                }
+                eprintln!("Verification: OK");
+            }
+            Err(_) => {
+                eprintln!("error: verification failed");
+                process::exit(1);
+            }
+        }
+    }
+
+    PreparedArtifact {
+        project,
+        entry,
+        tasm,
+        cost,
+        file,
+        name,
+        version,
+        resolved,
+    }
+}
+
 /// Load dependency search directories from a project's lockfile (if present).
 pub fn load_dep_dirs(project: &trident::project::Project) -> Vec<PathBuf> {
     let lock_path = project.root_dir.join("trident.lock");
