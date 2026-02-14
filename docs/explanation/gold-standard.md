@@ -2,21 +2,29 @@
 
 ## 🏛️ ZK-Native Token Standards and Skill Library
 
-Version: 0.6
-Date: February 12, 2026
+Version: 0.1-draft
+Date: February 14, 2026
 
-### Implementation Status
+### Status
 
-| Component | Status | Example Code |
-|-----------|--------|--------------|
-| PLUMB framework | Implemented | `os/neptune/kernel.tri`, `os/neptune/utxo.tri` |
-| TSP-1 (Coin) | Implemented | `examples/neptune/type_custom_token.tri` |
-| TSP-2 (Card) | Implemented | `examples/uniq/uniq.tri` |
-| Native currency | Implemented | `examples/neptune/type_native_currency.tri` |
-| Lock scripts | Implemented | `examples/neptune/lock_*.tri` (4 variants) |
-| Transaction validation | Implemented | `examples/neptune/transaction_validation.tri` |
-| Proof composition | Implemented | `os/neptune/proof.tri`, `examples/neptune/proof_aggregator.tri` |
-| Skill library | Design only | 23 skills specified below |
+This document is a design specification — it describes what we want to
+build, not what exists today. The PLUMB framework and token standards
+(TSP-1, TSP-2) are architecturally complete. The skill library is a
+design-phase catalog — none of the 23 skills are implemented yet.
+
+The 0.1 release target is: deploy basic tokens and interact with them.
+Skills and capabilities come later, after the foundation is battle-tested.
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| PLUMB framework | Compiler support | `os/neptune/kernel.tri`, `os/neptune/utxo.tri` |
+| TSP-1 (Coin) | Compiler support | `examples/neptune/type_custom_token.tri` |
+| TSP-2 (Card) | Compiler support | `examples/uniq/uniq.tri` |
+| Native currency | Compiler support | `examples/neptune/type_native_currency.tri` |
+| Lock scripts | Compiler support | `examples/neptune/lock_*.tri` (4 variants) |
+| Transaction validation | Compiler support | `examples/neptune/transaction_validation.tri` |
+| Proof composition | Compiler support | `os/neptune/proof.tri`, `examples/neptune/proof_aggregator.tri` |
+| Skill library | Design only | 23 skills specified, 0 implemented |
 
 See the [Tutorial](../tutorials/tutorial.md) for language basics, [Programming Model](programming-model.md) for the Neptune transaction model, and [Deploying a Program](../guides/deploying-a-program.md) for deployment workflows.
 
@@ -99,10 +107,22 @@ Supply is a conservation law — enforced per operation. Price is a derivation l
 
 #### How It Works
 
-1. Every Liquidity (TIDE) swap proves: token pair, amount in, amount out, fee collected
-2. The block circuit aggregates all swap proofs for each pair into a fee-weighted TWAP
-3. The resulting `price` and `fees` become public state for the next block
-4. Any skill can read proven price as a public input — no oracle composition required
+1. Every Liquidity (TIDE) swap proves: token pair, amount in, amount out,
+   fee collected. The swap proof is a STARK — the price data is a
+   byproduct of proven execution, not a separate attestation.
+2. The block producer aggregates all swap proofs for each pair into a
+   fee-weighted TWAP. This aggregation is itself a STARK proof — the
+   block circuit verifies that the TWAP was correctly derived from the
+   individual swap proofs included in the block.
+3. The resulting `price` and `fees` become public state for the next block.
+4. Any skill can read proven price as a public input — no oracle
+   composition required.
+
+Who computes: the block producer (miner). They are already composing all
+transaction proofs into the block proof — aggregating swap data into a
+TWAP is additional constraint verification within the same block circuit.
+The miner cannot fake the TWAP because it must be consistent with the
+individual swap proofs they include.
 
 #### Why Protocol Fees, Not Volume
 
@@ -517,7 +537,12 @@ Metadata update: Owner auth, `flags & UPDATABLE`, only `metadata_hash` changes, 
 
 ---
 
-## 🧰 6. Skill Library
+## 🧰 6. Skill Library (Design Phase)
+
+*None of the skills below are implemented. This section specifies the
+design space — what tokens should be able to learn. Implementation
+follows after the PLUMB foundation (basic token deploy and interact)
+is production-tested. Community contributions welcome.*
 
 ### 6.1 What Is a Skill
 
@@ -535,7 +560,9 @@ A token with no skills is a bare TSP-1 or TSP-2 — it can pay, lock, update, mi
 
 ### 6.2 How Skills Compose
 
-Multiple skills can be active on the same token simultaneously. When multiple skills install hooks on the same operation, their proofs compose independently:
+Multiple skills can be active on the same token simultaneously. When
+multiple skills install hooks on the same operation, their proofs compose
+independently:
 
 ```text
 Pay operation with Compliance + Fee-on-Transfer + Liquidity:
@@ -546,7 +573,33 @@ Pay operation with Compliance + Fee-on-Transfer + Liquidity:
   Verifier composes: Token ⊗ Compliance ⊗ Fee ⊗ Liquidity → single proof
 ```
 
-Convention: access control hooks verify first, then financial hooks, then composition hooks.
+#### Hook Composition Ordering
+
+Hook ordering is a non-problem. Unlike contract calls (which execute
+sequentially and can reenter each other), STARK proof composition is
+**commutative** — each hook proof is independently generated and
+independently verified. There is no execution order because hooks don't
+call each other. They produce separate proofs that the verifier checks
+together.
+
+The config declares which hooks are active. The prover generates all
+required sub-proofs. The verifier checks:
+
+1. Every declared hook has a valid proof
+2. Public I/O is consistent across all sub-proofs (same accounts, amounts,
+   timestamps)
+3. All Merkle roots chain correctly
+
+If any hook proof is missing or invalid, the composed proof fails. If two
+hooks have contradictory requirements (e.g., Soulbound says "reject all
+transfers" while Liquidity says "allow this swap"), the composition simply
+fails — both proofs cannot be simultaneously valid. This is correct
+behavior: contradictory hooks mean a misconfigured token, caught at proof
+time, not at runtime.
+
+The one constraint: when multiple hooks modify **different state trees**
+in the same transaction, the block's atomic state commitment (section 3.6)
+ensures all tree updates are applied together or not at all.
 
 ### 6.3 Skill Tiers
 
@@ -559,7 +612,7 @@ Convention: access control hooks verify first, then financial hooks, then compos
 
 ---
 
-## 🔧 7. Core Skills
+## 🔧 7. Core Skills (Design Phase)
 
 ### 7.1 Supply Cap
 
@@ -652,7 +705,7 @@ Config changes are queued and can only execute after the delay period. Prevents 
 
 ---
 
-## 💰 8. Financial Skills
+## 💰 8. Financial Skills (Design Phase)
 
 ### 8.1 Liquidity (TIDE)
 
@@ -845,7 +898,7 @@ Mint hook composes with: Oracle Pricing proof (collateral price), TSP-1 lock pro
 
 ---
 
-## 🔐 9. Access Control Skills
+## 🔐 9. Access Control Skills (Design Phase)
 
 ### 9.1 Compliance (Whitelist / Blacklist)
 
@@ -921,7 +974,7 @@ Also achievable without a hook: mint with `flags = 0` (TRANSFERABLE bit clear). 
 
 ---
 
-## 🔗 10. Composition Skills
+## 🔗 10. Composition Skills (Design Phase)
 
 ### 10.1 Bridging
 
@@ -1246,52 +1299,65 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 
 ## 🗺️ 15. Implementation Roadmap
 
-### Phase 0 — Genesis
-1. PLUMB framework (auth, config, hook composition)
-2. TSP-1 circuit
-3. Token deployment tooling
-4. Core skills: Supply Cap, Compliance, Soulbound
+### 0.1 — Foundation (current target)
 
-### Phase 1 — Ownership
-5. TSP-2 circuit
-6. Skills: Royalties, Delegation, Supply Cap (for collections)
-7. Wallet integration (both standards)
+Deploy basic tokens and interact with them. No skills. The goal is to
+validate the PLUMB framework, the two standards, and the proof pipeline
+end-to-end.
 
-### Phase 2 — Financial
-8. Liquidity skill (allocation tree, constant product, stable swap)
-9. Vault skill
-10. Staking skill
+1. PLUMB framework (auth, config, hook slots)
+2. TSP-1 circuit (pay, lock, update, mint, burn)
+3. TSP-2 circuit (same operations, unique asset semantics)
+4. Token deployment tooling
+5. Basic wallet integration
 
-### Phase 3 — Oracle
-11. Oracle Pricing skill (attestation tree, submit, aggregate, read)
-12. Median + TWAP aggregation hooks
+Everything below is post-0.1 — sequenced by dependency, not by deadline.
 
-### Phase 4 — Composition
-13. Oracle-priced Liquidity strategy
-14. Lending skill
-15. Stablecoin skill
-16. Cross-chain proof relay (Bridging)
+### Post-0.1 — Skills (community-driven)
 
-### Phase 5 — Ecosystem
-17. Remaining skills (Governance, Timelock, Multisig, Vesting, Batch, Burn-to-Redeem, Subscription)
-18. Recipe tooling and deployment templates
-19. Reference implementations for all recipes
+Skills are the extensibility layer. They require the foundation to be
+stable. Suggested priority based on dependency order:
+
+**First skills** (unblock the rest):
+- Supply Cap — simplest skill, validates the hook mechanism
+- Delegation — enables subscription and spending limits
+- Compliance — enables regulated tokens
+
+**Financial skills** (require working tokens):
+- Liquidity (TIDE) — enables proven price
+- Oracle Pricing (COMPASS) — enables lending and stablecoins
+- Vault, Staking, Lending, Stablecoin
+
+**Composition skills** (require working financial skills):
+- Governance, Bridging, Burn-to-Redeem, Batch Operations
+
+The skill library is intentionally large — it maps the full design space.
+Not all skills need to be built by the core team. The architecture is
+designed so that anyone can implement a skill as a ZK program that
+composes through the hook system.
 
 ---
 
-## ❓ 16. Open Questions
+## ❓ 16. Open Questions for the Community
 
-1. Tree depth: Depth 20 (~1M leaves). Fixed or variable?
-2. Multi-hop swaps: Atomic A→B→C or sequential?
-3. Privacy: How far to push shielded transfers?
-4. State rent: Should leaves expire?
-5. Strategy liveness: Keeper mechanism for dead strategies?
-6. Skill versioning: Can a skill be upgraded, or must you deploy a new one?
-7. Skill discovery: How does a wallet know which skills a token has?
-8. Hook chaining: When multiple skills install hooks on the same operation, what is the proof composition order?
-9. Skill dependencies: Should the system enforce that Lending requires Oracle Pricing, or is that the deployer's responsibility?
-10. Controller recursion: Can a controller program delegate to another controller?
-11. Fund share pricing: Should fund shares use Oracle Pricing feeds for their own price, creating a feedback loop?
+The Gold Standard specifies the design space. These questions are
+intentionally left open — they require real-world usage, community input,
+and implementation experience to answer well. Contributions welcome.
+
+1. **Tree depth.** Depth 20 (~1M leaves). Fixed or variable per token?
+2. **Multi-hop swaps.** Atomic A->B->C in one composed proof, or sequential?
+3. **Privacy.** How far to push shielded transfers beyond basic pay?
+4. **State rent.** Should leaves expire if unused?
+5. **Strategy liveness.** Keeper mechanism for dead Liquidity strategies?
+6. **Skill versioning.** Can a skill be upgraded, or must you deploy a new one?
+7. **Skill discovery.** How does a wallet know which skills a token has?
+8. **Skill dependencies.** Should the system enforce that Lending requires Oracle Pricing, or is that the deployer's responsibility?
+9. **Controller recursion.** Can a controller program delegate to another controller? (Likely answer: no — depth = 1, to prevent infinite auth chains.)
+10. **Fund share pricing.** Should fund shares use Oracle Pricing feeds for their own price, creating a feedback loop?
+
+Note: hook composition ordering (previously listed here) is answered in
+section 6.2 — STARK proof composition is commutative, so ordering is a
+non-problem.
 
 ---
 
