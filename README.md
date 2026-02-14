@@ -3,7 +3,7 @@
 ## Write once. Prove anywhere
 
 <p align="center">
-  <img src="assets/trident-girl.gif" width="100%" alt="Trident" />
+  <img src="media/trident-girl.gif" width="100%" alt="Trident" />
 </p>
 
 Trident is a programming language for provable virtual machines.
