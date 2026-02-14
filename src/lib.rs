@@ -2,20 +2,15 @@ pub mod ast;
 pub mod common;
 pub mod cost;
 pub mod frontend;
-pub mod kir;
-pub mod legacy;
 pub mod linker;
-pub mod lir;
 pub mod pkgmgmt;
 pub mod stack;
 pub mod tir;
 pub mod tools;
-pub mod tree;
 pub mod typecheck;
 pub mod verify;
 
 // Re-exports — preserves all `crate::X` paths
-// Old emitter kept for comparison tests; not part of public API.
 pub use common::diagnostic;
 pub use common::span;
 pub use common::types;
@@ -23,7 +18,6 @@ pub use frontend::format;
 pub use frontend::lexeme;
 pub use frontend::lexer;
 pub use frontend::parser;
-pub(crate) use legacy::emitter as emit;
 pub use pkgmgmt::cache;
 #[allow(unused_imports)]
 pub use pkgmgmt::hash;
