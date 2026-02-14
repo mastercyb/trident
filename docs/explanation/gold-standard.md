@@ -595,10 +595,14 @@ Deploy basic tokens and interact with them.
 4. Token deployment tooling
 5. Basic wallet integration
 
-### Post-0.1
+### 0.2 — On-Chain Registry + Skills
 
-Skills and capabilities come after the foundation is battle-tested.
-See the [Skill Library](skill-library.md) for the full design space.
+1. On-chain Merkle registry for content-addressed code (UCM definitions
+   anchored on-chain, provable registration and verification)
+2. First skills — Supply Cap, Delegation, Compliance
+3. Skill composition end-to-end
+
+See the [Skill Library](skill-library.md) for the full skill design space.
 
 ---
 

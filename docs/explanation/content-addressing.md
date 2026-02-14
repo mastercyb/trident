@@ -393,7 +393,16 @@ Two definitions with the same content hash are trivially equivalent. For definit
 
 ---
 
-## 🔗 7. See Also
+## 🔮 7. Future: On-Chain Registry (0.2)
+
+The 0.1 release provides local-first UCM and an HTTP registry. Version 0.2
+will add an on-chain Merkle registry — content-addressed definitions
+anchored on-chain with provable registration and verification. This will
+enable trustless, blockchain-backed code discovery and certification.
+
+---
+
+## 🔗 8. See Also
 
 - [Language Reference](../reference/language.md) -- Complete language syntax, types, and built-in functions
 - [Formal Verification](formal-verification.md) -- How verification works, including how results are cached by content hash
