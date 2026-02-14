@@ -34,11 +34,7 @@ program card
 // Hook program IDs are output for external proof composition.
 // ======================================================
 use std.crypto.merkle
-
-// Depth of the asset Merkle tree (2^20 = ~1M leaves).
-fn tree_depth() -> Field {
-    20
-}
+use os.neptune.standards.plumb
 
 // --- Flag constants ---
 // TRANSFERABLE = 1, BURNABLE = 2, UPDATABLE = 4, LOCKABLE = 8, MINTABLE = 16
@@ -69,76 +65,7 @@ fn hash_leaf(
     )
 }
 
-// --- Config hashing (5 authorities + 5 hooks) ---
-fn hash_config(
-    admin_auth: Field,
-    pay_auth: Field,
-    lock_auth: Field,
-    mint_auth: Field,
-    burn_auth: Field,
-    pay_hook: Field,
-    lock_hook: Field,
-    update_hook: Field,
-    mint_hook: Field,
-    burn_hook: Field
-) -> Digest {
-    hash(
-        admin_auth,
-        pay_auth,
-        lock_auth,
-        mint_auth,
-        burn_auth,
-        pay_hook,
-        lock_hook,
-        update_hook,
-        mint_hook,
-        burn_hook
-    )
-}
 
-fn verify_config(
-    admin_auth: Field,
-    pay_auth: Field,
-    lock_auth: Field,
-    mint_auth: Field,
-    burn_auth: Field,
-    pay_hook: Field,
-    lock_hook: Field,
-    update_hook: Field,
-    mint_hook: Field,
-    burn_hook: Field,
-    expected: Digest
-) {
-    let computed: Digest = hash_config(
-        admin_auth,
-        pay_auth,
-        lock_auth,
-        mint_auth,
-        burn_auth,
-        pay_hook,
-        lock_hook,
-        update_hook,
-        mint_hook,
-        burn_hook
-    )
-    assert_digest(computed, expected)
-}
-
-// --- Authorization: prove knowledge of secret matching auth_hash ---
-fn verify_auth(auth_hash: Field) {
-    let secret: Field = divine()
-    let computed: Digest = hash(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-    let (h0, _, _, _, _) = computed
-    assert_eq(auth_hash, h0)
-}
-
-// --- Hook signaling: output hook program ID for external composition ---
-fn signal_hook(hook: Field) {
-    if hook == 0 {
-    } else {
-        pub_write(hook)
-    }
-}
 
 // --- Flag checks ---
 fn assert_transferable(flags: Field) {
@@ -194,18 +121,13 @@ fn assert_mintable(flags: Field) {
     let headroom: Field = sub(31, flags)
     let _: U32 = as_u32(headroom)
     let low: Field = sub(flags, 16)
-    assert_non_negative(low)
+    plumb.assert_non_negative(low)
 }
 
 fn assert_valid_flags(flags: Field) {
     let _: U32 = as_u32(flags)
     let headroom: Field = sub(31, flags)
     let _: U32 = as_u32(headroom)
-}
-
-// --- Range check ---
-fn assert_non_negative(val: Field) {
-    let _: U32 = as_u32(val)
 }
 
 // --- Events ---
@@ -270,7 +192,7 @@ fn pay() {
     let cfg_update_hook: Field = divine()
     let cfg_mint_hook: Field = divine()
     let cfg_burn_hook: Field = divine()
-    verify_config(
+    plumb.verify_config(
         cfg_admin,
         cfg_pay,
         cfg_lock,
@@ -308,19 +230,19 @@ fn pay() {
         leaf_flags
     )
     let leaf_idx: U32 = as_u32(divine())
-    merkle.verify(old_leaf, old_root, leaf_idx, tree_depth())
+    merkle.verify(old_leaf, old_root, leaf_idx, plumb.tree_depth())
     // Asset ID must match public input
     assert_eq(leaf_asset_id, asset_id)
     // Owner authorization
-    verify_auth(leaf_auth_hash)
+    plumb.verify_auth(leaf_auth_hash)
     // Dual auth if pay_auth ≠ 0
     if cfg_pay == 0 {
     } else {
-        verify_auth(cfg_pay)
+        plumb.verify_auth(cfg_pay)
     }
     // Time-lock check
     let lock_headroom: Field = sub(current_time, leaf_lock_until)
-    assert_non_negative(lock_headroom)
+    plumb.assert_non_negative(lock_headroom)
     // Flag check: must be transferable
     assert_transferable(leaf_flags)
     // --- New owner ---
@@ -341,9 +263,9 @@ fn pay() {
         leaf_flags
     )
     // Authenticate new leaf against new state root
-    merkle.verify(new_leaf, new_root, leaf_idx, tree_depth())
+    merkle.verify(new_leaf, new_root, leaf_idx, plumb.tree_depth())
     // Hook signal
-    signal_hook(cfg_pay_hook)
+    plumb.signal_hook(cfg_pay_hook)
     // Nullifier (sealed — prevents replay)
     seal Nullifier { asset_id: leaf_asset_id, nonce: leaf_nonce }
     // Events
@@ -372,7 +294,7 @@ fn lock() {
     let cfg_update_hook: Field = divine()
     let cfg_mint_hook: Field = divine()
     let cfg_burn_hook: Field = divine()
-    verify_config(
+    plumb.verify_config(
         cfg_admin,
         cfg_pay,
         cfg_lock,
@@ -410,20 +332,20 @@ fn lock() {
         leaf_flags
     )
     let leaf_idx: U32 = as_u32(divine())
-    merkle.verify(old_leaf, old_root, leaf_idx, tree_depth())
+    merkle.verify(old_leaf, old_root, leaf_idx, plumb.tree_depth())
     assert_eq(leaf_asset_id, asset_id)
     // Owner authorization
-    verify_auth(leaf_auth_hash)
+    plumb.verify_auth(leaf_auth_hash)
     // Dual auth if lock_auth ≠ 0
     if cfg_lock == 0 {
     } else {
-        verify_auth(cfg_lock)
+        plumb.verify_auth(cfg_lock)
     }
     // Flag check: must be lockable
     assert_lockable(leaf_flags)
     // Lock can only extend, not shorten
     let extension: Field = sub(lock_until_time, leaf_lock_until)
-    assert_non_negative(extension)
+    plumb.assert_non_negative(extension)
     // New leaf: only lock_until and nonce change
     let new_nonce: Field = leaf_nonce + 1
     let new_leaf: Digest = hash_leaf(
@@ -439,9 +361,9 @@ fn lock() {
         leaf_flags
     )
     // Authenticate new leaf against new state root
-    merkle.verify(new_leaf, new_root, leaf_idx, tree_depth())
+    merkle.verify(new_leaf, new_root, leaf_idx, plumb.tree_depth())
     // Hook signal
-    signal_hook(cfg_lock_hook)
+    plumb.signal_hook(cfg_lock_hook)
     reveal
     Lock { asset_id: leaf_asset_id, lock_until: lock_until_time }
 }
@@ -470,7 +392,7 @@ fn update() {
     let cfg_update_hook: Field = divine()
     let cfg_mint_hook: Field = divine()
     let cfg_burn_hook: Field = divine()
-    verify_config(
+    plumb.verify_config(
         cfg_admin,
         cfg_pay,
         cfg_lock,
@@ -485,7 +407,7 @@ fn update() {
     )
     if asset_id == 0 {
         // --- Config update ---
-        verify_auth(cfg_admin)
+        plumb.verify_auth(cfg_admin)
     } else {
         // --- Metadata update ---
         let leaf_asset_id: Field = divine()
@@ -512,10 +434,10 @@ fn update() {
             leaf_flags
         )
         let leaf_idx: U32 = as_u32(divine())
-        merkle.verify(old_leaf, old_root, leaf_idx, tree_depth())
+        merkle.verify(old_leaf, old_root, leaf_idx, plumb.tree_depth())
         assert_eq(leaf_asset_id, asset_id)
         // Owner authorization
-        verify_auth(leaf_auth_hash)
+        plumb.verify_auth(leaf_auth_hash)
         // Flag check: must be updatable
         assert_updatable(leaf_flags)
         // New leaf: only metadata_hash and nonce change
@@ -533,12 +455,12 @@ fn update() {
             leaf_flags
         )
         // Authenticate new leaf against new state root
-        merkle.verify(new_leaf, new_root, leaf_idx, tree_depth())
+        merkle.verify(new_leaf, new_root, leaf_idx, plumb.tree_depth())
         reveal
         MetadataUpdate { asset_id: leaf_asset_id, old_metadata: leaf_metadata_hash, new_metadata: new_metadata_hash }
     }
     // Hook signal
-    signal_hook(cfg_update_hook)
+    plumb.signal_hook(cfg_update_hook)
 }
 
 // ============================================================
@@ -565,7 +487,7 @@ fn mint() {
     let cfg_update_hook: Field = divine()
     let cfg_mint_hook: Field = divine()
     let cfg_burn_hook: Field = divine()
-    verify_config(
+    plumb.verify_config(
         cfg_admin,
         cfg_pay,
         cfg_lock,
@@ -579,7 +501,7 @@ fn mint() {
         config
     )
     // Mint authorization (always required, 0 = minting disabled)
-    verify_auth(cfg_mint)
+    plumb.verify_auth(cfg_mint)
     // Supply accounting
     let expected_count: Field = old_count + 1
     assert_eq(new_count, expected_count)
@@ -587,7 +509,7 @@ fn mint() {
     if max_supply == 0 {
     } else {
         let headroom: Field = sub(max_supply, new_count)
-        assert_non_negative(headroom)
+        plumb.assert_non_negative(headroom)
     }
     // Asset fields from prover
     let owner_id: Field = divine()
@@ -596,9 +518,9 @@ fn mint() {
     let royalty_bps: Field = divine()
     let flags: Field = divine()
     // Validate fields
-    assert_non_negative(royalty_bps)
+    plumb.assert_non_negative(royalty_bps)
     let royalty_headroom: Field = sub(10000, royalty_bps)
-    assert_non_negative(royalty_headroom)
+    plumb.assert_non_negative(royalty_headroom)
     assert_valid_flags(flags)
     // Flag check: must be mintable (collection open for mints)
     assert_mintable(flags)
@@ -617,9 +539,9 @@ fn mint() {
     )
     // Authenticate new leaf against new state root
     let leaf_idx: U32 = as_u32(divine())
-    merkle.verify(new_leaf, new_root, leaf_idx, tree_depth())
+    merkle.verify(new_leaf, new_root, leaf_idx, plumb.tree_depth())
     // Hook signal
-    signal_hook(cfg_mint_hook)
+    plumb.signal_hook(cfg_mint_hook)
     // Events
     reveal
     Mint { asset_id: asset_id, creator_id: creator_id, collection_id: collection_id, metadata_hash: metadata_hash }
@@ -649,7 +571,7 @@ fn burn() {
     let cfg_update_hook: Field = divine()
     let cfg_mint_hook: Field = divine()
     let cfg_burn_hook: Field = divine()
-    verify_config(
+    plumb.verify_config(
         cfg_admin,
         cfg_pay,
         cfg_lock,
@@ -687,25 +609,25 @@ fn burn() {
         leaf_flags
     )
     let leaf_idx: U32 = as_u32(divine())
-    merkle.verify(old_leaf, old_root, leaf_idx, tree_depth())
+    merkle.verify(old_leaf, old_root, leaf_idx, plumb.tree_depth())
     assert_eq(leaf_asset_id, asset_id)
     // Owner authorization
-    verify_auth(leaf_auth_hash)
+    plumb.verify_auth(leaf_auth_hash)
     // Dual auth if burn_auth ≠ 0
     if cfg_burn == 0 {
     } else {
-        verify_auth(cfg_burn)
+        plumb.verify_auth(cfg_burn)
     }
     // Time-lock check
     let lock_headroom: Field = sub(current_time, leaf_lock_until)
-    assert_non_negative(lock_headroom)
+    plumb.assert_non_negative(lock_headroom)
     // Flag check: must be burnable
     assert_burnable(leaf_flags)
     // Supply accounting
     let expected_count: Field = sub(old_count, 1)
     assert_eq(new_count, expected_count)
     // Hook signal
-    signal_hook(cfg_burn_hook)
+    plumb.signal_hook(cfg_burn_hook)
     // Nullifier (sealed — prevents double-burn)
     seal Nullifier { asset_id: leaf_asset_id, nonce: leaf_nonce }
     // Events

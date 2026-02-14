@@ -19,11 +19,7 @@ program coin
 // Hook program IDs are output for external proof composition.
 // ======================================================
 use std.crypto.merkle
-
-// Depth of the account Merkle tree (2^20 = ~1M leaves).
-fn tree_depth() -> Field {
-    20
-}
+use os.neptune.standards.plumb
 
 // --- Leaf hashing (10 fields: 5 core + 3 program control + 2 reserved) ---
 fn hash_leaf(
@@ -63,76 +59,7 @@ fn hash_metadata(
     )
 }
 
-// --- Config hashing (5 authorities + 5 hooks, all 10 slots used) ---
-fn hash_config(
-    admin_auth: Field,
-    pay_auth: Field,
-    lock_auth: Field,
-    mint_auth: Field,
-    burn_auth: Field,
-    pay_hook: Field,
-    lock_hook: Field,
-    update_hook: Field,
-    mint_hook: Field,
-    burn_hook: Field
-) -> Digest {
-    hash(
-        admin_auth,
-        pay_auth,
-        lock_auth,
-        mint_auth,
-        burn_auth,
-        pay_hook,
-        lock_hook,
-        update_hook,
-        mint_hook,
-        burn_hook
-    )
-}
 
-fn verify_config(
-    admin_auth: Field,
-    pay_auth: Field,
-    lock_auth: Field,
-    mint_auth: Field,
-    burn_auth: Field,
-    pay_hook: Field,
-    lock_hook: Field,
-    update_hook: Field,
-    mint_hook: Field,
-    burn_hook: Field,
-    config: Digest
-) {
-    let computed: Digest = hash_config(
-        admin_auth,
-        pay_auth,
-        lock_auth,
-        mint_auth,
-        burn_auth,
-        pay_hook,
-        lock_hook,
-        update_hook,
-        mint_hook,
-        burn_hook
-    )
-    assert_digest(computed, config)
-}
-
-// --- Authorization: prove knowledge of secret matching auth_hash ---
-fn verify_auth(auth_hash: Field) {
-    let secret: Field = divine()
-    let computed: Digest = hash(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-    let (h0, _, _, _, _) = computed
-    assert_eq(auth_hash, h0)
-}
-
-// --- Hook signaling: output hook program ID for external composition ---
-fn signal_hook(hook: Field) {
-    if hook == 0 {
-    } else {
-        pub_write(hook)
-    }
-}
 
 // --- Events ---
 event Nullifier {
@@ -149,10 +76,7 @@ event SupplyChange {
     new_supply: Field,
 }
 
-// --- Balance range check ---
-fn assert_non_negative(val: Field) {
-    let checked: U32 = as_u32(val)
-}
+
 
 // ============================================================
 // Op 0: PAY — transfer tokens between accounts
@@ -175,7 +99,7 @@ fn pay() {
     let cfg_update_hook: Field = divine()
     let cfg_mint_hook: Field = divine()
     let cfg_burn_hook: Field = divine()
-    verify_config(
+    plumb.verify_config(
         cfg_admin,
         cfg_pay_auth,
         cfg_lock_auth,
@@ -203,13 +127,13 @@ fn pay() {
         s_controller, s_locked_by, s_lock_data
     )
     let s_idx: U32 = as_u32(divine())
-    merkle.verify(s_leaf, old_root, s_idx, tree_depth())
+    merkle.verify(s_leaf, old_root, s_idx, plumb.tree_depth())
     // Account-level authorization (always required)
-    verify_auth(s_auth)
+    plumb.verify_auth(s_auth)
     // Config-level pay auth (0 = self only, else dual)
     if cfg_pay_auth == 0 {
     } else {
-        verify_auth(cfg_pay_auth)
+        plumb.verify_auth(cfg_pay_auth)
     }
     // Controller co-authorization signal
     if s_controller == 0 {
@@ -223,10 +147,10 @@ fn pay() {
     }
     // Time-lock check: current_time >= lock_until
     let time_diff: Field = sub(current_time, s_lock)
-    assert_non_negative(time_diff)
+    plumb.assert_non_negative(time_diff)
     // Sufficient balance
     let new_s_bal: Field = sub(s_bal, amount)
-    assert_non_negative(new_s_bal)
+    plumb.assert_non_negative(new_s_bal)
     // --- Receiver account ---
     let r_id: Field = divine()
     let r_bal: Field = divine()
@@ -242,7 +166,7 @@ fn pay() {
         r_controller, r_locked_by, r_lock_data
     )
     let r_idx: U32 = as_u32(divine())
-    merkle.verify(r_leaf, old_root, r_idx, tree_depth())
+    merkle.verify(r_leaf, old_root, r_idx, plumb.tree_depth())
     // --- Compute new leaves ---
     let new_s_nonce: Field = s_nonce + 1
     let new_s_leaf: Digest = hash_leaf(
@@ -255,10 +179,10 @@ fn pay() {
         r_controller, r_locked_by, r_lock_data
     )
     // Authenticate new leaves against new state root
-    merkle.verify(new_s_leaf, new_root, s_idx, tree_depth())
-    merkle.verify(new_r_leaf, new_root, r_idx, tree_depth())
+    merkle.verify(new_s_leaf, new_root, s_idx, plumb.tree_depth())
+    merkle.verify(new_r_leaf, new_root, r_idx, plumb.tree_depth())
     // Hook signal
-    signal_hook(cfg_pay_hook)
+    plumb.signal_hook(cfg_pay_hook)
     // Nullifier (sealed — verifier sees commitment)
     seal Nullifier { account_id: s_id, nonce: s_nonce }
     // Supply unchanged
@@ -286,7 +210,7 @@ fn lock() {
     let cfg_update_hook: Field = divine()
     let cfg_mint_hook: Field = divine()
     let cfg_burn_hook: Field = divine()
-    verify_config(
+    plumb.verify_config(
         cfg_admin,
         cfg_pay_auth,
         cfg_lock_auth,
@@ -314,17 +238,17 @@ fn lock() {
         a_controller, a_locked_by, a_lock_data
     )
     let a_idx: U32 = as_u32(divine())
-    merkle.verify(a_leaf, old_root, a_idx, tree_depth())
+    merkle.verify(a_leaf, old_root, a_idx, plumb.tree_depth())
     // Account-level authorization (always required)
-    verify_auth(a_auth)
+    plumb.verify_auth(a_auth)
     // Config-level lock auth (0 = self only, else dual)
     if cfg_lock_auth == 0 {
     } else {
-        verify_auth(cfg_lock_auth)
+        plumb.verify_auth(cfg_lock_auth)
     }
     // Lock monotonicity: new lock_until >= old lock_until
     let lock_diff: Field = sub(lock_time, a_lock)
-    assert_non_negative(lock_diff)
+    plumb.assert_non_negative(lock_diff)
     // New leaf with updated lock_until and incremented nonce
     let new_a_nonce: Field = a_nonce + 1
     let new_a_leaf: Digest = hash_leaf(
@@ -332,9 +256,9 @@ fn lock() {
         a_controller, a_locked_by, a_lock_data
     )
     // Authenticate new leaf against new state root
-    merkle.verify(new_a_leaf, new_root, a_idx, tree_depth())
+    merkle.verify(new_a_leaf, new_root, a_idx, plumb.tree_depth())
     // Hook signal
-    signal_hook(cfg_lock_hook)
+    plumb.signal_hook(cfg_lock_hook)
     // Supply unchanged
     reveal
     SupplyCheck { supply: supply }
@@ -362,7 +286,7 @@ fn update() {
     let old_update_hook: Field = divine()
     let old_mint_hook: Field = divine()
     let old_burn_hook: Field = divine()
-    verify_config(
+    plumb.verify_config(
         old_admin,
         old_pay_auth,
         old_lock_auth,
@@ -376,7 +300,7 @@ fn update() {
         old_config
     )
     // Admin authorization (0 = renounced, verify_auth will fail)
-    verify_auth(old_admin)
+    plumb.verify_auth(old_admin)
     // --- Verify new config ---
     let new_admin: Field = divine()
     let new_pay_auth: Field = divine()
@@ -388,7 +312,7 @@ fn update() {
     let new_update_hook: Field = divine()
     let new_mint_hook: Field = divine()
     let new_burn_hook: Field = divine()
-    verify_config(
+    plumb.verify_config(
         new_admin,
         new_pay_auth,
         new_lock_auth,
@@ -402,7 +326,7 @@ fn update() {
         new_config
     )
     // Hook signal
-    signal_hook(old_update_hook)
+    plumb.signal_hook(old_update_hook)
     // Supply unchanged
     reveal
     SupplyCheck { supply: supply }
@@ -429,7 +353,7 @@ fn mint() {
     let cfg_update_hook: Field = divine()
     let cfg_mint_hook: Field = divine()
     let cfg_burn_hook: Field = divine()
-    verify_config(
+    plumb.verify_config(
         cfg_admin,
         cfg_pay_auth,
         cfg_lock_auth,
@@ -443,7 +367,7 @@ fn mint() {
         config
     )
     // Mint authorization (always required, 0 = minting disabled)
-    verify_auth(cfg_mint_auth)
+    plumb.verify_auth(cfg_mint_auth)
     // Supply accounting
     let expected_supply: Field = old_supply + amount
     assert_eq(new_supply, expected_supply)
@@ -462,7 +386,7 @@ fn mint() {
         r_controller, r_locked_by, r_lock_data
     )
     let r_idx: U32 = as_u32(divine())
-    merkle.verify(r_leaf, old_root, r_idx, tree_depth())
+    merkle.verify(r_leaf, old_root, r_idx, plumb.tree_depth())
     // New recipient leaf (balance increased)
     let new_r_bal: Field = r_bal + amount
     let new_r_leaf: Digest = hash_leaf(
@@ -470,9 +394,9 @@ fn mint() {
         r_controller, r_locked_by, r_lock_data
     )
     // Authenticate new leaf against new state root
-    merkle.verify(new_r_leaf, new_root, r_idx, tree_depth())
+    merkle.verify(new_r_leaf, new_root, r_idx, plumb.tree_depth())
     // Hook signal
-    signal_hook(cfg_mint_hook)
+    plumb.signal_hook(cfg_mint_hook)
     // Supply change
     reveal
     SupplyChange { old_supply: old_supply, new_supply: new_supply }
@@ -500,7 +424,7 @@ fn burn() {
     let cfg_update_hook: Field = divine()
     let cfg_mint_hook: Field = divine()
     let cfg_burn_hook: Field = divine()
-    verify_config(
+    plumb.verify_config(
         cfg_admin,
         cfg_pay_auth,
         cfg_lock_auth,
@@ -528,13 +452,13 @@ fn burn() {
         a_controller, a_locked_by, a_lock_data
     )
     let a_idx: U32 = as_u32(divine())
-    merkle.verify(a_leaf, old_root, a_idx, tree_depth())
+    merkle.verify(a_leaf, old_root, a_idx, plumb.tree_depth())
     // Account-level authorization (always required)
-    verify_auth(a_auth)
+    plumb.verify_auth(a_auth)
     // Config-level burn auth (0 = self only, else dual)
     if cfg_burn_auth == 0 {
     } else {
-        verify_auth(cfg_burn_auth)
+        plumb.verify_auth(cfg_burn_auth)
     }
     // Controller co-authorization signal
     if a_controller == 0 {
@@ -548,10 +472,10 @@ fn burn() {
     }
     // Time-lock check
     let time_diff: Field = sub(current_time, a_lock)
-    assert_non_negative(time_diff)
+    plumb.assert_non_negative(time_diff)
     // Sufficient balance
     let new_a_bal: Field = sub(a_bal, amount)
-    assert_non_negative(new_a_bal)
+    plumb.assert_non_negative(new_a_bal)
     // Supply accounting
     let expected_supply: Field = sub(old_supply, amount)
     assert_eq(new_supply, expected_supply)
@@ -562,9 +486,9 @@ fn burn() {
         a_controller, a_locked_by, a_lock_data
     )
     // Authenticate new leaf against new state root
-    merkle.verify(new_a_leaf, new_root, a_idx, tree_depth())
+    merkle.verify(new_a_leaf, new_root, a_idx, plumb.tree_depth())
     // Hook signal
-    signal_hook(cfg_burn_hook)
+    plumb.signal_hook(cfg_burn_hook)
     // Nullifier (sealed — verifier sees commitment)
     seal Nullifier { account_id: a_id, nonce: a_nonce }
     // Supply change

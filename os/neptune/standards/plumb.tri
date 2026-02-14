@@ -1,0 +1,91 @@
+module os.neptune.standards.plumb
+
+// PLUMB framework — shared utilities for TSP-1 (Coin) and TSP-2 (Card).
+//
+// Config = hash(5 authorities + 5 hooks)
+// Authority semantics:
+//   Account ops (pay/lock/burn): 0 = self, else dual
+//   Config ops (mint/update):    0 = off, else auth
+
+use std.crypto.merkle
+
+// Depth of the Merkle tree (2^20 = ~1M leaves).
+pub fn tree_depth() -> Field {
+    20
+}
+
+// --- Config hashing (5 authorities + 5 hooks, all 10 slots used) ---
+pub fn hash_config(
+    admin_auth: Field,
+    pay_auth: Field,
+    lock_auth: Field,
+    mint_auth: Field,
+    burn_auth: Field,
+    pay_hook: Field,
+    lock_hook: Field,
+    update_hook: Field,
+    mint_hook: Field,
+    burn_hook: Field
+) -> Digest {
+    hash(
+        admin_auth,
+        pay_auth,
+        lock_auth,
+        mint_auth,
+        burn_auth,
+        pay_hook,
+        lock_hook,
+        update_hook,
+        mint_hook,
+        burn_hook
+    )
+}
+
+pub fn verify_config(
+    admin_auth: Field,
+    pay_auth: Field,
+    lock_auth: Field,
+    mint_auth: Field,
+    burn_auth: Field,
+    pay_hook: Field,
+    lock_hook: Field,
+    update_hook: Field,
+    mint_hook: Field,
+    burn_hook: Field,
+    expected: Digest
+) {
+    let computed: Digest = hash_config(
+        admin_auth,
+        pay_auth,
+        lock_auth,
+        mint_auth,
+        burn_auth,
+        pay_hook,
+        lock_hook,
+        update_hook,
+        mint_hook,
+        burn_hook
+    )
+    assert_digest(computed, expected)
+}
+
+// --- Authorization: prove knowledge of secret matching auth_hash ---
+pub fn verify_auth(auth_hash: Field) {
+    let secret: Field = divine()
+    let computed: Digest = hash(secret, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    let (h0, _, _, _, _) = computed
+    assert_eq(auth_hash, h0)
+}
+
+// --- Hook signaling: output hook program ID for external composition ---
+pub fn signal_hook(hook: Field) {
+    if hook == 0 {
+    } else {
+        pub_write(hook)
+    }
+}
+
+// --- Range check: assert value fits in u32 (non-negative in field) ---
+pub fn assert_non_negative(val: Field) {
+    let _: U32 = as_u32(val)
+}
