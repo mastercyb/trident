@@ -15,7 +15,8 @@ from conventional computing — and it needs a language built for how the
 machine actually works.
 
 Today Trident compiles to [Triton VM](https://triton-vm.org/), powering
-[Neptune Cash](https://neptune.cash/). The architecture supports
+[Neptune Cash](https://neptune.cash/) — the only programmable, private,
+mineable, quantum-safe blockchain that exists. The architecture supports
 [multi-target compilation](docs/explanation/multi-target.md) — the same
 source will compile to other proving backends as they ship.
 
