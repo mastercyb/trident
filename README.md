@@ -3,7 +3,7 @@
 *Write once. Prove anywhere.*
 
 <p align="center">
-  <img src="assets/trident-girl.gif" width="420" alt="Trident" />
+  <img src="assets/trident-girl.gif" width="100%" alt="Trident" />
 </p>
 
 Trident is a minimal, security-first programming language for provable
