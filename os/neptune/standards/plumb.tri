@@ -7,8 +7,6 @@ module os.neptune.standards.plumb
 //   Account ops (pay/lock/burn): 0 = self, else dual
 //   Config ops (mint/update):    0 = off, else auth
 
-use std.crypto.merkle
-
 // Depth of the Merkle tree (2^20 = ~1M leaves).
 pub fn tree_depth() -> Field {
     20

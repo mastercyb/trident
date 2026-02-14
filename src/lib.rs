@@ -754,19 +754,13 @@ mod integration_tests {
         assert!(fn_names.contains(&"lock"), "missing lock cost");
         assert!(fn_names.contains(&"update"), "missing update cost");
 
-        // Config helper functions should appear
-        assert!(
-            fn_names.contains(&"hash_config"),
-            "missing hash_config cost"
-        );
+        // Helper functions should appear (hash_config and verify_config
+        // moved to plumb.tri, but hash_metadata remains local)
         assert!(
             fn_names.contains(&"hash_metadata"),
             "missing hash_metadata cost"
         );
-        assert!(
-            fn_names.contains(&"verify_config"),
-            "missing verify_config cost"
-        );
+        assert!(fn_names.contains(&"hash_leaf"), "missing hash_leaf cost");
 
         eprintln!(
             "Token cost: padded_height={}, cc={}, hash={}, u32={}",

@@ -119,6 +119,8 @@ impl CostModel for TritonCostModel {
             "assert_digest" => Self::ASSERT2,
 
             // Field ops
+            "field_add" => Self::SIMPLE_OP,
+            "field_mul" => Self::SIMPLE_OP,
             "inv" => Self::PURE_PROC,
             "neg" => TableCost {
                 processor: 2,

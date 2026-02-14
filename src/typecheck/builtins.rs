@@ -224,6 +224,22 @@ impl TypeChecker {
             },
         );
 
+        // Merkle — memory variant
+        b.insert(
+            "merkle_step_mem".into(),
+            FnSig {
+                params: {
+                    let mut p = vec![("idx".into(), Ty::U32)];
+                    for i in 0..dw {
+                        p.push((format!("d{}", i), Ty::Field));
+                    }
+                    p.push(("ptr".into(), Ty::Field));
+                    p
+                },
+                return_ty: Ty::Tuple(vec![Ty::U32, digest_ty.clone(), Ty::Field]),
+            },
+        );
+
         // RAM
         b.insert(
             "ram_read".into(),
@@ -285,7 +301,21 @@ impl TypeChecker {
                 "xinvert".into(),
                 FnSig {
                     params: vec![("a".into(), xfield_ty.clone())],
-                    return_ty: xfield_ty,
+                    return_ty: xfield_ty.clone(),
+                },
+            );
+            b.insert(
+                "xx_dot_step".into(),
+                FnSig {
+                    params: vec![("a".into(), xfield_ty.clone()), ("ptr".into(), Ty::Field)],
+                    return_ty: Ty::Tuple(vec![xfield_ty.clone(), Ty::Field]),
+                },
+            );
+            b.insert(
+                "xb_dot_step".into(),
+                FnSig {
+                    params: vec![("a".into(), xfield_ty.clone()), ("ptr".into(), Ty::Field)],
+                    return_ty: Ty::Tuple(vec![xfield_ty, Ty::Field]),
                 },
             );
         }
