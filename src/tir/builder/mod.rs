@@ -23,9 +23,9 @@ mod tests;
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
-use crate::stack::SpillFormatter;
-use crate::stack::StackManager;
 use crate::target::TargetConfig;
+use crate::tir::stack::SpillFormatter;
+use crate::tir::stack::StackManager;
 use crate::tir::TIROp;
 use crate::typecheck::MonoInstance;
 

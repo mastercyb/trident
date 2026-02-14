@@ -6,6 +6,7 @@
 
 pub mod builder;
 pub mod lower;
+pub mod stack;
 
 use std::fmt;
 

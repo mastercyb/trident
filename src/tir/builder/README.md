@@ -16,7 +16,7 @@ Walks a type-checked AST and produces `Vec<TIROp>`. Target-independent.
 
 ## How it works
 
-[`TIRBuilder`](mod.rs:37) maintains a [`StackManager`](../../stack.rs:58) that models the runtime stack with LRU spill/reload to RAM. As it walks the AST, it pushes [`TIROp`](../mod.rs:18) variants and keeps the stack model in sync. Structural control flow (`IfElse`, `Loop`) captures nested bodies as `Vec<TIROp>` rather than emitting flat labels.
+[`TIRBuilder`](mod.rs:37) maintains a [`StackManager`](../stack.rs:58) that models the runtime stack with LRU spill/reload to RAM. As it walks the AST, it pushes [`TIROp`](../mod.rs:18) variants and keeps the stack model in sync. Structural control flow (`IfElse`, `Loop`) captures nested bodies as `Vec<TIROp>` rather than emitting flat labels.
 
 ## Data flow
 
@@ -29,6 +29,6 @@ Walks a type-checked AST and produces `Vec<TIROp>`. Target-independent.
 ## Dependencies
 
 - [`TIROp`](../mod.rs:18) — the IR operations this builder produces
-- [`StackManager`](../../stack.rs:58) — stack depth tracking and spill/reload
+- [`StackManager`](../stack.rs:58) — stack depth tracking and spill/reload
 - [`TargetConfig`](../../tools/target.rs:20) — VM parameters (stack depth, field widths)
 - [`MonoInstance`](../../typecheck/mod.rs:32) — resolved generic instantiations

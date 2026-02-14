@@ -20,7 +20,7 @@ Structural ops (`IfElse`, `IfOnly`, `Loop`) carry nested `Vec<TIROp>` bodies so 
 
 - [`TargetConfig`](../tools/target.rs:20) — VM parameters (stack depth, digest width, hash rate)
 - [`MonoInstance`](../typecheck/mod.rs:32) — monomorphized generic function instances from the type checker
-- [`StackManager`](../stack.rs:58) / [`SpillFormatter`](../stack.rs:16) — stack model with automatic RAM spill/reload
+- [`StackManager`](stack.rs:58) / [`SpillFormatter`](stack.rs:16) — stack model with automatic RAM spill/reload
 
 ## Entry point
 

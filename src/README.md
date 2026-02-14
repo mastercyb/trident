@@ -34,7 +34,7 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 | [`common/`](common/) | 314 | Shared infrastructure: [source spans](common/span.rs), [diagnostics](common/diagnostic.rs), [type definitions](common/types.rs) |
 | [`frontend/`](frontend/) | 4,392 | [Lexer](frontend/lexer.rs), [parser](frontend/parser.rs), [token definitions](frontend/lexeme.rs), [pretty-printer/formatter](frontend/format.rs) |
 | [`typecheck/`](typecheck/) | 3,007 | [Type checker](typecheck/mod.rs) with borrow analysis, generics, and [builtin registration](typecheck/builtins.rs) |
-| [`tir/`](tir/) | 3,204 | Trident IR: [opcode definitions](tir/mod.rs), [AST→TIR builder](tir/builder/), [Triton lowering](tir/lower/triton.rs) |
+| [`tir/`](tir/) | 3,678 | Trident IR: [opcode definitions](tir/mod.rs), [AST→TIR builder](tir/builder/), [Triton lowering](tir/lower/triton.rs), [stack manager](tir/stack.rs) |
 | [`cost/`](cost/) | 2,335 | Static cost [analyzer](cost/analyzer.rs), per-function breakdown, [optimization hints and reports](cost/report.rs), target [cost models](cost/model/) |
 | [`verify/`](verify/) | 5,570 | [Symbolic execution](verify/sym.rs), [constraint solving](verify/solve.rs), [SMT encoding](verify/smt.rs), [equivalence checking](verify/equiv.rs), [invariant synthesis](verify/synthesize.rs), [JSON reports](verify/report.rs) |
 | [`pkgmgmt/`](pkgmgmt/) | 6,494 | [BLAKE3 hashing](pkgmgmt/hash.rs), [Poseidon2](pkgmgmt/poseidon2.rs), [UCM codebase](pkgmgmt/ucm.rs), [registry server/client](pkgmgmt/registry.rs), [dependency manifests](pkgmgmt/manifest.rs), [compilation cache](pkgmgmt/cache.rs) |
@@ -47,7 +47,6 @@ Parallel to the main pipeline, several modules provide analysis, tooling, and pa
 | [`ast.rs`](ast.rs) | 371 | AST node definitions shared by every stage |
 | [`lib.rs`](lib.rs) | 2,700 | Public API, re-exports, and orchestration functions (`compile`, `analyze_costs`, `check_file`) |
 | [`main.rs`](main.rs) | 2,650 | CLI entry point: argument parsing and command dispatch |
-| [`stack.rs`](stack.rs) | 474 | LRU [stack manager](stack.rs) with automatic RAM spill/reload |
 | [`linker.rs`](linker.rs) | 134 | Multi-module [linker](linker.rs) for cross-module calls |
 
 **Total: ~36,700 lines across 57 Rust files, 5 runtime dependencies.**
@@ -58,7 +57,7 @@ Frontend ([`frontend/`](frontend/)). The [lexer](frontend/lexer.rs) tokenizes so
 
 Type Checking ([`typecheck/`](typecheck/)). The [type checker](typecheck/mod.rs) validates types, resolves generics via monomorphization, performs borrow/move analysis, and registers builtin function signatures ([`builtins.rs`](typecheck/builtins.rs)). Diagnostics are emitted for type mismatches, undefined variables, unused bindings, and borrow violations.
 
-TIR Pipeline ([`tir/`](tir/)). The [TIR builder](tir/builder/mod.rs) translates the typed AST into a flat sequence of `TIROp` instructions. The [Triton lowering](tir/lower/triton.rs) produces TASM assembly. The [stack manager](stack.rs) tracks operand positions with automatic RAM spill/reload. The [linker](linker.rs) resolves cross-module calls.
+TIR Pipeline ([`tir/`](tir/)). The [TIR builder](tir/builder/mod.rs) translates the typed AST into a flat sequence of `TIROp` instructions. The [Triton lowering](tir/lower/triton.rs) produces TASM assembly. The [stack manager](tir/stack.rs) tracks operand positions with automatic RAM spill/reload. The [linker](linker.rs) resolves cross-module calls.
 
 Cost Analysis ([`cost/`](cost/)). The [analyzer](cost/analyzer.rs) walks the AST and sums per-instruction costs using a target-specific [`CostModel`](cost/model/mod.rs). The [report module](cost/report.rs) formats results, generates optimization hints, and provides JSON serialization for `--compare` workflows.
 
