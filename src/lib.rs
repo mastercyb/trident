@@ -1,6 +1,6 @@
 pub mod ast;
-pub mod common;
 pub mod cost;
+pub mod diagnostic;
 pub mod doc;
 pub mod frontend;
 pub mod kir;
@@ -8,16 +8,15 @@ pub mod linker;
 pub mod lir;
 pub mod package;
 pub mod pipeline;
+pub mod span;
 pub mod tir;
 pub mod tools;
 pub mod tree;
 pub mod typecheck;
+pub mod types;
 pub mod verify;
 
 // Re-exports — preserves all `crate::X` paths
-pub use common::diagnostic;
-pub use common::span;
-pub use common::types;
 pub use frontend::format;
 pub use frontend::lexeme;
 pub use frontend::lexer;
