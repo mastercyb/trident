@@ -1,5 +1,9 @@
 # 🔱 Trident
 
+<p align="center">
+  <img src="assets/trident.jpg" width="420" alt="Trident" />
+</p>
+
 *Write once. Prove anywhere.*
 
 Trident is a minimal, security-first programming language for provable
