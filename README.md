@@ -94,27 +94,26 @@ the code. See [Content-Addressed Code](docs/explanation/content-addressing.md).
 
 ---
 
-## 🏗️ What You Can Build Today
+## 🏗️ Examples
 
-[Coins](examples/coin/coin.tri) — A 535-line ZK-native fungible token
-(TSP-1) with 5 [PLUMB](docs/explanation/gold-standard.md) operations (Pay,
-Lock, Update, Mint, Burn), time-locks, nullifiers, configurable authorities,
-composable hooks, and 12 formally specified security properties.
+Everything below compiles to TASM with `trident build` today.
 
-[Uniqs](examples/uniq/uniq.tri) — Non-fungible tokens (TSP-2) with
-per-asset metadata, royalties, creator immutability, and 5-bit flag-gated
-operations. Same PLUMB framework, same proof architecture.
+[Coin](examples/coin/coin.tri) — 535-line fungible token (TSP-1). Five
+operations (Pay, Lock, Update, Mint, Burn), time-locks, nullifiers,
+configurable authorities, composable hooks.
 
-Neptune transaction validation — UTXO verification, supply conservation,
-nullifier checking — expressible in Trident instead of hand-written TASM.
+[Card](examples/uniq/uniq.tri) — Non-fungible token (TSP-2). Per-asset
+metadata, royalties, creator immutability, flag-gated operations. Same
+PLUMB framework as Coin.
 
-Recursive STARK verification — Verify a proof inside a proof. Neptune
-Cash runs a recursive verifier in production today. ~300K clock cycles
-regardless of the original computation's complexity.
+[Neptune programs](examples/neptune/) — Lock scripts (generation,
+symmetric, timelock, multisig), type scripts (native currency, custom
+tokens), transaction validation, recursive verification, proof
+aggregation and relay.
 
 See the [Gold Standard](docs/explanation/gold-standard.md) for the full
-specification: PLUMB framework, TSP-1, TSP-2, and the capability library —
-23 composable skills from Liquidity (TIDE) to Oracle Pricing (COMPASS).
+PLUMB specification and the [Skill Library](docs/explanation/skill-library.md)
+for designed token capabilities.
 
 ---
 
