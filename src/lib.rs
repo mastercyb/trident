@@ -1,6 +1,7 @@
 pub mod ast;
 pub mod config;
 pub mod cost;
+pub mod deploy;
 pub mod diagnostic;
 pub mod doc;
 pub mod kir;
@@ -22,6 +23,7 @@ pub use config::project;
 pub use config::resolve;
 pub use config::scaffold;
 pub use config::target;
+pub use deploy as artifact;
 pub use package::cache;
 pub use package::hash;
 pub use package::manifest;
@@ -33,7 +35,6 @@ pub use syntax::lexeme;
 pub use syntax::lexer;
 pub use syntax::parser;
 pub use tools::lsp;
-pub use tools::package as artifact;
 
 pub use verify::equiv;
 pub use verify::report;
