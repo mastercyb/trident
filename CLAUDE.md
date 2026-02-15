@@ -54,7 +54,7 @@ Layout:
 - `vm/core/`, `vm/io/`, `vm/crypto/` — shared VM intrinsic `.tri` source
 - `os/{name}/` — per-OS directory: `target.toml` (config) + `README.md` (docs) + `.tri` extensions
 - `std/` — pure Trident library code (no `#[intrinsic]`)
-- Module resolution: `src/tools/resolve.rs`
+- Module resolution: `src/config/resolve.rs`
 
 ## Parallel Agents
 
@@ -78,6 +78,24 @@ agents to revert each other's work.
   ask before committing.
 - Conventional commits. Use prefixes: `feat:`, `fix:`, `refactor:`,
   `docs:`, `test:`, `chore:`.
+
+## Chain of Verification
+
+When answering non-trivial questions or making decisions that affect
+correctness (architecture, bug fixes, refactoring plans, cost models,
+type system changes), follow this protocol:
+
+1. **Initial answer.** Provide your best answer or plan.
+2. **Verification questions.** Generate 3-5 questions that would expose
+   errors, omissions, or wrong assumptions in your initial answer.
+3. **Independent answers.** Answer each verification question
+   independently — check the codebase, re-read docs, test assumptions.
+4. **Revised answer.** Provide your final answer incorporating any
+   corrections discovered during verification.
+
+This applies to: design decisions, audit findings, migration plans,
+bug root-cause analysis, and any claim about how the codebase works.
+Skip for trivial tasks (single-line edits, formatting, obvious fixes).
 
 ## Build & Test
 
