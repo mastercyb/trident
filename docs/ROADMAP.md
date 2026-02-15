@@ -22,7 +22,7 @@ are the remaining roadmap.
 ## Milestone 3: Content-Addressed Codebase
 
 - [x] Complete — AST normalization, content hashing, store (add/list/view/rename/stats/history/deps), compilation caching, global registry (HTTP API, publish/pull, search, certificate sharing), semantic equivalence checking
-- [ ] On-chain Merkle registry (target: 0.2) — TSP-2 Card collection per OS: each package is a Card (`asset_id = hash(name)`, `metadata_hash = content_hash(artifact)`), publishing = mint, version update = metadata update, three-tier resolution (local → cache → on-chain)
+- [ ] Atlas on-chain registry (target: 0.2) — TSP-2 Card collection per OS: each package is a Card (`asset_id = hash(name)`, `metadata_hash = content_hash(artifact)`), publishing = mint, version update = metadata update, three-tier resolution (local → cache → on-chain)
 
 ## Milestone 4: Multi-Target Backends
 
@@ -44,7 +44,7 @@ backend is fully implemented; others are stubs.
 - [ ] Browser extension integration library
 - [ ] ZK coprocessor programs (Axiom, Brevis, Herodotus integration)
 - [ ] Editor extension download page + marketplace listings
-- [ ] Reimplement store registry as TSP-2 Card collection with per-OS namespace governance
+- [ ] Reimplement store as Atlas (TSP-2 Card collection) with per-OS namespace governance
 - [ ] Ship `std.token`, `std.coin`, `std.card`, `std.skill.*` (23 skills) as standard library modules
 
 ## Language Evolution
@@ -65,7 +65,7 @@ Long-term, exploratory, not committed.
 - [ ] Hardware acceleration backends (FPGA, ASIC, GPU proving)
 - [ ] Self-proving compiler — Trident compiles itself to a provable target,
       then proves its own compilation correctness. Every `trident build`
-      produces a proof certificate alongside the assembly. The registry
+      produces a proof certificate alongside the assembly. Atlas
       already stores content-addressed hashes; add proof certificates
       alongside and you get trustless package distribution — you don't
       trust the compiler binary, you verify the proof. The endgame:

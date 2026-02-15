@@ -43,8 +43,8 @@ All 23 official skills ship as importable Trident source under
   at compile time.
 - **Fork**: copy from `std/skill/`, modify, compile your own version.
 - **Deploy**: publish to the OS's
-  [on-chain registry](../../reference/os.md#per-os-on-chain-registry);
-  other tokens reference by content hash or registry name.
+  [Atlas](../../reference/atlas.md);
+  other tokens reference by content hash or Atlas name.
 
 Skills build on `std.token`, `std.coin` (TSP-1), and `std.card`
 (TSP-2). See the [Standard Library reference](../../reference/stdlib.md#layer-05-token-infrastructure)

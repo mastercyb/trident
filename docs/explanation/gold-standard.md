@@ -77,7 +77,7 @@ recipes, and proof composition architecture.
 
 All 23 skills ship with the compiler as `std.skill.*` modules — importable
 source that developers can use directly, fork, or deploy to an OS's
-on-chain registry.
+[Atlas](../../reference/atlas.md).
 
 ### 2.3 Why This Is Complete
 
@@ -363,14 +363,14 @@ Deploy basic tokens and interact with them.
 
 ### 0.2 — On-Chain Registry + Skills
 
-1. On-chain Merkle registry for content-addressed code (store definitions
-   anchored on-chain, provable registration and verification)
-   The on-chain registry uses TSP-2 Cards: each package is a Card in
-   the OS's registry collection (`asset_id = hash(name)`,
+1. [Atlas](../../reference/atlas.md) — on-chain Merkle registry for
+   content-addressed code (store definitions anchored on-chain, provable
+   registration and verification).
+   Atlas uses TSP-2 Cards: each package is a Card in the OS's Atlas
+   collection (`asset_id = hash(name)`,
    `metadata_hash = content_hash(artifact)`). Publishing is minting,
    updating is metadata update, ownership transfer is a pay operation.
-   Each OS maintains its own independent registry. See
-   [OS Reference: Per-OS On-Chain Registry](../../reference/os.md#per-os-on-chain-registry).
+   Each OS maintains its own independent Atlas instance.
 2. First skills — Supply Cap, Delegation, Compliance
 3. Skill composition end-to-end
 

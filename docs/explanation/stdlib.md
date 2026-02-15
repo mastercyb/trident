@@ -287,4 +287,4 @@ invitation.
 - [Skill Library](skill-library.md) -- Composable token skills design philosophy
 - [Skill Reference](../../reference/skills.md) -- Skill specifications, recipes, hook IDs
 - [The Gold Standard](gold-standard.md) -- PLUMB framework, TSP-1, TSP-2
-- [OS Reference](../../reference/os.md) -- Runtime bindings and per-OS registry
+- [OS Reference](../../reference/os.md) -- Runtime bindings and per-OS [Atlas](../../reference/atlas.md)

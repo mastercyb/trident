@@ -249,7 +249,7 @@ The shared foundation for all token standards. Defines the config model, leaf st
 std.token
 ├── config          Token configuration (5 authorities + 5 hooks)
 │   ├── authority   Authority types (disabled, required, optional)
-│   ├── hook        Hook program references (content hash or registry name)
+│   ├── hook        Hook program references (content hash or [Atlas](atlas.md) name)
 │   └── validate    Config hash computation and verification
 ├── leaf            Token leaf structure (10-field standard layout)
 │   ├── read        Leaf field access
@@ -343,12 +343,12 @@ See [TSP-2 Card reference](tsp2-card.md) for the complete specification.
 
 ### std.skill — Composable Token Skills
 
-Skills are composable packages that teach tokens new behaviors through the PLUMB hook system. The `std.skill` module ships 23 official skill implementations with the compiler. Each skill is importable Trident source — developers can use them directly, fork and customize, or deploy modified versions to the on-chain registry.
+Skills are composable packages that teach tokens new behaviors through the PLUMB hook system. The `std.skill` module ships 23 official skill implementations with the compiler. Each skill is importable Trident source — developers can use them directly, fork and customize, or deploy modified versions to [Atlas](atlas.md).
 
 Three usage modes for any skill:
 - **Import**: `use std.skill.liquidity` — inline the skill code at compile time
 - **Fork**: Copy the source, modify it, compile your own version
-- **Deploy**: Publish a compiled skill to the OS's [on-chain registry](os.md#per-os-on-chain-registry), reference it by content hash or name in token config hooks
+- **Deploy**: Publish a compiled skill to the OS's [Atlas registry](atlas.md), reference it by content hash or name in token config hooks
 
 ```
 std.skill

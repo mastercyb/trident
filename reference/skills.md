@@ -654,6 +654,6 @@ Update: TSP-2 metadata update (if flags.updatable=1)
 - [Skill Library -- Design & Philosophy](../docs/explanation/skill-library.md) -- Why skills exist, how they compose, deep dives on TIDE and COMPASS
 - [The Gold Standard](../docs/explanation/gold-standard.md) -- PLUMB framework, TSP-1 (Coin), TSP-2 (Card)
 - [Standard Library](stdlib.md) -- `std.skill.*` module catalog
-- [OS Reference](os.md) -- `os.token` bindings and per-OS registry
+- [OS Reference](os.md) -- `os.token` bindings and per-OS [Atlas](atlas.md)
 - [TSP-1 Coin](tsp1-coin.md) -- Coin leaf format, config, operations
 - [TSP-2 Card](tsp2-card.md) -- Card leaf format, config, operations

@@ -60,6 +60,7 @@ and code disagree, the reference wins.
 | [VM Reference](vm.md) | Virtual machine architecture and instruction sets |
 | [OS Reference](os.md) | Operating system model and bindings |
 | [Standard Library](stdlib.md) | `std.*` modules (field, token, nn, private, quantum, ...) |
+| [Atlas Registry](atlas.md) | On-chain package registry: model, resolution, CLI, wire protocol |
 | [Skill Reference](skills.md) | All 23 skills: spec tables, recipes, hook IDs, glossary |
 
 Per-target specs live alongside their config:

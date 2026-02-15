@@ -105,24 +105,24 @@ Both commands default to `--profile release` (unlike `build` which defaults to
 
 ---
 
-## On-Chain Registry Publishing
+## On-Chain Atlas Publishing
 
-The on-chain registry extends deployment beyond HTTP servers. Each OS
-maintains a TSP-2 Card collection as its package registry. Publishing a
-program to the registry mints a Card — the package name becomes the
+Atlas extends deployment beyond HTTP servers. Each OS
+maintains a TSP-2 Card collection as its Atlas instance. Publishing a
+program to Atlas mints a Card — the package name becomes the
 `asset_id`, and the compiled artifact's content hash becomes the
 `metadata_hash`.
 
 ### Publishing Workflow
 
 ```bash
-# Deploy to Neptune's on-chain registry
+# Deploy to Neptune's Atlas
 trident deploy my_skill.tri --target neptune
 
 # This:
 # 1. Compiles my_skill.tri → .tasm artifact
 # 2. Hashes the artifact (content-addressed)
-# 3. Mints a Card in Neptune's registry collection
+# 3. Mints a Card in Neptune's Atlas collection
 #    asset_id     = hash("my_skill")
 #    metadata_hash = content_hash(artifact)
 #    owner_id     = deployer's neuron identity
@@ -150,8 +150,8 @@ use os.neptune.registry.my_skill
 // pay_hook = 0xabcd...1234
 ```
 
-See the [OS Reference: Per-OS On-Chain Registry](../../reference/os.md#per-os-on-chain-registry)
-for the full registry architecture.
+See the [Atlas Reference](../../reference/atlas.md)
+for the full Atlas architecture.
 
 ---
 
