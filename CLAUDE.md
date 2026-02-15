@@ -2,7 +2,7 @@
 
 ## Source of Truth
 
-`docs/reference/` is the canonical reference for all Trident design decisions.
+`reference/` is the canonical reference for all Trident design decisions.
 Each file owns a specific domain:
 
 - `language.md` — syntax, types, operators, builtins, attributes,
@@ -22,8 +22,8 @@ Each file owns a specific domain:
 - `briefing.md` — AI-optimized compact cheat-sheet
 
 Any change to the IR, language, or target model MUST update the corresponding
-reference doc first, then propagate to code. If docs/reference/ and code
-disagree, docs/reference/ wins.
+reference doc first, then propagate to code. If reference/ and code
+disagree, reference/ wins.
 
 ## Four-Tier Namespace
 
@@ -319,7 +319,7 @@ requirement" instead of "Privacy is not a feature. It is a requirement."
 
 Builtins are defined in 4 places that must stay in sync:
 
-1. `docs/reference/language.md` (canonical)
+1. `reference/language.md` (canonical)
 2. `src/typecheck/` (type signatures)
 3. `src/tir/` (IR lowering)
 4. `src/cost/` (cost tables)
@@ -331,7 +331,7 @@ Adding or removing a builtin requires updating all 4.
 Do not modify without explicit request:
 
 - `Cargo.toml` dependencies (minimal by design)
-- `docs/reference/` structure (canonical, changes need discussion)
+- `reference/` structure (canonical, changes need discussion)
 - `vm/*/target.toml` and `os/*/target.toml` (configuration, not code)
 - `LICENSE.md`
 

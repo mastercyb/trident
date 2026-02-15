@@ -1,6 +1,6 @@
 # Nock VM — Target Profile
 
-[← Target Registry](../../docs/reference/targets.md)
+[← Target Registry](../../reference/targets.md)
 
 ---
 

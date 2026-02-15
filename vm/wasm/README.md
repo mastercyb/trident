@@ -1,6 +1,6 @@
 # WASM (WebAssembly)
 
-[← Target Reference](../../docs/reference/targets.md)
+[← Target Reference](../../reference/targets.md)
 
 ---
 

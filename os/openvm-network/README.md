@@ -1,6 +1,6 @@
 # OpenVM Network — Operating System
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [OPENVM](../../vm/openvm/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [OPENVM](../../vm/openvm/README.md)
 
 ---
 

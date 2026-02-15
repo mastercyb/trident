@@ -288,7 +288,7 @@ In this example, the Processor and Op Stack tables are both 3,847 rows, but
 the padded height is 4,096. If a small code change pushed any table past
 4,096, the padded height would jump to 8,192 -- doubling proving time.
 
-Cross-reference: [vm.md](../reference/vm.md) for the full cost model,
+Cross-reference: [vm.md](../../reference/vm.md) for the full cost model,
 [optimization.md](../guides/optimization.md) for strategies to reduce table heights.
 
 ---
@@ -774,7 +774,7 @@ included automatically in the compiler's cost estimates.
 
 See [Comparative Analysis](provable-computing.md#44-hash-performance-critical-for-graph-operations) for hash cost benchmarks. Triton VM's Tip5 costs 1 clock cycle + 6 hash rows -- 1,000-3,000x cheaper than general-purpose VMs.
 
-Cross-reference: [vm.md](../reference/vm.md) for the complete cost model,
+Cross-reference: [vm.md](../../reference/vm.md) for the complete cost model,
 [optimization.md](../guides/optimization.md) for cost reduction strategies.
 
 ---
@@ -856,7 +856,7 @@ a working recursive verifier running in production today.
   single proof growing larger.
 
 Cross-reference: [vision.md](vision.md) "Recursive STARK Verification",
-[language.md](../reference/language.md).
+[language.md](../../reference/language.md).
 
 ---
 
@@ -896,10 +896,10 @@ Cross-reference: [vision.md](vision.md) "Recursive STARK Verification",
 - [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide from hello world to Merkle
   proofs, cost analysis, and inline assembly.
 
-- [Language Reference](../reference/language.md) -- Quick lookup: cost-per-instruction
+- [Language Reference](../../reference/language.md) -- Quick lookup: cost-per-instruction
   table (Section 7) maps every construct to its table impact.
 
-- [VM Reference](../reference/vm.md) -- VM registry, lowering paths, cost models
+- [VM Reference](../../reference/vm.md) -- VM registry, lowering paths, cost models
   full detail. Section 8.4 covers extension-field dot products. Section 13.4
   gives the recursive verifier sketch.
 
@@ -911,7 +911,7 @@ Cross-reference: [vision.md](vision.md) "Recursive STARK Verification",
   heights and avoiding power-of-2 cliffs. Essential reading after
   understanding the cost model.
 
-- [Error Catalog](../reference/errors.md) -- All compiler error messages explained, with
+- [Error Catalog](../../reference/errors.md) -- All compiler error messages explained, with
   links back to relevant concepts.
 
 - [Comparative Analysis](provable-computing.md) -- Triton VM compared to every other

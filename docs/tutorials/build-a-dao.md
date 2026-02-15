@@ -245,12 +245,12 @@ Same primitive. Same three lines.
 You have built a complete private web3 application. To go further:
 
 - [Language Tour](tutorial.md) -- complete syntax reference with examples
-- [Agent Briefing](../reference/briefing.md) -- compact cheat-sheet for
+- [Agent Briefing](../../reference/briefing.md) -- compact cheat-sheet for
   the full language
-- [Language Reference](../reference/language.md) -- sponge, Merkle,
+- [Language Reference](../../reference/language.md) -- sponge, Merkle,
   extension fields, proof composition
 - [Gold Standard](../explanation/gold-standard.md) -- production token
   standards and capability library
-- [OS Reference](../reference/os.md) -- portable runtime APIs across 25
+- [OS Reference](../../reference/os.md) -- portable runtime APIs across 25
   operating systems
 - `os/neptune/standards/` -- production implementations of `coin.tri` and `card.tri`

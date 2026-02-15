@@ -88,7 +88,7 @@ Trident is a minimal, security-first language for provable computation --
 and the first programming language positioned at the convergence point of
 all three revolutions.
 
-Source code compiles through a [54-operation IR](../reference/ir.md) that
+Source code compiles through a [54-operation IR](../../reference/ir.md) that
 lowers to a target VM. The first target is Triton VM. The roadmap includes
 quantum, ML, ZK, and classical backends.
 
@@ -360,5 +360,5 @@ approaching cryptographic relevance, regulatory pressure for auditable code
 - [Comparative Analysis](provable-computing.md) -- Triton VM vs every other ZK system
 - [How STARK Proofs Work](stark-proofs.md) -- From execution traces to quantum-safe proofs
 - [Gold Standard](gold-standard.md) -- Token standards (TSP-1, TSP-2) and capability library
-- [Language Reference](../reference/language.md) -- Types, operators, builtins, grammar
-- [IR Reference](../reference/ir.md) -- 54 TIR operations, 4 lowering paths
+- [Language Reference](../../reference/language.md) -- Types, operators, builtins, grammar
+- [IR Reference](../../reference/ir.md) -- 54 TIR operations, 4 lowering paths

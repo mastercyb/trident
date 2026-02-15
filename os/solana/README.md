@@ -1,6 +1,6 @@
 # ☀️ Solana
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [SBPF](../../vm/sbpf/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [SBPF](../../vm/sbpf/README.md)
 
 Solana is the high-performance blockchain powered by SBPF (Solana Berkeley
 Packet Filter). Trident is designed to compile to SBPF bytecode (`.so`) and link against
@@ -198,7 +198,7 @@ instead of `os.solana.*` for cross-chain portability:
 
 Use `os.solana.*` when you need: PDAs, CPI, specific account indices,
 rent exemption checks, or other Solana-specific features. See
-[os.md](../../docs/reference/os.md) for the full `os.*` API.
+[os.md](../../reference/os.md) for the full `os.*` API.
 
 ---
 

@@ -332,7 +332,7 @@ cannot be simultaneously quantum-advantaged and quantum-secure.
 - [AI](ai.md) — Field-native neural networks and zkML
 - [Vision](vision.md) — Why Trident exists
 - [Multi-Target Compilation](multi-target.md) — One source, every chain
-- [Language Reference](../reference/language.md) — Types, operators,
+- [Language Reference](../../reference/language.md) — Types, operators,
   builtins, grammar
 
 ---

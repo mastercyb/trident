@@ -404,6 +404,6 @@ enable trustless, blockchain-backed code discovery and certification.
 
 ## 🔗 8. See Also
 
-- [Language Reference](../reference/language.md) -- Complete language syntax, types, and built-in functions
+- [Language Reference](../../reference/language.md) -- Complete language syntax, types, and built-in functions
 - [Formal Verification](formal-verification.md) -- How verification works, including how results are cached by content hash
 - [Deploying a Program](../guides/deploying-a-program.md) -- Deployment by content hash

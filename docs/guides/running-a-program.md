@@ -192,7 +192,7 @@ The `.tasm` file produced by `trident build` is human-readable Triton Assembly. 
 
 - [Compiling a Program](compiling-a-program.md) -- The prior stage: build pipeline and cost analysis
 - [Deploying a Program](deploying-a-program.md) -- The next stage: packaging for on-chain use
-- [Error Catalog](../reference/errors.md) -- All error messages explained with fixes
+- [Error Catalog](../../reference/errors.md) -- All error messages explained with fixes
 
 ## 🚀 Next Step
 

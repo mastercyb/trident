@@ -1,6 +1,6 @@
 # ⭐ Starknet
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [Cairo VM](../../vm/cairo/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [Cairo VM](../../vm/cairo/README.md)
 
 Starknet is the STARK-based Ethereum L2 powered by the Cairo VM. Trident
 is designed to compile to Sierra (`.sierra`) and link against `starknet.ext.*` for
@@ -213,7 +213,7 @@ instead of `starknet.ext.*` for cross-chain portability:
 
 Use `starknet.ext.*` when you need: L1/L2 messaging, library calls,
 Pedersen-addressed storage vars, or other Starknet-specific features. See
-[os.md](../../docs/reference/os.md) for the full `os.*` API.
+[os.md](../../reference/os.md) for the full `os.*` API.
 
 ---
 

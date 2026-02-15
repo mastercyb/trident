@@ -43,16 +43,16 @@ application, from a four-line proof to a sovereign DAO.
 
 | Document | Description |
 |----------|-------------|
-| [Language Reference](reference/language.md) | Types, operators, builtins, sponge, Merkle, proof composition |
-| [Grammar (EBNF)](reference/grammar.md) | Complete formal specification |
-| [IR Design](reference/ir.md) | TIR operations, tiers, lowering |
-| [Target Reference](reference/targets.md) | OS model, target profiles, cost models |
-| [VM Reference](reference/vm.md) | Virtual machine architecture |
-| [OS Reference](reference/os.md) | Operating system model |
-| [Standard Library](reference/stdlib.md) | `std.*` module reference |
-| [CLI Reference](reference/cli.md) | Command-line interface |
-| [Error Catalog](reference/errors.md) | Every error message explained |
-| [Agent Briefing](reference/briefing.md) | Compact format for AI code generation |
+| [Language Reference](../reference/language.md) | Types, operators, builtins, sponge, Merkle, proof composition |
+| [Grammar (EBNF)](../reference/grammar.md) | Complete formal specification |
+| [IR Design](../reference/ir.md) | TIR operations, tiers, lowering |
+| [Target Reference](../reference/targets.md) | OS model, target profiles, cost models |
+| [VM Reference](../reference/vm.md) | Virtual machine architecture |
+| [OS Reference](../reference/os.md) | Operating system model |
+| [Standard Library](../reference/stdlib.md) | `std.*` module reference |
+| [CLI Reference](../reference/cli.md) | Command-line interface |
+| [Error Catalog](../reference/errors.md) | Every error message explained |
+| [Agent Briefing](../reference/briefing.md) | Compact format for AI code generation |
 
 Per-target documentation lives alongside its config:
 - [OS Registry](../os/README.md) — all 25 operating systems

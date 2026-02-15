@@ -1,6 +1,6 @@
 # 📖 Trident Reference
 
-[← Documentation Index](../README.md)
+[← Documentation Index](../docs/README.md)
 
 Canonical reference for all Trident design decisions. If reference docs
 and code disagree, the reference wins.

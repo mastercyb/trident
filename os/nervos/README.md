@@ -1,6 +1,6 @@
 # Nervos CKB — Operating System
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [CKB](../../vm/ckb/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [CKB](../../vm/ckb/README.md)
 
 ---
 

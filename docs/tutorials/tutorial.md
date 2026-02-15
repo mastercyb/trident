@@ -2,7 +2,7 @@
 
 This is the first stage of the Trident program lifecycle: Writing > [Compiling](../guides/compiling-a-program.md) > [Running](../guides/running-a-program.md) > [Deploying](../guides/deploying-a-program.md) > [Generating Proofs](../guides/generating-proofs.md) > [Verifying Proofs](../guides/verifying-proofs.md).
 
-This tutorial covers everything you need to write a valid Trident program -- file structure, types, control flow, functions, modules, and the key differences from conventional languages. For a complete lookup table, see the [Reference](../reference/language.md). For a formal treatment, see the [Target Reference](../reference/targets.md).
+This tutorial covers everything you need to write a valid Trident program -- file structure, types, control flow, functions, modules, and the key differences from conventional languages. For a complete lookup table, see the [Reference](../../reference/language.md). For a formal treatment, see the [Target Reference](../../reference/targets.md).
 
 ---
 
@@ -91,7 +91,7 @@ my_project/
 
 ## 🧠 3. Types
 
-All types have compile-time known widths measured in field elements. There are no dynamically sized types. See the [Reference](../reference/language.md) for the complete type table, operators, and cost per instruction.
+All types have compile-time known widths measured in field elements. There are no dynamically sized types. See the [Reference](../../reference/language.md) for the complete type table, operators, and cost per instruction.
 
 | Type | Width | Description |
 |------|------:|-------------|
@@ -317,7 +317,7 @@ let equal: Bool = a == b       // Field or U32
 let less: Bool = x < y         // U32 only
 ```
 
-There are no `!=`, `>`, `<=`, or `>=` operators. Compose them from `==`, `<`, and `not()`. There are no `&&` or `||` -- use boolean combinators instead. This is deliberate: fewer operators means fewer things to audit in provable code. See the [Reference](../reference/language.md) for the full operator table and per-instruction costs.
+There are no `!=`, `>`, `<=`, or `>=` operators. Compose them from `==`, `<`, and `not()`. There are no `&&` or `||` -- use boolean combinators instead. This is deliberate: fewer operators means fewer things to audit in provable code. See the [Reference](../../reference/language.md) for the full operator table and per-instruction costs.
 
 ---
 
@@ -575,7 +575,7 @@ The standard library is organized in three universal layers plus backend extensi
 
 The `vm.*` and `std.*` modules are target-agnostic and work across all backends. The `os.neptune.*` modules are available only when compiling with `--target triton` (the first target). Importing an `os.<os>.*` module while targeting a different backend is a compile error.
 
-See the [Reference](../reference/language.md) for a complete list of standard library functions, and the [Programming Model](../explanation/programming-model.md) for how I/O interacts with the prover and verifier.
+See the [Reference](../../reference/language.md) for a complete list of standard library functions, and the [Programming Model](../explanation/programming-model.md) for how I/O interacts with the prover and verifier.
 
 ---
 
@@ -636,7 +636,7 @@ fn hash_stream() -> Digest {
 }
 ```
 
-Merkle proofs are built from Tip5 hashes. See `std.crypto.merkle` in the [Reference](../reference/language.md) for the Merkle authentication API.
+Merkle proofs are built from Tip5 hashes. See `std.crypto.merkle` in the [Reference](../../reference/language.md) for the Merkle authentication API.
 
 ---
 
@@ -708,7 +708,7 @@ Run tests:
 trident test main.tri
 ```
 
-Test functions are excluded from production builds. See the [Error Catalog](../reference/errors.md) for all assertion failure messages.
+Test functions are excluded from production builds. See the [Error Catalog](../../reference/errors.md) for all assertion failure messages.
 
 ---
 
@@ -782,7 +782,7 @@ flags = ["testnet", "debug"]
 
 ## 🏗️ 16. Inline Assembly
 
-For operations not covered by the language, embed raw [TASM](https://triton-vm.org/spec/) instructions in `asm` blocks. See the [Reference](../reference/language.md) for the full TASM instruction set mapping.
+For operations not covered by the language, embed raw [TASM](https://triton-vm.org/spec/) instructions in `asm` blocks. See the [Reference](../../reference/language.md) for the full TASM instruction set mapping.
 
 ### Basic Form
 
@@ -846,13 +846,13 @@ These constraints make every Trident program a fixed, bounded computation -- exa
 
 ## 🔮 Next Steps
 
-- [Language Reference](../reference/language.md) -- Quick lookup for types, operators, builtins, and grammar
-- [Target Reference](../reference/targets.md) -- OS model, integration tracking, how-to-add checklists
+- [Language Reference](../../reference/language.md) -- Quick lookup for types, operators, builtins, and grammar
+- [Target Reference](../../reference/targets.md) -- OS model, integration tracking, how-to-add checklists
 - [Programming Model](../explanation/programming-model.md) -- How programs run (currently targeting [Triton VM](https://triton-vm.org/)) and the Neptune transaction model
 - [Compiling a Program](../guides/compiling-a-program.md) -- Next lifecycle stage: build targets, output formats, and optimization flags
 - [Optimization Guide](../guides/optimization.md) -- Strategies to reduce proving cost
 - [How STARK Proofs Work](../explanation/stark-proofs.md) -- The proof system behind every Trident program
-- [Error Catalog](../reference/errors.md) -- All error messages explained
+- [Error Catalog](../../reference/errors.md) -- All error messages explained
 - [Formal Verification](../explanation/formal-verification.md) -- `#[requires]`, `#[ensures]`, `#[invariant]`, and `#[pure]`
 - [For Offchain Devs](../explanation/for-offchain-devs.md) -- Zero-knowledge concepts explained for conventional programmers
 - [For Onchain Devs](../explanation/for-onchain-devs.md) -- Mental model migration from Solidity/Anchor/CosmWasm

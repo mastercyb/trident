@@ -471,11 +471,11 @@ The verdict: For a sovereign verification layer that must be quantum-safe, priva
 - [How STARK Proofs Work](stark-proofs.md) -- The proof system Triton VM uses, explained from first principles
 - [Quantum Computing](quantum.md) -- Why prime field arithmetic is simultaneously provable and quantum-native
 - [Vision](vision.md) -- Why Trident exists: quantum safety, cost transparency, recursive verification
-- [Language Reference](../reference/language.md) -- Permanent exclusions and design decisions
-- [Language Reference](../reference/language.md) -- Quick lookup for the Trident language
+- [Language Reference](../../reference/language.md) -- Permanent exclusions and design decisions
+- [Language Reference](../../reference/language.md) -- Quick lookup for the Trident language
 - [Programming Model](programming-model.md) -- Triton VM execution model and Neptune transaction model
 - [Optimization Guide](../guides/optimization.md) -- The six-table cost model in practice
-- [Error Catalog](../reference/errors.md) -- All compiler error messages explained
+- [Error Catalog](../../reference/errors.md) -- All compiler error messages explained
 - [Tutorial](../tutorials/tutorial.md) -- Start building on the system this analysis recommends
 - [For Offchain Devs](for-offchain-devs.md) -- Zero-knowledge concepts for conventional programmers
 - [For Onchain Devs](for-onchain-devs.md) -- Mental model migration from smart contract platforms

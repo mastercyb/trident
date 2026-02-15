@@ -4,7 +4,7 @@ PLUMB implementation for divisible assets.
 
 Conservation law: `sum(balances) = supply`.
 
-See the [Gold Standard](../explanation/gold-standard.md) for the PLUMB
+See the [Gold Standard](../docs/explanation/gold-standard.md) for the PLUMB
 framework, skill library, and design rationale.
 
 ---

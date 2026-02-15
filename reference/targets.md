@@ -66,7 +66,7 @@ there is no OS to bind against.
 | Level | Name | Artifact | Example |
 |-------|------|----------|---------|
 | L0 | Declared | `vm/<vm>.toml` exists | All 20 VMs |
-| L1 | Documented | `docs/reference/vm/<vm>.md` exists | All 20 VMs |
+| L1 | Documented | `reference/vm/<vm>.md` exists | All 20 VMs |
 | L2 | Scaffold | Legacy `StackBackend` in `src/legacy/backend/` | SP1, OPENVM, CAIRO |
 | L3 | Lowering | New-pipeline lowering trait in `src/tir/lower/`, `src/tree/lower/`, or `src/lir/lower/` | Triton, Miden, Nock, x86-64 |
 | L4 | Costed | `CostModel` in `src/cost/model/` | TRITON, MIDEN, SP1, OPENVM, CAIRO |
@@ -81,7 +81,7 @@ describe what artifacts exist.
 | Level | Name | Artifact | Example |
 |-------|------|----------|---------|
 | L0 | Declared | `os/<os>.toml` exists, `vm` field references a VM | All 25 OSes |
-| L1 | Documented | `docs/reference/os/<os>.md` exists | All 25 OSes |
+| L1 | Documented | `reference/os/<os>.md` exists | All 25 OSes |
 | L2 | Bound | `os/<os>/*.tri` runtime bindings exist | Neptune |
 | L3 | Tested | End-to-end OS-targeted compilation tests pass | None yet |
 
@@ -207,7 +207,7 @@ Step-by-step checklist with exact file paths.
 
 ### L1 — Document
 
-- [ ] Create `docs/reference/vm/<vm>.md` — include architecture, word size,
+- [ ] Create `reference/vm/<vm>.md` — include architecture, word size,
   instruction set summary, cost model parameters, and hash function
 - [ ] Add the VM to the VM Registry table in [vm.md](vm.md)
 - [ ] Update the VM Integration Matrix in this file
@@ -266,7 +266,7 @@ Only if using the legacy emitter pipeline. New VMs should prefer L3.
 
 ### L1 — Document
 
-- [ ] Create `docs/reference/os/<os>.md` — include programming model,
+- [ ] Create `reference/os/<os>.md` — include programming model,
   state model, `os.<os>.*` API surface, and deployment patterns
 - [ ] Add the OS to the OS Registry table in [os.md](os.md)
 - [ ] Update the OS Integration Matrix in this file

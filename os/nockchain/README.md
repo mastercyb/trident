@@ -1,6 +1,6 @@
 # Nockchain
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [Nock](../../vm/nock/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [Nock](../../vm/nock/README.md)
 
 ---
 

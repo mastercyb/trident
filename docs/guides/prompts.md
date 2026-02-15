@@ -17,7 +17,7 @@ Requirements:
 - No subtraction operator: use sub(a, b)
 - No division: use a * inv(b)
 - Type annotations required on all let bindings
-- Reference: docs/reference/briefing.md
+- Reference: reference/briefing.md
 
 Target: Triton VM (Goldilocks field, p = 2^64 - 2^32 + 1)
 ```

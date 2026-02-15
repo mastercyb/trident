@@ -1,6 +1,6 @@
 # Boundless
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [RISCZERO](../../vm/risczero/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [RISCZERO](../../vm/risczero/README.md)
 
 ---
 

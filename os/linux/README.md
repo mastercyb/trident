@@ -1,6 +1,6 @@
 # Linux — Operating System
 
-[← OS Reference](../../docs/reference/targets.md) | VM: [x86-64](../../vm/x86-64/README.md), [ARM64](../../vm/arm64/README.md), [RISC-V](../../vm/riscv/README.md)
+[← OS Reference](../../reference/targets.md) | VM: [x86-64](../../vm/x86-64/README.md), [ARM64](../../vm/arm64/README.md), [RISC-V](../../vm/riscv/README.md)
 
 ---
 

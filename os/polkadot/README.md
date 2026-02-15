@@ -1,6 +1,6 @@
 # Polkadot — Operating System
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [POLKAVM](../../vm/polkavm/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [POLKAVM](../../vm/polkavm/README.md)
 
 ---
 

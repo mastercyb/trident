@@ -362,7 +362,7 @@ target that supports the same feature set.
 
 - [Tutorial](../tutorials/tutorial.md) -- Step-by-step guide: types, functions, modules,
   I/O, hashing, events, testing, cost analysis
-- [Language Reference](../reference/language.md) -- Quick lookup: types, operators,
+- [Language Reference](../../reference/language.md) -- Quick lookup: types, operators,
   builtins, grammar, CLI flags
 - [Programming Model](../explanation/programming-model.md) -- How programs run inside Triton
   VM, the Neptune blockchain model, script types, and data flow

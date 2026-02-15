@@ -1,6 +1,6 @@
 # Arbitrum (Stylus) — Operating System
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [WASM](../../vm/wasm/README.md) + [EVM](../../vm/evm/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [WASM](../../vm/wasm/README.md) + [EVM](../../vm/evm/README.md)
 
 ---
 

@@ -491,7 +491,7 @@ statements. Loop invariant checking relies on the synthesizer or unrolling.
 
 ## 🔗 See Also
 
-- [Language Reference](../reference/language.md) -- syntax, types, and specification annotations
+- [Language Reference](../../reference/language.md) -- syntax, types, and specification annotations
 - [Content-Addressed Code](content-addressing.md) -- how verification results are cached via content hashing
 - [Tutorial](../tutorials/tutorial.md) -- getting started with Trident programs
 - [Compiling a Program](../guides/compiling-a-program.md) -- build pipeline and `--costs` flag

@@ -142,7 +142,7 @@ inference. One design choice, three futures.
 ### What follows from these facts
 
 What you see is what you prove. Source compiles through a 54-operation
-[intermediate representation](docs/reference/ir.md) that maps nearly 1:1 to
+[intermediate representation](reference/ir.md) that maps nearly 1:1 to
 target instructions.
 
 Hash performance dominance. Triton VM executes
@@ -279,7 +279,7 @@ Full index: [docs/README.md](docs/README.md)
 |----------|-----------|
 | Tutorials | [The Builder's Journey](docs/tutorials/README.md) — six chapters, from hello-proof to a DAO |
 | Guides | [Compiling a Program](docs/guides/compiling-a-program.md) — build, test, deploy, prove, verify |
-| Reference | [Language Reference](docs/reference/language.md) — types, operators, builtins, grammar |
+| Reference | [Language Reference](reference/language.md) — types, operators, builtins, grammar |
 | Explanation | [Vision](docs/explanation/vision.md) — why Trident exists and what it's building toward |
 
 ---

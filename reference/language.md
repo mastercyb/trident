@@ -693,7 +693,7 @@ cannot compile for any other target.
 - [IR Reference](ir.md) — Compiler intermediate representation (54 ops, 4 tiers)
 - [Target Reference](targets.md) — OS model, integration tracking, how-to-add checklists
 - [Error Catalog](errors.md) — All compiler error messages explained
-- [Tutorial](../tutorials/tutorial.md) — Step-by-step developer guide
+- [Tutorial](../docs/tutorials/tutorial.md) — Step-by-step developer guide
 
 ---
 

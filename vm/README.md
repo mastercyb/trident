@@ -1,6 +1,6 @@
 # 💻 Virtual Machines
 
-[← Target Reference](../docs/reference/targets.md)
+[← Target Reference](../reference/targets.md)
 
 Designed for 20 VMs. The VM is the CPU — the instruction set architecture.
 
@@ -41,5 +41,5 @@ Designed for 20 VMs. The VM is the CPU — the instruction set architecture.
 
 ---
 
-See [targets.md](../docs/reference/targets.md) for the full OS model, tier compatibility,
+See [targets.md](../reference/targets.md) for the full OS model, tier compatibility,
 type/builtin availability, and cost model overview.

@@ -78,6 +78,6 @@ catalog.
 - [Language Reference](language.md) — Types, operators, builtins, grammar
 - [Target Reference](targets.md) — OS model, integration tracking, how-to-add checklists
 - [IR Reference](ir.md) — 54 operations, 4 tiers, lowering paths
-- [Tutorial](../tutorials/tutorial.md) — Step-by-step guide with working examples
-- [For Offchain Devs](../explanation/for-offchain-devs.md) — Why bounded loops? Why no heap?
-- [Optimization Guide](../guides/optimization.md) — Cost reduction strategies
+- [Tutorial](../docs/tutorials/tutorial.md) — Step-by-step guide with working examples
+- [For Offchain Devs](../docs/explanation/for-offchain-devs.md) — Why bounded loops? Why no heap?
+- [Optimization Guide](../docs/guides/optimization.md) — Cost reduction strategies

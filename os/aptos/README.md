@@ -1,6 +1,6 @@
 # Aptos — Operating System
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [MOVEVM](../../vm/movevm/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [MOVEVM](../../vm/movevm/README.md)
 
 ---
 

@@ -1,6 +1,6 @@
 # 💎 Ethereum
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [EVM](../../vm/evm/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [EVM](../../vm/evm/README.md)
 
 Ethereum is the canonical EVM chain -- L1 settlement layer. Trident compiles
 to EVM bytecode (`.evm`) and links against `os.ethereum.*` for Ethereum-
@@ -185,7 +185,7 @@ instead of `os.ethereum.*` for cross-chain portability:
 
 Use `os.ethereum.*` when you need: precompiles, delegatecall, specific
 LOG topics, storage maps, or other EVM-specific features. See
-[os.md](../../docs/reference/os.md) for the full `os.*` API.
+[os.md](../../reference/os.md) for the full `os.*` API.
 
 ---
 

@@ -1,6 +1,6 @@
 # Android — Operating System
 
-[← OS Reference](../../docs/reference/targets.md) | VM: [ARM64](../../vm/arm64/README.md), [x86-64](../../vm/x86-64/README.md)
+[← OS Reference](../../reference/targets.md) | VM: [ARM64](../../vm/arm64/README.md), [x86-64](../../vm/x86-64/README.md)
 
 ---
 

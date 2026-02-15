@@ -296,9 +296,9 @@ Quantum compilation backend for `std.nn` operations.
 - [How STARK Proofs Work](stark-proofs.md) — The proof system behind
   Trident's post-quantum security
 - [Vision](vision.md) — Why Trident exists
-- [Standard Library Reference](../reference/stdlib.md) — Full `std.*`
+- [Standard Library Reference](../../reference/stdlib.md) — Full `std.*`
   module inventory
-- [Language Reference](../reference/language.md) — Types, operators,
+- [Language Reference](../../reference/language.md) — Types, operators,
   builtins, grammar
 
 ---

@@ -171,7 +171,7 @@ for both coins and uniqs.
 
 See [TSP-1 — Coin](tsp1-coin.md) and [TSP-2 — Card](tsp2-card.md) for
 leaf formats, config model, and circuit constraints. See the
-[Gold Standard](../explanation/gold-standard.md) for the PLUMB framework
+[Gold Standard](../docs/explanation/gold-standard.md) for the PLUMB framework
 design rationale and skill library.
 
 #### PLUMB Operations — Coins

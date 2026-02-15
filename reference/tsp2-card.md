@@ -4,7 +4,7 @@ PLUMB implementation for unique assets.
 
 Conservation law: `owner_count(id) = 1`.
 
-See the [Gold Standard](../explanation/gold-standard.md) for the PLUMB
+See the [Gold Standard](../docs/explanation/gold-standard.md) for the PLUMB
 framework, skill library, and design rationale.
 
 ---

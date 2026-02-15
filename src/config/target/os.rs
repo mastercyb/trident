@@ -158,7 +158,7 @@ pub struct ResolvedTarget {
 impl ResolvedTarget {
     /// Resolve a target name: try OS first, then fall back to VM.
     ///
-    /// This matches the resolution order from `docs/reference/targets.md`:
+    /// This matches the resolution order from `reference/targets.md`:
     /// 1. Is `<name>` an OS? Load `os/<name>/target.toml`, derive VM.
     /// 2. Is `<name>` a VM? Load `vm/<name>/target.toml`.
     /// 3. Neither? Error.

@@ -151,4 +151,4 @@ STARK proofs are quantum-safe: security relies on hash collision resistance (Tip
 
 - [How STARK Proofs Work](../explanation/stark-proofs.md) -- Full proof system details
 - [Programming Model](../explanation/programming-model.md) -- Claim/Proof structure
-- [Language Reference](../reference/language.md) -- Types, instructions, costs
+- [Language Reference](../../reference/language.md) -- Types, instructions, costs

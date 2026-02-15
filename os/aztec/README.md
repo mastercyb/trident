@@ -1,6 +1,6 @@
 # Aztec
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [Aztec/Noir](../../vm/aztec/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [Aztec/Noir](../../vm/aztec/README.md)
 
 ---
 

@@ -1,6 +1,6 @@
 # Polygon Miden
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [MIDEN](../../vm/miden/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [MIDEN](../../vm/miden/README.md)
 
 ---
 

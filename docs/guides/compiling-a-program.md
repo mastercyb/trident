@@ -165,7 +165,7 @@ error: recursive function call detected: main -> foo -> main
   help: Trident does not allow recursion; use `for` loops instead
 ```
 
-For the complete list of every error message with explanations and fixes, see the [Error Catalog](../reference/errors.md).
+For the complete list of every error message with explanations and fixes, see the [Error Catalog](../../reference/errors.md).
 
 ## ⚡ Cost Analysis at Compile Time
 
@@ -372,8 +372,8 @@ trident test .
 
 ## 🔗 See Also
 
-- [Language Reference](../reference/language.md) -- Types, operators, builtins, grammar
-- [Error Catalog](../reference/errors.md) -- Every error message explained with fixes
+- [Language Reference](../../reference/language.md) -- Types, operators, builtins, grammar
+- [Error Catalog](../../reference/errors.md) -- Every error message explained with fixes
 - [Optimization Guide](optimization.md) -- Cost reduction strategies for all six tables
 
 ## 🚀 Next Step

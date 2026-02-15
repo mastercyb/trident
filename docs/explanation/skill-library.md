@@ -891,6 +891,6 @@ composes through the hook system.
 
 - [The Gold Standard](gold-standard.md) — PLUMB framework, TSP-1 (Coin), TSP-2 (Card)
 - [Programming Model](programming-model.md) — Execution model and stack semantics
-- [OS Reference](../reference/os.md) — OS concepts and `os.token` bindings
+- [OS Reference](../../reference/os.md) — OS concepts and `os.token` bindings
 - [Multi-Target Compilation](multi-target.md) — One source, every chain
 - [Deploying a Program](../guides/deploying-a-program.md) — Deployment workflows

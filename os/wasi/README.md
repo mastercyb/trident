@@ -1,6 +1,6 @@
 # WASI — Operating System
 
-[← OS Reference](../../docs/reference/targets.md) | VM: [WASM](../../vm/wasm/README.md)
+[← OS Reference](../../reference/targets.md) | VM: [WASM](../../vm/wasm/README.md)
 
 ---
 

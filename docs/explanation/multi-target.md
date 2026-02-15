@@ -272,13 +272,13 @@ The `sender_bal - amount` and `assert(new_bal >= 0)` are pure Level 1 logic. The
 
 ## ⚙️ TargetConfig
 
-Targets are defined as TOML files in `vm/<name>/target.toml`. Each declares architecture, field parameters, stack depth, hash function, and cost table names. The compiler loads them via `--target <name>`. See [Target Reference](../reference/targets.md) for the schema, shipped configurations, and how to add new targets.
+Targets are defined as TOML files in `vm/<name>/target.toml`. Each declares architecture, field parameters, stack depth, hash function, and cost table names. The compiler loads them via `--target <name>`. See [Target Reference](../../reference/targets.md) for the schema, shipped configurations, and how to add new targets.
 
 ---
 
 ## 🔧 Backend Traits
 
-Each target implements two traits: `StackLowering` (mapping TIR operations to target assembly) and `CostModel` (providing per-instruction cost in target-native dimensions). Stack targets (Triton, Miden) share control-flow and stack-management logic. Register targets use `RegisterLowering` via LIR. Tree targets (Nock) use `TreeLowering`. See [IR Reference](../reference/ir.md) for the trait interfaces and [Target Reference](../reference/targets.md) for implemented backends.
+Each target implements two traits: `StackLowering` (mapping TIR operations to target assembly) and `CostModel` (providing per-instruction cost in target-native dimensions). Stack targets (Triton, Miden) share control-flow and stack-management logic. Register targets use `RegisterLowering` via LIR. Tree targets (Nock) use `TreeLowering`. See [IR Reference](../../reference/ir.md) for the trait interfaces and [Target Reference](../../reference/targets.md) for implemented backends.
 
 ---
 
@@ -290,7 +290,7 @@ Three layers enable portability:
 - `std.io` / `std.crypto` -- Same API on every target. The compiler dispatches to target-native instructions.
 - `os.<os>.*` -- OS-specific extensions that lock to one target.
 
-Programs using only `std.*` compile to any backend. `std/target.tri` exposes compile-time constants (`DIGEST_WIDTH`, `FIELD_LIMBS`, `HASH_RATE`) derived from the active target, enabling polymorphic code without `#[cfg]` guards. See [Standard Library Reference](../reference/stdlib.md) for the full module inventory.
+Programs using only `std.*` compile to any backend. `std/target.tri` exposes compile-time constants (`DIGEST_WIDTH`, `FIELD_LIMBS`, `HASH_RATE`) derived from the active target, enabling polymorphic code without `#[cfg]` guards. See [Standard Library Reference](../../reference/stdlib.md) for the full module inventory.
 
 ---
 
@@ -386,7 +386,7 @@ tables = ["cycles"]
 For stack targets, add a new struct in `src/tir/lower/` that implements the
 `StackLowering` trait. Every method maps a semantic operation (push, add, hash,
 etc.) to the target's assembly syntax. For register targets, implement
-`RegisterLowering` via the LIR path. See [targets.md](../reference/targets.md)
+`RegisterLowering` via the LIR path. See [targets.md](../../reference/targets.md)
 for which lowering path to use per VM family.
 
 ### 3. Implement CostModel
@@ -525,8 +525,8 @@ end-to-end proving and verification.
 
 ## 🔗 See Also
 
-- [IR Reference](../reference/ir.md) — Lowering architecture
-- [Target Reference](../reference/targets.md) — OS model, target profiles
+- [IR Reference](../../reference/ir.md) — Lowering architecture
+- [Target Reference](../../reference/targets.md) — OS model, target profiles
 - [Programming Model](programming-model.md) — Execution model, OS abstraction
-- [Language Reference](../reference/language.md) — Syntax and semantics
+- [Language Reference](../../reference/language.md) — Syntax and semantics
 - [Compiling a Program](../guides/compiling-a-program.md) — `--target` flag

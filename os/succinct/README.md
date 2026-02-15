@@ -1,6 +1,6 @@
 # Succinct
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [SP1](../../vm/sp1/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [SP1](../../vm/sp1/README.md)
 
 ---
 

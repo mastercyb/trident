@@ -1,6 +1,6 @@
 # Aleo
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [AVM](../../vm/avm/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [AVM](../../vm/avm/README.md)
 
 ---
 

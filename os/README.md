@@ -1,6 +1,6 @@
 # 🖥️ Operating Systems
 
-[← Target Reference](../docs/reference/targets.md)
+[← Target Reference](../reference/targets.md)
 
 Designed for 25 OSes. The OS is the runtime — storage, accounts, syscalls, billing.
 
@@ -46,5 +46,5 @@ Designed for 25 OSes. The OS is the runtime — storage, accounts, syscalls, bil
 
 ---
 
-See [targets.md](../docs/reference/targets.md) for the full OS model, tier compatibility,
+See [targets.md](../reference/targets.md) for the full OS model, tier compatibility,
 type/builtin availability, and cost model overview.

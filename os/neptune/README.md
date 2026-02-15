@@ -1,6 +1,6 @@
 # Neptune
 
-[VM: Triton](../../vm/triton/README.md) | [OS Reference](../../docs/reference/os.md) | [Gold Standard](../../docs/explanation/gold-standard.md)
+[VM: Triton](../../vm/triton/README.md) | [OS Reference](../../reference/os.md) | [Gold Standard](../../docs/explanation/gold-standard.md)
 
 Neptune is a blockchain where every state transition produces a STARK
 proof. No trusted setup. No elliptic curves. Quantum-safe by
@@ -94,7 +94,7 @@ define what a token *is*. Skills define what a token *does*.
 
 See the [Gold Standard](../../docs/explanation/gold-standard.md) for
 PLUMB, circuit constraints, config model, and the hook system. See the
-[Skill Library](../../docs/reference/skill-library.md) for the 23
+[Skill Library](../../reference/skill-library.md) for the 23
 designed skills.
 
 ---
@@ -181,9 +181,9 @@ Standalone programs for transaction orchestration and proof composition.
 ## See Also
 
 - [Gold Standard](../../docs/explanation/gold-standard.md) — PLUMB framework, TSP-1/TSP-2 circuits, hook system, proven price
-- [Skill Library](../../docs/reference/skill-library.md) — 23 composable token capabilities
+- [Skill Library](../../reference/skill-library.md) — 23 composable token capabilities
 - [Programming Model](../../docs/explanation/programming-model.md) — Divine-and-authenticate, stack semantics
 - [For Onchain Devs](../../docs/explanation/for-onchain-devs.md) — Mental model migration from Solidity
 - [Deploying a Program](../../docs/guides/deploying-a-program.md) — Build and deploy workflows
 - [Triton VM](../../vm/triton/README.md) — The underlying provable virtual machine
-- [OS Reference](../../docs/reference/os.md) — Portable `os.*` API and per-OS lowering tables
+- [OS Reference](../../reference/os.md) — Portable `os.*` API and per-OS lowering tables

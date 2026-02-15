@@ -1,6 +1,6 @@
 # Sui
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [MOVEVM](../../vm/movevm/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [MOVEVM](../../vm/movevm/README.md)
 
 Sui is the object-centric blockchain powered by MOVEVM. Trident compiles
 to Move bytecode (`.mv`) and links against `sui.ext.*` for Sui-specific
@@ -202,7 +202,7 @@ instead of `sui.ext.*` for cross-chain portability:
 
 Use `sui.ext.*` when you need: object ownership (owned/shared/frozen),
 dynamic fields, capability pattern, or other Sui-specific features. See
-[os.md](../../docs/reference/os.md) for the full `os.*` API.
+[os.md](../../reference/os.md) for the full `os.*` API.
 
 ---
 

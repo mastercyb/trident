@@ -1,6 +1,6 @@
 # x86-64
 
-[← Target Reference](../../docs/reference/targets.md)
+[← Target Reference](../../reference/targets.md)
 
 ---
 

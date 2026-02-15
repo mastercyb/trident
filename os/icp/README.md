@@ -1,6 +1,6 @@
 # Icp (Internet Computer) — Operating System
 
-[← Target Reference](../../docs/reference/targets.md) | VM: [WASM](../../vm/wasm/README.md)
+[← Target Reference](../../reference/targets.md) | VM: [WASM](../../vm/wasm/README.md)
 
 ---
 

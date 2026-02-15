@@ -256,4 +256,4 @@ The goal is not to minimize every table, but to bring the tallest table down. On
 
 - [Compiling a Program](compiling-a-program.md) -- Build pipeline, `--costs` / `--hotspots` flags
 - [Generating Proofs](generating-proofs.md) -- How proving cost translates to proof generation time
-- [IR Reference](../reference/ir.md) -- TIR operations and lowering paths
+- [IR Reference](../../reference/ir.md) -- TIR operations and lowering paths
