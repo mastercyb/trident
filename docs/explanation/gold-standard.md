@@ -193,57 +193,19 @@ PLUMB is the architectural foundation that all Gold Standard token standards sha
 - Nullifier scheme — `hash(id, nonce)` for replay prevention
 - Global public state — `state_root`, `supply`, `config_hash`, `metadata_hash`, `current_time`, `price`, `fees`
 
-### 3.1 Config — Shared by All PLUMB Standards
+### 3.1 Config, Operations, and Hooks
 
-```trident
-config = hash(admin_auth, pay_auth, lock_auth, mint_auth, burn_auth,
-              pay_hook, lock_hook, update_hook, mint_hook, burn_hook)
-```
+Config is a 10-field commitment: 5 authorities (admin, pay, lock, mint,
+burn) + 5 hooks (one per operation). Every operation verifies the full
+config hash and extracts its dedicated authority and hook. Hooks are
+composed ZK programs — the verifier ensures both the token proof and the
+hook proof are valid.
 
-| Field | Type | Description |
-|---|---|---|
-| `admin_auth` | Field | Admin secret hash. `0` = renounced (permanently immutable) |
-| `pay_auth` | Field | Config-level pay authority. `0` = account auth only |
-| `lock_auth` | Field | Config-level lock authority. `0` = account auth only |
-| `mint_auth` | Field | Config-level mint authority. `0` = minting disabled |
-| `burn_auth` | Field | Config-level burn authority. `0` = account auth only |
-| `pay_hook` | Field | External program ID for pay logic (`0` = none) |
-| `lock_hook` | Field | External program ID for lock logic (`0` = none) |
-| `update_hook` | Field | External program ID for update logic (`0` = none) |
-| `mint_hook` | Field | External program ID for mint logic (`0` = none) |
-| `burn_hook` | Field | External program ID for burn logic (`0` = none) |
+See [TSP-1 Reference](../../reference/tsp1-coin.md#token-config--10-field-elements)
+for the full config schema, authority semantics, hook table, and proof
+envelope.
 
-#### Authority Semantics
-
-| Operation type | Auth = 0 | Auth ≠ 0 |
-|---|---|---|
-| Account ops (pay, lock, burn) | Account auth only (permissionless) | Dual auth: account + config authority |
-| Config ops (mint) | Operation disabled | Config authority required |
-| Config ops (update) | Renounced (permanently frozen) | Admin authority required |
-
-### 3.2 Operations
-
-All 5 operations follow the same proof envelope:
-1. Divine 10 config fields, hash, assert match against public `config_hash`
-2. Extract dedicated authority and hook
-3. Verify authorization (account-level, and config-level if dual auth)
-4. Apply state transition to leaf(s)
-5. Update Merkle root
-6. Emit public I/O for composition
-
-### 3.3 Hook System
-
-| Hook | Triggered by | Description |
-|---|---|---|
-| `pay_hook` | Every pay | Custom logic on transfers |
-| `lock_hook` | Every lock | Custom lock logic |
-| `update_hook` | Every config update | Governance over config changes |
-| `mint_hook` | Every mint | Supply and minting logic |
-| `burn_hook` | Every burn | Burn conditions and effects |
-
-Composition model: The token circuit proves state transition validity. The verifier composes the token proof with the hook proof. If `hook == 0`, no external proof required.
-
-### 3.4 Cross-Token Proof Composition
+### 3.2 Cross-Token Proof Composition
 
 Hooks are not limited to their own token's state. A hook can require proofs from any skill or token as input. The verifier composes all required proofs together.
 
@@ -256,7 +218,7 @@ The hook circuit declares its required inputs. The verifier ensures all sub-proo
 
 This is how DeFi works in Neptune: operations on one token compose with operations on other tokens, oracle feeds, and skill state — all in a single atomic proof.
 
-### 3.5 Skill State Trees
+### 3.3 Skill State Trees
 
 Skills that need persistent state maintain their own Merkle trees. A skill state tree follows the same pattern as standard trees:
 - 10-field leaves hashed to Digest
@@ -266,7 +228,7 @@ Skills that need persistent state maintain their own Merkle trees. A skill state
 
 The Liquidity skill's allocation tree, the Oracle Pricing skill's attestation tree, a Governance skill's proposal tree — all are skill state trees. What IS standardized is how skill proofs compose with token proofs through the hook system.
 
-### 3.6 Atomic Multi-Tree Commitment
+### 3.4 Atomic Multi-Tree Commitment
 
 A single Neptune transaction may update multiple Merkle trees:
 - TOKEN_A tree (collateral deposited)
@@ -285,7 +247,7 @@ block_state = hash(
 
 A transaction's composed proof references the old and new state commitment. The block verifier ensures all tree roots transition consistently — no partial updates.
 
-### 3.7 No Approvals
+### 3.5 No Approvals
 
 PLUMB has no `approve`, `allowance`, or `transferFrom`. The approve/transferFrom pattern is the largest attack surface in ERC-20. In the Gold Standard:
 
@@ -299,242 +261,41 @@ PLUMB has no `approve`, `allowance`, or `transferFrom`. The approve/transferFrom
 
 For delegated spending: `auth_hash` derived keys + Delegation skill tracking cumulative spending per delegate. Strictly more powerful, strictly safer than approve.
 
-### 3.8 Security Properties
+### 3.6 Security Properties
 
-1. No negative balances: `as_u32()` range check
-2. Replay prevention: Monotonic nonce + nullifiers
-3. Time-lock enforcement: `current_time` from block
-4. Lock monotonicity: Can only extend, not shorten
-5. Supply conservation: Public invariant
-6. Account abstraction: `auth_hash` = privkey, Shamir, ZK proof, anything
-7. Config binding: Every op verifies full config hash
-8. Irreversible renounce: `admin_auth = 0` = frozen forever
-9. Config-state separation: Config updates can't touch tree
-10. Hook composability: Hooks bound to config hash
-11. Symmetric authority: Every op has authority + hook
-12. Safe defaults: `mint_auth = 0` = disabled, others `= 0` = permissionless
-13. No approvals: No allowances, no `transferFrom`, no approval phishing
+13 properties covering range checks, replay prevention, time-locks,
+supply conservation, account abstraction, config binding, irreversible
+renounce, and more. See [TSP-1 Security Properties](../../reference/tsp1-coin.md#security-properties)
+for the full list.
 
 ---
 
 ## 🥇 4. TSP-1 — Coin Standard
 
-*PLUMB implementation for divisible assets*
+PLUMB implementation for divisible assets. Conservation law:
+`sum(balances) = supply`.
 
-### 4.1 Account Leaf — 10 field elements
+10-field account leaves with balance, nonce, auth, time-lock, controller
+(program-controlled accounts), and locked-by (program-based locking).
+5 operations: Pay, Lock, Update, Mint, Burn — each with full config
+verification and hook composition.
 
-```trident
-leaf = hash(account_id, balance, nonce, auth_hash, lock_until,
-            controller, locked_by, lock_data, 0, 0)
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `account_id` | Field | Unique account identifier (pubkey hash) |
-| `balance` | Field | Token balance (U32 range) |
-| `nonce` | Field | Monotonic counter |
-| `auth_hash` | Field | Hash of authorization secret |
-| `lock_until` | Field | Timestamp lock (0 = unlocked) |
-| `controller` | Field | Program ID that must co-authorize operations (`0` = owner only) |
-| `locked_by` | Field | Program ID that locked this account (`0` = not program-locked) |
-| `lock_data` | Field | Program-specific lock data (position ID, collateral ratio, etc.) |
-| *reserved* | Field×2 | Extension space |
-
-#### Controller Field
-
-When `controller ≠ 0`, every operation on this leaf requires a composed proof from the controller program in addition to normal auth. This enables program-controlled accounts — leaves that can only be moved by a specific ZK program.
-
-Use cases:
-- Fund accounts: collateral held by fund program, released only on valid redemption/liquidation proof
-- Escrow: tokens held until condition is met
-- Protocol treasuries: spending requires governance proof
-
-The circuit checks: if `leaf.controller ≠ 0`, the verifier must compose with a valid proof from program `controller`. This is additive — both `auth_hash` AND controller must be satisfied.
-
-#### Locked-by Field
-
-When `locked_by ≠ 0`, the account's tokens are committed to a specific program. The `lock_data` field carries program-specific state (e.g. which fund position this collateral backs).
-
-Unlike `lock_until` (time-based), `locked_by` is program-based locking: only a proof from the `locked_by` program can unlock the account. The lock can be released before `lock_until` if the program authorizes it (e.g. on redemption).
-
-### 4.2 Token Metadata
-
-```trident
-metadata = hash(name_hash, ticker_hash, teaser_hash, site_hash, custom_hash,
-                price_oracle, volume_oracle, 0, 0, 0)
-```
-
-### 4.3 Circuit Constraints
-
-#### Op 0: Pay
-1. Config verified, `pay_auth` and `pay_hook` extracted
-2. Sender leaf verifies against `old_root`
-3. `hash(secret) == sender.auth_hash`
-4. If `pay_auth ≠ 0`, dual auth required
-5. `current_time >= sender.lock_until`
-6. `sender.balance >= amount` (range check via `as_u32`)
-7. Sender: `balance -= amount`, `nonce += 1`
-8. Receiver: `balance += amount`
-9. New leaves → `new_root`
-10. Supply unchanged
-
-#### Op 1: Lock(time)
-1. Config verified, `lock_auth` and `lock_hook` extracted
-2. Account auth required
-3. If `lock_auth ≠ 0`, dual auth
-4. `lock_until_time >= leaf.lock_until` (extend only)
-5. Leaf: `lock_until = lock_until_time`, `nonce += 1`
-
-#### Op 2: Update
-1. `old_root == new_root` (state unchanged)
-2. Old config verified, `update_hook` extracted
-3. `hash(admin_secret) == old_config.admin_auth`
-4. `admin_auth ≠ 0` (not renounced)
-5. New config fields → `new_config`
-
-#### Op 3: Mint
-1. Config verified, `mint_auth` and `mint_hook` extracted
-2. `hash(mint_secret) == config.mint_auth`
-3. `new_supply == old_supply + amount`
-4. Recipient: `balance += amount`
-
-#### Op 4: Burn
-1. Config verified, `burn_auth` and `burn_hook` extracted
-2. Account auth required
-3. If `burn_auth ≠ 0`, dual auth
-4. `current_time >= leaf.lock_until`
-5. `leaf.balance >= amount`
-6. `new_supply == old_supply - amount`
-7. Leaf: `balance -= amount`, `nonce += 1`
+Full specification: [TSP-1 — Coin Reference](../../reference/tsp1-coin.md).
 
 ---
 
 ## 🥇 5. TSP-2 — Card Standard
 
-*PLUMB implementation for unique assets*
+PLUMB implementation for unique assets. Conservation law:
+`owner_count(id) = 1`.
 
-### 5.1 What Differs from TSP-1
+10-field asset leaves with owner, collection, metadata hash, royalty,
+immutable creator, and a flags bitfield gating which operations are
+allowed per asset. Same 5 PLUMB operations, different circuit
+constraints: uniqueness instead of divisible supply, flag enforcement,
+supply caps, and immutable provenance.
 
-1. Leaf represents an asset (unique item), not an account balance
-2. Invariant: uniqueness (`owner_count(id) = 1`) not divisible supply
-3. No divisible arithmetic — no `balance`, no range checks, no splitting
-4. Per-asset state — metadata, royalty, creator, flags live in the leaf
-5. Creator immutability — `creator_id` is set at mint and can never change
-6. Flag-gated operations — transferable, burnable, updatable bits control which PLUMB operations are allowed per asset
-
-Operations are still Pay, Lock, Update, Mint, Burn — PLUMB operations. What changes is what the circuit enforces inside each.
-
-### 5.2 Asset Leaf — 10 field elements
-
-```trident
-leaf = hash(asset_id, owner_id, nonce, auth_hash, lock_until,
-            collection_id, metadata_hash, royalty_bps, creator_id, flags)
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `asset_id` | Field | Globally unique asset identifier |
-| `owner_id` | Field | Current owner (account_id hash) |
-| `nonce` | Field | Monotonic counter |
-| `auth_hash` | Field | Hash of owner's authorization secret |
-| `lock_until` | Field | Timestamp lock (0 = unlocked) |
-| `collection_id` | Field | Collection membership (0 = standalone) |
-| `metadata_hash` | Field | Hash of item metadata |
-| `royalty_bps` | Field | Royalty basis points (0-10000) |
-| `creator_id` | Field | Original creator (immutable after mint) |
-| `flags` | Field | Bits: transferable (0), burnable (1), updatable (2), lockable (3), mintable (4) |
-
-First 5 fields occupy same positions as TSP-1. Last 5 — reserved zeros in TSP-1 — carry per-asset state in TSP-2.
-
-#### Flags Bitfield
-
-| Bit | Name | When set | When clear |
-|-----|------|----------|------------|
-| 0 | `TRANSFERABLE` | Pay (transfer) allowed | Pay rejected |
-| 1 | `BURNABLE` | Burn allowed | Burn rejected |
-| 2 | `UPDATABLE` | Metadata update allowed | Metadata frozen forever |
-| 3 | `LOCKABLE` | Lock (time-lock) allowed | Lock rejected |
-| 4 | `MINTABLE` | Re-mint into collection allowed | Collection closed to new mints |
-
-Flags are set at mint time and cannot be changed after creation. A soulbound credential is minted with `flags = 0`. A game item uses `flags = 31` (all operations). A standard collectible uses `flags = 11` (transferable + burnable + lockable).
-
-#### Collection Binding
-
-When `collection_id ≠ 0`, the asset belongs to a collection identified by its config hash. Collection membership is immutable after mint.
-
-#### Creator Immutability
-
-`creator_id` is set at mint and can never change. Every subsequent operation preserves it. This provides an unforgeable provenance chain. The Royalties skill depends on this: hooks read `royalty_bps` from the leaf and `royalty_receiver` from collection metadata.
-
-### 5.3 Collection Metadata — 10 field elements
-
-```trident
-metadata = hash(name_hash, description_hash, image_hash, site_hash, custom_hash,
-                max_supply, royalty_receiver, 0, 0, 0)
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `name_hash` | Field | Hash of collection name |
-| `description_hash` | Field | Hash of collection description |
-| `image_hash` | Field | Hash of collection image/avatar |
-| `site_hash` | Field | Hash of collection website URL |
-| `custom_hash` | Field | Hash of application-specific data |
-| `max_supply` | Field | Maximum number of assets (0 = unlimited) |
-| `royalty_receiver` | Field | Account that receives royalties on transfers |
-| *reserved* | Field×3 | Extension space |
-
-### 5.4 Circuit Constraints
-
-All 5 operations follow the PLUMB proof envelope (section 3.2).
-
-#### Op 0: Pay (Transfer Ownership)
-1. Config verified, `pay_auth` and `pay_hook` extracted
-2. Asset leaf verified against `old_root`
-3. `hash(secret) == leaf.auth_hash`
-4. If `pay_auth ≠ 0`: dual auth required
-5. `current_time >= leaf.lock_until`
-6. `leaf.flags & TRANSFERABLE`
-7. `collection_id`, `creator_id`, `royalty_bps`, `metadata_hash`, `flags` unchanged
-8. New leaf: `owner_id = new_owner`, `auth_hash = new_auth`, `nonce += 1`
-9. New leaf → `new_root`
-10. Nullifier emitted: `hash(asset_id, nonce)`
-
-#### Op 1: Lock (Time-Lock Asset)
-1. Config verified, `lock_auth` and `lock_hook` extracted
-2. Owner auth required
-3. If `lock_auth ≠ 0`: dual auth
-4. `leaf.flags & LOCKABLE`
-5. `lock_until_time >= leaf.lock_until` (extend only)
-6. All immutable fields unchanged
-7. Leaf: `lock_until = lock_until_time`, `nonce += 1`
-
-#### Op 2: Update (Config or Metadata)
-Config update: `old_root == new_root`, admin auth, `admin_auth ≠ 0`, new config fields.
-Metadata update: Owner auth, `flags & UPDATABLE`, only `metadata_hash` changes, `nonce += 1`.
-
-#### Op 3: Mint (Originate)
-1. Config verified, `mint_auth` and `mint_hook` extracted
-2. `mint_auth ≠ 0` (minting enabled)
-3. Mint authorization
-4. `asset_id` not in tree (non-membership proof)
-5. `creator_id = minter_id` (immutable forever)
-6. `collection_id`, `flags`, `royalty_bps` set (immutable after mint)
-7. `flags & MINTABLE`
-8. `nonce = 0`, `lock_until = 0`
-9. New leaf → `new_root`
-10. `new_asset_count == old_asset_count + 1`
-11. If `max_supply ≠ 0`: `new_asset_count <= max_supply`
-
-#### Op 4: Burn (Release)
-1. Config verified, `burn_auth` and `burn_hook` extracted
-2. Owner auth required
-3. If `burn_auth ≠ 0`: dual auth
-4. `current_time >= leaf.lock_until`
-5. `leaf.flags & BURNABLE`
-6. Leaf → null (Merkle deletion)
-7. `new_asset_count == old_asset_count - 1`
-8. Nullifier emitted: `hash(asset_id, nonce)`
+Full specification: [TSP-2 — Card Reference](../../reference/tsp2-card.md).
 
 ---
 
