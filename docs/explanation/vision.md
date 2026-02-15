@@ -49,9 +49,9 @@ efficiency: it fits in 64-bit CPU words, allows fast modular reduction, and
 has a multiplicative group with 2^32 roots of unity for efficient NTTs.
 
 That this same choice simultaneously optimizes for quantum advantage,
-private computation, and field-native AI is the discovery. It is not a
-design choice. It is a mathematical inevitability arising from the shared
-requirement of reversible computation with complete arithmetic.
+private computation, and field-native AI is the discovery — a mathematical
+inevitability arising from the shared requirement of reversible computation
+with complete arithmetic.
 
 **Quantum** -- requires prime-dimensional state spaces. Every quantum
 operation must be unitary -- reversible, norm-preserving, with no information
@@ -88,8 +88,8 @@ from three sides.
 
 > Both classical provability and quantum mechanics require reversible
 > computation with complete arithmetic. Both require prime fields. Trident
-> makes prime field elements its fundamental primitive. The convergence is
-> not coincidental. It is a theorem about prime numbers.
+> makes prime field elements its fundamental primitive. The convergence
+> follows from a theorem about prime numbers.
 
 See [Quantum Computing](quantum.md) for the full structural argument.
 
@@ -185,7 +185,7 @@ quantum-accelerated tomorrow, with zero source code changes.
 
 ### Privacy: ZK + FHE + MPC
 
-Privacy is not a feature. It is a requirement. Three cryptographic technologies
+Privacy is a requirement. Three cryptographic technologies
 work in concert:
 
 - **ZK** (Zero-Knowledge Proofs) -- prove a statement is true while keeping the

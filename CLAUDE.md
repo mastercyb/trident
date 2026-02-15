@@ -307,6 +307,12 @@ try to hold an entire large file in a single agent context.
 - No floating point anywhere
 - No `async` in the compilation pipeline (only in LSP and CLI)
 
+## Writing Style
+
+Never use "This is not X. It is Y." or "X is not Y — it is Z."
+formulations. State what something is directly. Say "Privacy is a
+requirement" instead of "Privacy is not a feature. It is a requirement."
+
 ## Builtin Sync Rule
 
 Builtins are defined in 4 places that must stay in sync:

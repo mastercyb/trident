@@ -15,7 +15,7 @@ Three computational revolutions — quantum computing, privacy, and
 artificial intelligence — share a common algebraic foundation in prime
 field arithmetic. Trident sits at their intersection because its native
 `Field` type simultaneously satisfies the requirements of all three.
-This convergence is not a design choice. It is a
+The convergence is a
 [mathematical inevitability](docs/explanation/quantum.md).
 
 Today Trident compiles to [Triton VM](https://triton-vm.org/), powering
@@ -98,8 +98,7 @@ field simultaneously functions as four different mechanisms.
 | FHE bootstrap | Encrypted evaluation | Privacy |
 | STARK lookup | Proof authentication | Verifiability |
 
-One table. One field. Four purposes. This is not a metaphor — it is a
-mathematical identity. When all systems operate over the same prime field,
+One table. One field. Four purposes. A mathematical identity. When all systems operate over the same prime field,
 four separate mechanisms collapse into one data structure read four ways.
 
 A program that performs neural network inference on FHE-encrypted data with
@@ -126,8 +125,7 @@ inside it, so any chain of proofs collapses into a single proof. Trident
 is designed for recursive proof composition — not invocation.
 
 **Bounded execution is a feature.** Circuits must terminate. Loops must
-be bounded. This isn't a limitation — it's what makes proofs finite and
-costs predictable. The compiler computes exact proving cost from source,
+be bounded. The compiler computes exact proving cost from source,
 before execution. The same bound that makes programs provable makes them
 quantum-native: bounded loops map directly to fixed-depth quantum circuits.
 
