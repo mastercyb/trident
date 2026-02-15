@@ -70,6 +70,9 @@ and its output (does the next stage still accept it?).
 
 ## src/ Module Map
 
+Update this map when files are added, removed, renamed, or modules are
+reorganized. Do NOT update for line count changes or content-only edits.
+
 97 files, ~35,700 lines. Modules listed in pipeline order, then support.
 
 **Pipeline stages:**
