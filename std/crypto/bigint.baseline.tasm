@@ -1,0 +1,1495 @@
+// Hand-optimized TASM baseline: std.crypto.bigint
+// 256-bit integer arithmetic over 8 U32 limbs (little-endian).
+//
+// U256 on stack (8 elements): [l7 l6 l5 l4 l3 l2 l1 l0]
+//   l7 = MSB (st0), l0 = LSB (st7)
+//
+// Calling convention: first arg deepest.
+//   fn(a, b): [b on top | a below]
+//
+// Memory layout (non-overlapping scratch regions):
+//   0..7    slot A     (store/load helpers, inline carry chains)
+//   10..17  slot B     (store/load helpers, inline carry chains)
+//   20..27  accumulator (mul256_low)
+//   30      scalar     (mul256_by_u32, shl_limbs counter)
+//   40..47  orig A     (mul256_low, mod_reduce_once, sub_mod)
+//   50..57  orig B     (mul256_low, mod_reduce_once, sub_mod)
+//   60..67  modulus    (add_mod, sub_mod, mul_mod)
+//
+// Triton VM memory ops:
+//   write_mem N: st0=addr, st1..stN=vals -> writes st1..[addr] etc -> [addr+N]
+//   read_mem 1:  st0=addr -> [mem[addr], addr-1]
+//   split:       [x] -> st0=lo(32bit), st1=hi(32bit)
+//   skiz:        pops st0; if nonzero, executes next instruction
+//
+// Counting: comments, labels (:), halt, blanks NOT counted.
+
+// ===================================================================
+// MEMORY HELPERS
+// ===================================================================
+
+// __store_a: store top U256 to mem[0..7]. 5 ops.
+__store_a:
+    push 0
+    write_mem 5
+    write_mem 3
+    pop 1
+    return
+
+// __store_b: store top U256 to mem[10..17]. 5 ops.
+__store_b:
+    push 10
+    write_mem 5
+    write_mem 3
+    pop 1
+    return
+
+// __load_a: load U256 from mem[0..7] as [l7..l0]. 25 ops.
+// Reads addr 7 down to 0; each pushes on top in correct order.
+__load_a:
+    push 7
+    read_mem 1
+    pop 1
+    push 6
+    read_mem 1
+    pop 1
+    push 5
+    read_mem 1
+    pop 1
+    push 4
+    read_mem 1
+    pop 1
+    push 3
+    read_mem 1
+    pop 1
+    push 2
+    read_mem 1
+    pop 1
+    push 1
+    read_mem 1
+    pop 1
+    push 0
+    read_mem 1
+    pop 1
+    return
+
+// __load_b: load U256 from mem[10..17]. 25 ops.
+__load_b:
+    push 17
+    read_mem 1
+    pop 1
+    push 16
+    read_mem 1
+    pop 1
+    push 15
+    read_mem 1
+    pop 1
+    push 14
+    read_mem 1
+    pop 1
+    push 13
+    read_mem 1
+    pop 1
+    push 12
+    read_mem 1
+    pop 1
+    push 11
+    read_mem 1
+    pop 1
+    push 10
+    read_mem 1
+    pop 1
+    return
+
+// __store_orig_a: store top U256 to mem[40..47]. 5 ops.
+__store_orig_a:
+    push 40
+    write_mem 5
+    write_mem 3
+    pop 1
+    return
+
+// __load_orig_a: load U256 from mem[40..47]. 25 ops.
+__load_orig_a:
+    push 47
+    read_mem 1
+    pop 1
+    push 46
+    read_mem 1
+    pop 1
+    push 45
+    read_mem 1
+    pop 1
+    push 44
+    read_mem 1
+    pop 1
+    push 43
+    read_mem 1
+    pop 1
+    push 42
+    read_mem 1
+    pop 1
+    push 41
+    read_mem 1
+    pop 1
+    push 40
+    read_mem 1
+    pop 1
+    return
+
+// __store_orig_b: store top U256 to mem[50..57]. 5 ops.
+__store_orig_b:
+    push 50
+    write_mem 5
+    write_mem 3
+    pop 1
+    return
+
+// __load_orig_b: load U256 from mem[50..57]. 25 ops.
+__load_orig_b:
+    push 57
+    read_mem 1
+    pop 1
+    push 56
+    read_mem 1
+    pop 1
+    push 55
+    read_mem 1
+    pop 1
+    push 54
+    read_mem 1
+    pop 1
+    push 53
+    read_mem 1
+    pop 1
+    push 52
+    read_mem 1
+    pop 1
+    push 51
+    read_mem 1
+    pop 1
+    push 50
+    read_mem 1
+    pop 1
+    return
+
+// __load_mod: load U256 from mem[60..67]. 25 ops.
+__load_mod:
+    push 67
+    read_mem 1
+    pop 1
+    push 66
+    read_mem 1
+    pop 1
+    push 65
+    read_mem 1
+    pop 1
+    push 64
+    read_mem 1
+    pop 1
+    push 63
+    read_mem 1
+    pop 1
+    push 62
+    read_mem 1
+    pop 1
+    push 61
+    read_mem 1
+    pop 1
+    push 60
+    read_mem 1
+    pop 1
+    return
+
+// __load_accum: load U256 from mem[20..27]. 25 ops.
+__load_accum:
+    push 27
+    read_mem 1
+    pop 1
+    push 26
+    read_mem 1
+    pop 1
+    push 25
+    read_mem 1
+    pop 1
+    push 24
+    read_mem 1
+    pop 1
+    push 23
+    read_mem 1
+    pop 1
+    push 22
+    read_mem 1
+    pop 1
+    push 21
+    read_mem 1
+    pop 1
+    push 20
+    read_mem 1
+    pop 1
+    return
+
+// ===================================================================
+// CONSTANTS
+// ===================================================================
+
+// zero256() -> U256. 9 ops.
+__zero256:
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    return
+
+// one256() -> U256. 9 ops.
+__one256:
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 1
+    return
+
+// from_u32(x: U32) -> U256. 9 ops.
+// Entry: [x]  Exit: [0 0 0 0 0 0 0 x]
+__from_u32:
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    swap 7
+    return
+
+// ===================================================================
+// U32 HELPERS
+// ===================================================================
+
+// add_u32_carry(a, b, carry_in) -> (result, carry_out). 5 ops.
+// Entry: [carry_in, b, a]   Exit: [carry_out, result]
+__add_u32_carry:
+    add
+    add
+    split
+    swap 1
+    return
+
+// sub_u32_borrow(a, b, borrow_in) -> (result, borrow_out). 14 ops.
+// Entry: [borrow_in, b, a]   Exit: [borrow_out, result]
+__sub_u32_borrow:
+    push -1
+    mul
+    swap 1
+    push -1
+    mul
+    add
+    add
+    push 4294967296
+    add
+    split
+    swap 1
+    push -1
+    mul
+    push 1
+    add
+    return
+
+// ===================================================================
+// 256-BIT ADDITION
+// ===================================================================
+
+// add256(a: U256, b: U256) -> (U256, U32 carry). 84 ops.
+// Entry: [b.l7..b.l0, a.l7..a.l0]  Exit: [carry, r.l7..r.l0]
+// Stores both to mem, carry-chains limb 0 through 7.
+__add256:
+    call __store_b
+    call __store_a
+    push 0
+
+    push 7
+    read_mem 1
+    pop 1
+    push 17
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+
+    push 6
+    read_mem 1
+    pop 1
+    push 16
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+
+    push 5
+    read_mem 1
+    pop 1
+    push 15
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+
+    push 4
+    read_mem 1
+    pop 1
+    push 14
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+
+    push 3
+    read_mem 1
+    pop 1
+    push 13
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+
+    push 2
+    read_mem 1
+    pop 1
+    push 12
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+
+    push 1
+    read_mem 1
+    pop 1
+    push 11
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+
+    push 0
+    read_mem 1
+    pop 1
+    push 10
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+    return
+
+// ===================================================================
+// 256-BIT SUBTRACTION
+// ===================================================================
+
+// sub256(a: U256, b: U256) -> U256. 116 ops.
+// Entry: [b.l7..b.l0, a.l7..a.l0]  Exit: [r.l7..r.l0]
+// Uses inverted borrow: hi=1 means no borrow, hi=0 means borrow.
+// Per limb: (2^32 - 1) + a_i - b_i + hi_prev; split -> [hi, result].
+// Initial hi = 1 (no borrow). Final hi discarded.
+__sub256:
+    call __store_b
+    call __store_a
+    push 1
+
+    // Limb 0: a.l0=mem[7], b.l0=mem[17]
+    push 17
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 7
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    swap 1
+
+    // Limb 1
+    push 16
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 6
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    swap 1
+
+    // Limb 2
+    push 15
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 5
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    swap 1
+
+    // Limb 3
+    push 14
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 4
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    swap 1
+
+    // Limb 4
+    push 13
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 3
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    swap 1
+
+    // Limb 5
+    push 12
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 2
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    swap 1
+
+    // Limb 6
+    push 11
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 1
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    swap 1
+
+    // Limb 7 (discard final hi)
+    push 10
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 0
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    swap 1
+    pop 1
+    return
+
+// ===================================================================
+// COMPARISON
+// ===================================================================
+
+// eq256(a: U256, b: U256) -> Bool. 59 ops.
+// Entry: [b.l7..b.l0, a.l7..a.l0]  Exit: [bool]
+__eq256:
+    call __store_b
+    call __store_a
+
+    push 0
+    read_mem 1
+    pop 1
+    push 10
+    read_mem 1
+    pop 1
+    eq
+
+    push 1
+    read_mem 1
+    pop 1
+    push 11
+    read_mem 1
+    pop 1
+    eq
+    and
+
+    push 2
+    read_mem 1
+    pop 1
+    push 12
+    read_mem 1
+    pop 1
+    eq
+    and
+
+    push 3
+    read_mem 1
+    pop 1
+    push 13
+    read_mem 1
+    pop 1
+    eq
+    and
+
+    push 4
+    read_mem 1
+    pop 1
+    push 14
+    read_mem 1
+    pop 1
+    eq
+    and
+
+    push 5
+    read_mem 1
+    pop 1
+    push 15
+    read_mem 1
+    pop 1
+    eq
+    and
+
+    push 6
+    read_mem 1
+    pop 1
+    push 16
+    read_mem 1
+    pop 1
+    eq
+    and
+
+    push 7
+    read_mem 1
+    pop 1
+    push 17
+    read_mem 1
+    pop 1
+    eq
+    and
+    return
+
+// lt256(a: U256, b: U256) -> Bool. 116 ops.
+// Entry: [b.l7..b.l0, a.l7..a.l0]  Exit: [bool (a < b)]
+// Inverted borrow chain: hi=1 no borrow, hi=0 borrow.
+// Per limb: (2^32-1) + a_i - b_i + hi; split; discard result, keep hi.
+// Final: a < b iff final hi = 0, so result = 1 - hi.
+__lt256:
+    call __store_b
+    call __store_a
+    push 1
+
+    // Limb 0: split gives [lo,hi]; pop lo to keep hi only.
+    push 17
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 7
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    pop 1
+
+    // Limb 1
+    push 16
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 6
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    pop 1
+
+    // Limb 2
+    push 15
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 5
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    pop 1
+
+    // Limb 3
+    push 14
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 4
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    pop 1
+
+    // Limb 4
+    push 13
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 3
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    pop 1
+
+    // Limb 5
+    push 12
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 2
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    pop 1
+
+    // Limb 6
+    push 11
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 1
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    pop 1
+
+    // Limb 7: split gives [lo,hi]; pop lo, keep hi.
+    // hi=1 means a>=b, hi=0 means a<b. Result = 1-hi.
+    push 10
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 0
+    read_mem 1
+    pop 1
+    add
+    add
+    push 4294967295
+    add
+    split
+    pop 1
+    push -1
+    mul
+    push 1
+    add
+    return
+
+// is_zero(a: U256) -> Bool. 10 ops.
+// Entry: [l7..l0]  Exit: [bool]
+// Sum all 8 U32 limbs (max sum = 8*(2^32-1) << p, so sum=0 iff all zero).
+__is_zero:
+    add
+    add
+    add
+    add
+    add
+    add
+    add
+    push 0
+    eq
+    return
+
+// ===================================================================
+// MULTIPLICATION HELPERS
+// ===================================================================
+
+// mul256_by_u32(a: U256, scalar: U32) -> (U256, U32 carry). 72 ops.
+// Entry: [scalar, a.l7..a.l0]  Exit: [carry, r.l7..r.l0]
+// Stores scalar to mem[30], a to mem[0..7], processes with carry chain.
+__mul256_by_u32:
+    push 30
+    swap 1
+    write_mem 1
+    pop 1
+    call __store_a
+    push 0
+
+    push 7
+    read_mem 1
+    pop 1
+    push 30
+    read_mem 1
+    pop 1
+    mul
+    add
+    split
+    swap 1
+
+    push 6
+    read_mem 1
+    pop 1
+    push 30
+    read_mem 1
+    pop 1
+    mul
+    add
+    split
+    swap 1
+
+    push 5
+    read_mem 1
+    pop 1
+    push 30
+    read_mem 1
+    pop 1
+    mul
+    add
+    split
+    swap 1
+
+    push 4
+    read_mem 1
+    pop 1
+    push 30
+    read_mem 1
+    pop 1
+    mul
+    add
+    split
+    swap 1
+
+    push 3
+    read_mem 1
+    pop 1
+    push 30
+    read_mem 1
+    pop 1
+    mul
+    add
+    split
+    swap 1
+
+    push 2
+    read_mem 1
+    pop 1
+    push 30
+    read_mem 1
+    pop 1
+    mul
+    add
+    split
+    swap 1
+
+    push 1
+    read_mem 1
+    pop 1
+    push 30
+    read_mem 1
+    pop 1
+    mul
+    add
+    split
+    swap 1
+
+    push 0
+    read_mem 1
+    pop 1
+    push 30
+    read_mem 1
+    pop 1
+    mul
+    add
+    split
+    swap 1
+    return
+
+// shl_one_limb(a: U256) -> U256. 10 ops.
+// Entry: [l7..l0]  Exit: [l6 l5 l4 l3 l2 l1 l0 0]
+__shl_one_limb:
+    pop 1
+    push 0
+    swap 1
+    swap 2
+    swap 3
+    swap 4
+    swap 5
+    swap 6
+    swap 7
+    return
+
+// shl_limbs(a: U256, n: Field) -> U256
+// Entry: [n, l7..l0]  Exit: [r.l7..r.l0]
+// Saves n to mem[30], loops calling shl_one_limb.
+__shl_limbs:
+    push 30
+    swap 1
+    write_mem 1
+    pop 1
+    call __shl_loop
+    return
+
+// __shl_loop: check counter, shift if nonzero, recurse.
+// n is stored at mem[30]. Stack: [l7..l0].
+__shl_loop:
+    push 30
+    read_mem 1
+    pop 1
+    // Stack: [n, l7..l0]
+    push 0
+    eq
+    // Stack: [n==0, l7..l0] -- n consumed by eq
+    skiz
+    return
+    // n > 0: reload n, decrement, save, shift, recurse
+    push 30
+    read_mem 1
+    pop 1
+    push -1
+    add
+    push 30
+    swap 1
+    write_mem 1
+    pop 1
+    call __shl_one_limb
+    recurse
+
+// ===================================================================
+// MUL256_LOW (SCHOOLBOOK)
+// ===================================================================
+
+// __mul_accum: inline-add partial product to accumulator in mem[20..27].
+// Entry: [pp.l7..pp.l0]  Exit: []
+// Stores pp to mem[0..7], carry-chain adds with accum, writes back.
+// Does NOT touch mem[40..57]. 108 ops.
+__mul_accum:
+    push 0
+    write_mem 5
+    write_mem 3
+    pop 1
+    push 0
+
+    // Limb 0: pp.l0=mem[7], acc.l0=mem[27]
+    push 7
+    read_mem 1
+    pop 1
+    push 27
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+    swap 1
+    push 27
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Limb 1
+    push 6
+    read_mem 1
+    pop 1
+    push 26
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+    swap 1
+    push 26
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Limb 2
+    push 5
+    read_mem 1
+    pop 1
+    push 25
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+    swap 1
+    push 25
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Limb 3
+    push 4
+    read_mem 1
+    pop 1
+    push 24
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+    swap 1
+    push 24
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Limb 4
+    push 3
+    read_mem 1
+    pop 1
+    push 23
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+    swap 1
+    push 23
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Limb 5
+    push 2
+    read_mem 1
+    pop 1
+    push 22
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+    swap 1
+    push 22
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Limb 6
+    push 1
+    read_mem 1
+    pop 1
+    push 21
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    swap 1
+    swap 1
+    push 21
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Limb 7 (discard carry)
+    push 0
+    read_mem 1
+    pop 1
+    push 20
+    read_mem 1
+    pop 1
+    add
+    add
+    split
+    pop 1
+    push 20
+    swap 1
+    write_mem 1
+    pop 1
+    return
+
+// mul256_low(a: U256, b: U256) -> U256
+// Entry: [b.l7..b.l0, a.l7..a.l0]  Exit: [r.l7..r.l0]
+// Stores originals to safe memory (40..57), zeroes accumulator (20..27),
+// then for each b limb: load orig_a, mul by b_k, shift k, accum.
+// mul256_by_u32 uses mem[0..7] and mem[30] as scratch -- safe.
+// __mul_accum uses mem[0..7] as scratch -- safe.
+__mul256_low:
+    call __store_orig_b
+    call __store_orig_a
+
+    // Zero accumulator
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 20
+    write_mem 5
+    write_mem 3
+    pop 1
+
+    // k=0: a * b.l0
+    call __load_orig_a
+    push 57
+    read_mem 1
+    pop 1
+    call __mul256_by_u32
+    pop 1
+    call __mul_accum
+
+    // k=1: a * b.l1, shift 1
+    call __load_orig_a
+    push 56
+    read_mem 1
+    pop 1
+    call __mul256_by_u32
+    pop 1
+    call __shl_one_limb
+    call __mul_accum
+
+    // k=2: a * b.l2, shift 2
+    call __load_orig_a
+    push 55
+    read_mem 1
+    pop 1
+    call __mul256_by_u32
+    pop 1
+    call __shl_one_limb
+    call __shl_one_limb
+    call __mul_accum
+
+    // k=3
+    call __load_orig_a
+    push 54
+    read_mem 1
+    pop 1
+    call __mul256_by_u32
+    pop 1
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __mul_accum
+
+    // k=4
+    call __load_orig_a
+    push 53
+    read_mem 1
+    pop 1
+    call __mul256_by_u32
+    pop 1
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __mul_accum
+
+    // k=5
+    call __load_orig_a
+    push 52
+    read_mem 1
+    pop 1
+    call __mul256_by_u32
+    pop 1
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __mul_accum
+
+    // k=6
+    call __load_orig_a
+    push 51
+    read_mem 1
+    pop 1
+    call __mul256_by_u32
+    pop 1
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __mul_accum
+
+    // k=7
+    call __load_orig_a
+    push 50
+    read_mem 1
+    pop 1
+    call __mul256_by_u32
+    pop 1
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __shl_one_limb
+    call __mul_accum
+
+    call __load_accum
+    return
+
+// ===================================================================
+// MODULAR ARITHMETIC
+// ===================================================================
+
+// mod_reduce_once(val: U256, m: U256) -> U256
+// Entry: [m.l7..m.l0, val.l7..val.l0]  Exit: [r.l7..r.l0]
+// If val < m return val, else return val - m.
+// Strategy: store both, compute val >= m. Use dual-skiz pattern:
+// first skiz calls subtraction helper, second skiz (negated) is a no-op.
+// Both paths store result to orig_a, which is loaded at the end.
+__mod_reduce_once:
+    call __store_orig_b
+    call __store_orig_a
+    // Compute val >= m = NOT(val < m)
+    call __load_orig_a
+    call __load_orig_b
+    call __lt256
+    push -1
+    mul
+    push 1
+    add
+    // Stack: [val >= m]
+    // If val >= m: call helper to compute val-m and store to orig_a
+    skiz
+    call __mod_do_sub
+    // Load result: orig_a holds val (unchanged) or val-m (from helper)
+    call __load_orig_a
+    return
+
+__mod_do_sub:
+    call __load_orig_a
+    call __load_orig_b
+    call __sub256
+    call __store_orig_a
+    return
+
+// add_mod(a: U256, b: U256, m: U256) -> U256
+// Entry: [m, b, a]  Exit: [r]
+__add_mod:
+    push 60
+    write_mem 5
+    write_mem 3
+    pop 1
+    call __add256
+    pop 1
+    call __load_mod
+    call __mod_reduce_once
+    return
+
+// sub_mod(a: U256, b: U256, m: U256) -> U256
+// Entry: [m, b, a]  Exit: [r]
+// If a >= b: a - b. If a < b: m - (b - a).
+// Strategy: store all three. Save condition to mem[31].
+// Use dual-skiz: first checks a>=b, second checks a<b.
+// Both helpers store result to orig_a. Load at end.
+__sub_mod:
+    push 60
+    write_mem 5
+    write_mem 3
+    pop 1
+    // Stack: [b, a]
+    call __store_orig_b
+    call __store_orig_a
+    // Compute a < b
+    call __load_orig_a
+    call __load_orig_b
+    call __lt256
+    // Stack: [a < b]
+    // Save condition to mem[31] for second check
+    dup 0
+    push 31
+    swap 1
+    write_mem 1
+    pop 1
+    // Negate: a >= b
+    push 31
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 1
+    add
+    // If a >= b: compute a-b, store to orig_a
+    skiz
+    call __sub_mod_ge
+    // Reload condition (a < b)
+    push 31
+    read_mem 1
+    pop 1
+    // If a < b: compute m-(b-a), store to orig_a
+    skiz
+    call __sub_mod_lt
+    // Load result
+    call __load_orig_a
+    return
+
+__sub_mod_ge:
+    // a >= b: a - b
+    call __load_orig_a
+    call __load_orig_b
+    call __sub256
+    call __store_orig_a
+    return
+
+__sub_mod_lt:
+    // a < b: m - (b - a)
+    call __load_orig_b
+    call __load_orig_a
+    call __sub256
+    // Stack: [b - a]
+    call __store_orig_a
+    call __load_mod
+    call __load_orig_a
+    call __sub256
+    call __store_orig_a
+    return
+
+// mul_mod(a: U256, b: U256, m: U256) -> U256
+// Entry: [m, b, a]  Exit: [r]
+__mul_mod:
+    push 60
+    write_mem 5
+    write_mem 3
+    pop 1
+    call __mul256_low
+    call __load_mod
+    call __mod_reduce_once
+    return
+
+// ===================================================================
+// BITWISE
+// ===================================================================
+
+// and256(a: U256, b: U256) -> U256. 59 ops.
+__and256:
+    call __store_b
+    call __store_a
+
+    push 0
+    read_mem 1
+    pop 1
+    push 10
+    read_mem 1
+    pop 1
+    and
+
+    push 1
+    read_mem 1
+    pop 1
+    push 11
+    read_mem 1
+    pop 1
+    and
+
+    push 2
+    read_mem 1
+    pop 1
+    push 12
+    read_mem 1
+    pop 1
+    and
+
+    push 3
+    read_mem 1
+    pop 1
+    push 13
+    read_mem 1
+    pop 1
+    and
+
+    push 4
+    read_mem 1
+    pop 1
+    push 14
+    read_mem 1
+    pop 1
+    and
+
+    push 5
+    read_mem 1
+    pop 1
+    push 15
+    read_mem 1
+    pop 1
+    and
+
+    push 6
+    read_mem 1
+    pop 1
+    push 16
+    read_mem 1
+    pop 1
+    and
+
+    push 7
+    read_mem 1
+    pop 1
+    push 17
+    read_mem 1
+    pop 1
+    and
+    return
+
+// xor256(a: U256, b: U256) -> U256. 59 ops.
+__xor256:
+    call __store_b
+    call __store_a
+
+    push 0
+    read_mem 1
+    pop 1
+    push 10
+    read_mem 1
+    pop 1
+    xor
+
+    push 1
+    read_mem 1
+    pop 1
+    push 11
+    read_mem 1
+    pop 1
+    xor
+
+    push 2
+    read_mem 1
+    pop 1
+    push 12
+    read_mem 1
+    pop 1
+    xor
+
+    push 3
+    read_mem 1
+    pop 1
+    push 13
+    read_mem 1
+    pop 1
+    xor
+
+    push 4
+    read_mem 1
+    pop 1
+    push 14
+    read_mem 1
+    pop 1
+    xor
+
+    push 5
+    read_mem 1
+    pop 1
+    push 15
+    read_mem 1
+    pop 1
+    xor
+
+    push 6
+    read_mem 1
+    pop 1
+    push 16
+    read_mem 1
+    pop 1
+    xor
+
+    push 7
+    read_mem 1
+    pop 1
+    push 17
+    read_mem 1
+    pop 1
+    xor
+    return
