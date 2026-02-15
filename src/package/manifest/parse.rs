@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use crate::hash::ContentHash;
+
 use super::{Dependency, Manifest};
 
 // ─── Parsing ───────────────────────────────────────────────────────
@@ -92,5 +94,5 @@ pub(super) fn parse_inline_table(s: &str) -> BTreeMap<String, String> {
 
 /// Check whether a string looks like a 64-char hex hash.
 pub(super) fn is_hex_hash(s: &str) -> bool {
-    s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit())
+    ContentHash::from_hex(s).is_some()
 }
