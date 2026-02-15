@@ -8,89 +8,39 @@ use crate::ast::BinOp;
 /// Triton VM cost model with 6 Algebraic Execution Tables.
 pub(crate) struct TritonCostModel;
 
+/// Number of active tables for Triton VM.
+const N: u8 = 6;
+
+// Table indices for Triton VM.
+// [0]=processor, [1]=hash, [2]=u32, [3]=op_stack, [4]=ram, [5]=jump_stack
+const _PROC: usize = 0;
+const _HASH: usize = 1;
+const _U32: usize = 2;
+const _OPST: usize = 3;
+const _RAM: usize = 4;
+const _JUMP: usize = 5;
+
+/// Build a Triton TableCost from a 6-element array.
+const fn tc(v: [u64; 6]) -> TableCost {
+    TableCost {
+        values: [v[0], v[1], v[2], v[3], v[4], v[5], 0, 0],
+        count: N,
+    }
+}
+
 impl TritonCostModel {
     /// Worst-case U32 table rows for 32-bit operations.
     const U32_WORST: u64 = 33;
 
-    /// Simple arithmetic/logic op: 1 processor cycle, 1 op_stack row.
-    const SIMPLE_OP: TableCost = TableCost {
-        processor: 1,
-        hash: 0,
-        u32_table: 0,
-        op_stack: 1,
-        ram: 0,
-        jump_stack: 0,
-    };
-
-    /// U32-table op with stack effect.
-    const U32_OP: TableCost = TableCost {
-        processor: 1,
-        hash: 0,
-        u32_table: Self::U32_WORST,
-        op_stack: 1,
-        ram: 0,
-        jump_stack: 0,
-    };
-
-    /// U32-table op without stack growth.
-    const U32_NOSTACK: TableCost = TableCost {
-        processor: 1,
-        hash: 0,
-        u32_table: Self::U32_WORST,
-        op_stack: 0,
-        ram: 0,
-        jump_stack: 0,
-    };
-
-    /// Hash-table op with stack effect (6 hash rows for Tip5 permutation).
-    const HASH_OP: TableCost = TableCost {
-        processor: 1,
-        hash: 6,
-        u32_table: 0,
-        op_stack: 1,
-        ram: 0,
-        jump_stack: 0,
-    };
-
-    /// Two-element assertion: 2 processor cycles, 2 op_stack rows.
-    const ASSERT2: TableCost = TableCost {
-        processor: 2,
-        hash: 0,
-        u32_table: 0,
-        op_stack: 2,
-        ram: 0,
-        jump_stack: 0,
-    };
-
-    /// Single RAM read/write: 2 processor cycles, 2 op_stack, 1 ram.
-    const RAM_RW: TableCost = TableCost {
-        processor: 2,
-        hash: 0,
-        u32_table: 0,
-        op_stack: 2,
-        ram: 1,
-        jump_stack: 0,
-    };
-
-    /// Block RAM read/write: 2 processor cycles, 2 op_stack, 5 ram.
-    const RAM_BLOCK_RW: TableCost = TableCost {
-        processor: 2,
-        hash: 0,
-        u32_table: 0,
-        op_stack: 2,
-        ram: 5,
-        jump_stack: 0,
-    };
-
-    /// Pure processor op (no stack/ram/hash effect): 1 processor cycle only.
-    const PURE_PROC: TableCost = TableCost {
-        processor: 1,
-        hash: 0,
-        u32_table: 0,
-        op_stack: 0,
-        ram: 0,
-        jump_stack: 0,
-    };
+    //                              proc  hash  u32   opst  ram   jump
+    const SIMPLE_OP: TableCost = tc([1, 0, 0, 1, 0, 0]);
+    const U32_OP: TableCost = tc([1, 0, 33, 1, 0, 0]);
+    const U32_NOSTACK: TableCost = tc([1, 0, 33, 0, 0, 0]);
+    const HASH_OP: TableCost = tc([1, 6, 0, 1, 0, 0]);
+    const ASSERT2: TableCost = tc([2, 0, 0, 2, 0, 0]);
+    const RAM_RW: TableCost = tc([2, 0, 0, 2, 1, 0]);
+    const RAM_BLOCK_RW: TableCost = tc([2, 0, 0, 2, 5, 0]);
+    const PURE_PROC: TableCost = tc([1, 0, 0, 0, 0, 0]);
 }
 
 impl CostModel for TritonCostModel {
@@ -122,22 +72,8 @@ impl CostModel for TritonCostModel {
             "field_add" => Self::SIMPLE_OP,
             "field_mul" => Self::SIMPLE_OP,
             "inv" => Self::PURE_PROC,
-            "neg" => TableCost {
-                processor: 2,
-                hash: 0,
-                u32_table: 0,
-                op_stack: 1,
-                ram: 0,
-                jump_stack: 0,
-            },
-            "sub" => TableCost {
-                processor: 3,
-                hash: 0,
-                u32_table: 0,
-                op_stack: 2,
-                ram: 0,
-                jump_stack: 0,
-            },
+            "neg" => tc([2, 0, 0, 1, 0, 0]),
+            "sub" => tc([3, 0, 0, 2, 0, 0]),
 
             // U32 ops
             "split" => Self::U32_OP,
@@ -147,42 +83,14 @@ impl CostModel for TritonCostModel {
 
             // Hash ops (6 hash table rows each for Tip5 permutation)
             "hash" => Self::HASH_OP,
-            "sponge_init" => TableCost {
-                processor: 1,
-                hash: 6,
-                u32_table: 0,
-                op_stack: 0,
-                ram: 0,
-                jump_stack: 0,
-            },
+            "sponge_init" => tc([1, 6, 0, 0, 0, 0]),
             "sponge_absorb" => Self::HASH_OP,
             "sponge_squeeze" => Self::HASH_OP,
-            "sponge_absorb_mem" => TableCost {
-                processor: 1,
-                hash: 6,
-                u32_table: 0,
-                op_stack: 1,
-                ram: 10,
-                jump_stack: 0,
-            },
+            "sponge_absorb_mem" => tc([1, 6, 0, 1, 10, 0]),
 
             // Merkle
-            "merkle_step" => TableCost {
-                processor: 1,
-                hash: 6,
-                u32_table: Self::U32_WORST,
-                op_stack: 0,
-                ram: 0,
-                jump_stack: 0,
-            },
-            "merkle_step_mem" => TableCost {
-                processor: 1,
-                hash: 6,
-                u32_table: Self::U32_WORST,
-                op_stack: 0,
-                ram: 5,
-                jump_stack: 0,
-            },
+            "merkle_step" => tc([1, 6, Self::U32_WORST, 0, 0, 0]),
+            "merkle_step_mem" => tc([1, 6, Self::U32_WORST, 0, 5, 0]),
 
             // RAM
             "ram_read" => Self::RAM_RW,
@@ -191,32 +99,11 @@ impl CostModel for TritonCostModel {
             "ram_write_block" => Self::RAM_BLOCK_RW,
 
             // Dot steps
-            "xx_dot_step" => TableCost {
-                processor: 1,
-                hash: 0,
-                u32_table: 0,
-                op_stack: 0,
-                ram: 6,
-                jump_stack: 0,
-            },
-            "xb_dot_step" => TableCost {
-                processor: 1,
-                hash: 0,
-                u32_table: 0,
-                op_stack: 0,
-                ram: 4,
-                jump_stack: 0,
-            },
+            "xx_dot_step" => tc([1, 0, 0, 0, 6, 0]),
+            "xb_dot_step" => tc([1, 0, 0, 0, 4, 0]),
 
             // Conversions
-            "as_u32" => TableCost {
-                processor: 2,
-                hash: 0,
-                u32_table: Self::U32_WORST,
-                op_stack: 1,
-                ram: 0,
-                jump_stack: 0,
-            },
+            "as_u32" => tc([2, 0, Self::U32_WORST, 1, 0, 0]),
             "as_field" => TableCost::ZERO,
 
             // XField
@@ -241,47 +128,19 @@ impl CostModel for TritonCostModel {
     }
 
     fn call_overhead(&self) -> TableCost {
-        TableCost {
-            processor: 2,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 0,
-            ram: 0,
-            jump_stack: 2,
-        }
+        tc([2, 0, 0, 0, 0, 2])
     }
 
     fn stack_op(&self) -> TableCost {
-        TableCost {
-            processor: 1,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        }
+        tc([1, 0, 0, 1, 0, 0])
     }
 
     fn if_overhead(&self) -> TableCost {
-        TableCost {
-            processor: 3,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 2,
-            ram: 0,
-            jump_stack: 1,
-        }
+        tc([3, 0, 0, 2, 0, 1])
     }
 
     fn loop_overhead(&self) -> TableCost {
-        TableCost {
-            processor: 8,
-            hash: 0,
-            u32_table: 0,
-            op_stack: 4,
-            ram: 0,
-            jump_stack: 1,
-        }
+        tc([8, 0, 0, 4, 0, 1])
     }
 
     fn hash_rows_per_permutation(&self) -> u64 {

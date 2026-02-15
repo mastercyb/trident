@@ -212,7 +212,7 @@ impl LanguageServer for TridentLsp {
 
         // Check builtins first
         if let Some(mut info) = builtin_hover(&word) {
-            let cost = crate::cost::cost_builtin(&word);
+            let cost = crate::cost::cost_builtin("triton", &word);
             info = format!("{}\n\n**Cost:** {}", info, format_cost_inline(&cost));
             return Ok(Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
@@ -687,7 +687,7 @@ impl TridentLsp {
             });
 
             if has_fn {
-                let mut analyzer = crate::cost::CostAnalyzer::new();
+                let mut analyzer = crate::cost::CostAnalyzer::default();
                 let program_cost = analyzer.analyze_file(&parsed);
                 for fc in &program_cost.functions {
                     if fc.name == fn_name {
@@ -879,23 +879,19 @@ fn format_ast_type(ty: &ast::Type) -> String {
 /// Only shows non-zero tables (except `cc` which is always shown).
 /// Example output: `cc=1, hash=6 | dominant: hash`
 fn format_cost_inline(cost: &crate::cost::TableCost) -> String {
-    let mut parts = vec![format!("cc={}", cost.processor)];
-    if cost.hash > 0 {
-        parts.push(format!("hash={}", cost.hash));
+    let short_names = ["cc", "hash", "u32", "opstack", "ram", "jump"];
+    let n = cost.count as usize;
+    let mut parts = Vec::new();
+    for i in 0..n.min(short_names.len()) {
+        if i == 0 || cost.values[i] > 0 {
+            parts.push(format!("{}={}", short_names[i], cost.values[i]));
+        }
     }
-    if cost.u32_table > 0 {
-        parts.push(format!("u32={}", cost.u32_table));
-    }
-    if cost.op_stack > 0 {
-        parts.push(format!("opstack={}", cost.op_stack));
-    }
-    if cost.ram > 0 {
-        parts.push(format!("ram={}", cost.ram));
-    }
-    if cost.jump_stack > 0 {
-        parts.push(format!("jump={}", cost.jump_stack));
-    }
-    format!("{} | dominant: {}", parts.join(", "), cost.dominant_table())
+    format!(
+        "{} | dominant: {}",
+        parts.join(", "),
+        cost.dominant_table(&short_names[..n.min(short_names.len())])
+    )
 }
 
 /// Hover info for builtin functions.
@@ -1563,7 +1559,7 @@ mod tests {
 
     #[test]
     fn test_format_cost_inline_zero() {
-        let cost = crate::cost::TableCost::ZERO;
+        let cost = crate::cost::TableCost::from_slice(&[0, 0, 0, 0, 0, 0]);
         let s = format_cost_inline(&cost);
         assert!(s.contains("cc=0"), "should contain cc=0, got: {}", s);
         assert!(
@@ -1575,14 +1571,7 @@ mod tests {
 
     #[test]
     fn test_format_cost_inline_hash_dominant() {
-        let cost = crate::cost::TableCost {
-            processor: 1,
-            hash: 6,
-            u32_table: 0,
-            op_stack: 1,
-            ram: 0,
-            jump_stack: 0,
-        };
+        let cost = crate::cost::TableCost::from_slice(&[1, 6, 0, 1, 0, 0]);
         let s = format_cost_inline(&cost);
         assert!(s.contains("cc=1"), "should contain cc=1, got: {}", s);
         assert!(s.contains("hash=6"), "should contain hash=6, got: {}", s);
@@ -1604,7 +1593,7 @@ mod tests {
     #[test]
     fn test_builtin_hover_includes_cost() {
         let mut info = builtin_hover("hash").unwrap();
-        let cost = crate::cost::cost_builtin("hash");
+        let cost = crate::cost::cost_builtin("triton", "hash");
         info = format!("{}\n\n**Cost:** {}", info, format_cost_inline(&cost));
         assert!(
             info.contains("hash=6"),
@@ -1621,7 +1610,7 @@ mod tests {
     #[test]
     fn test_builtin_hover_pub_read_cost() {
         let mut info = builtin_hover("pub_read").unwrap();
-        let cost = crate::cost::cost_builtin("pub_read");
+        let cost = crate::cost::cost_builtin("triton", "pub_read");
         info = format!("{}\n\n**Cost:** {}", info, format_cost_inline(&cost));
         assert!(
             info.contains("cc=1"),

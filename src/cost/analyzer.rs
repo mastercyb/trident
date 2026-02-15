@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::model::{CostModel, TableCost, TritonCostModel};
+use super::model::{create_cost_model, CostModel, TableCost};
 use crate::ast::*;
 
 // --- Per-function cost result ---
@@ -20,6 +20,10 @@ pub struct ProgramCost {
     pub program_name: String,
     pub functions: Vec<FunctionCost>,
     pub total: TableCost,
+    /// Table names from the CostModel (e.g. ["processor", "hash", ...]).
+    pub table_names: Vec<String>,
+    /// Short display names (e.g. ["cc", "hash", ...]).
+    pub table_short_names: Vec<String>,
     /// Program attestation adds ceil(instruction_count / 10) * 6 hash rows.
     pub attestation_hash_rows: u64,
     pub padded_height: u64,
@@ -28,12 +32,24 @@ pub struct ProgramCost {
     pub loop_bound_waste: Vec<(String, u64, u64)>, // (fn_name, end_value, bound)
 }
 
+impl ProgramCost {
+    /// Short names as str slice refs (for passing to TableCost methods).
+    pub fn short_names(&self) -> Vec<&str> {
+        self.table_short_names.iter().map(|s| s.as_str()).collect()
+    }
+
+    /// Long names as str slice refs.
+    pub fn long_names(&self) -> Vec<&str> {
+        self.table_names.iter().map(|s| s.as_str()).collect()
+    }
+}
+
 // --- Cost analyzer ---
 
 /// Computes static cost by walking the AST.
 ///
 /// The analyzer is parameterized by a `CostModel` that provides all
-/// target-specific cost constants. Default: `TritonCostModel`.
+/// target-specific cost constants.
 pub(crate) struct CostAnalyzer<'a> {
     /// Target-specific cost model.
     cost_model: &'a dyn CostModel,
@@ -49,27 +65,17 @@ pub(crate) struct CostAnalyzer<'a> {
 
 impl Default for CostAnalyzer<'_> {
     fn default() -> Self {
-        Self::new()
+        Self::for_target("triton")
     }
 }
 
-/// Static reference to the default Triton cost model for `CostAnalyzer::new()`.
-static TRITON_COST_MODEL: TritonCostModel = TritonCostModel;
-
 impl<'a> CostAnalyzer<'a> {
-    /// Create a new analyzer with the default Triton VM cost model.
-    pub(crate) fn new() -> Self {
-        Self {
-            cost_model: &TRITON_COST_MODEL,
-            fn_bodies: HashMap::new(),
-            fn_costs: HashMap::new(),
-            in_progress: Vec::new(),
-            loop_bound_waste: Vec::new(),
-        }
+    /// Create an analyzer for the named target.
+    pub(crate) fn for_target(target_name: &str) -> Self {
+        Self::with_cost_model(create_cost_model(target_name))
     }
 
-    /// Create a new analyzer with a specific cost model.
-    #[allow(dead_code)] // Will be used when multiple cost models are available.
+    /// Create an analyzer with a specific cost model.
     pub(crate) fn with_cost_model(cost_model: &'a dyn CostModel) -> Self {
         Self {
             cost_model,
@@ -113,8 +119,8 @@ impl<'a> CostAnalyzer<'a> {
         };
 
         // Estimate program instruction count for attestation.
-        // Rough heuristic: total processor cycles ≈ instruction count.
-        let instruction_count = total.processor.max(10);
+        // Rough heuristic: total first-table value (processor cycles) ≈ instruction count.
+        let instruction_count = total.get(0).max(10);
         let hash_rows = self.cost_model.hash_rows_per_permutation();
         let attestation_hash_rows = instruction_count.div_ceil(10) * hash_rows;
 
@@ -139,6 +145,18 @@ impl<'a> CostAnalyzer<'a> {
             program_name: file.name.node.clone(),
             functions,
             total,
+            table_names: self
+                .cost_model
+                .table_names()
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            table_short_names: self
+                .cost_model
+                .table_short_names()
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             attestation_hash_rows,
             padded_height,
             estimated_proving_secs,
@@ -324,17 +342,13 @@ impl<'a> CostAnalyzer<'a> {
                 let base_name = fn_name.rsplit('.').next().unwrap_or(&fn_name);
                 let fn_cost = {
                     let c = self.cost_model.builtin_cost(&fn_name);
-                    if c.processor > 0 || c.hash > 0 || c.u32_table > 0 || c.ram > 0 {
+                    if c.is_nonzero() {
                         c
                     } else {
                         self.cost_model.builtin_cost(base_name)
                     }
                 };
-                if fn_cost.processor > 0
-                    || fn_cost.hash > 0
-                    || fn_cost.u32_table > 0
-                    || fn_cost.ram > 0
-                {
+                if fn_cost.is_nonzero() {
                     // Builtin: use the cost table.
                     args_cost.add(&fn_cost)
                 } else {

@@ -27,7 +27,7 @@ pub(crate) fn generate_docs(
     // Compute cost analysis per module
     let mut module_costs: Vec<Option<cost::ProgramCost>> = Vec::new();
     for pm in &project.modules {
-        let pc = cost::CostAnalyzer::new().analyze_file(&pm.file);
+        let pc = cost::CostAnalyzer::default().analyze_file(&pm.file);
         module_costs.push(Some(pc));
     }
 
@@ -68,12 +68,13 @@ pub(crate) fn generate_docs(
                 let mut entry = format!("### `{}`\n", sig);
                 if let Some(fc) = fn_cost {
                     let c = &fc.cost;
+                    let sn = costs.unwrap().short_names();
                     entry.push_str(&format!(
                         "**Cost:** cc={}, hash={}, u32={} | dominant: {}\n",
-                        c.processor,
-                        c.hash,
-                        c.u32_table,
-                        c.dominant_table()
+                        c.get(0),
+                        c.get(1),
+                        c.get(2),
+                        c.dominant_table(&sn)
                     ));
                 }
                 entry.push_str(&format!("**Module:** {}\n", module_name));
@@ -223,9 +224,9 @@ pub(crate) fn generate_docs(
     doc.push_str("\n## Cost Summary\n\n");
     doc.push_str("| Table | Height |\n");
     doc.push_str("|-------|--------|\n");
-    doc.push_str(&format!("| Processor | {} |\n", total_cost.processor));
-    doc.push_str(&format!("| Hash | {} |\n", total_cost.hash));
-    doc.push_str(&format!("| U32 | {} |\n", total_cost.u32_table));
+    doc.push_str(&format!("| Processor | {} |\n", total_cost.get(0)));
+    doc.push_str(&format!("| Hash | {} |\n", total_cost.get(1)));
+    doc.push_str(&format!("| U32 | {} |\n", total_cost.get(2)));
     doc.push_str(&format!("| Padded | {} |\n", padded_height));
 
     Ok(doc)

@@ -10,54 +10,48 @@ use crate::span::Span;
 impl ProgramCost {
     /// Format a table-style cost report.
     pub fn format_report(&self) -> String {
+        let short = self.short_names();
+        let n = short.len();
         let mut out = String::new();
         out.push_str(&format!("Cost report: {}\n", self.program_name));
-        out.push_str(&format!(
-            "{:<24} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6}  {}\n",
-            "Function", "cc", "hash", "u32", "opst", "ram", "jump", "dominant"
-        ));
-        out.push_str(&"-".repeat(84));
+
+        // Header
+        out.push_str(&format!("{:<24}", "Function"));
+        for name in &short {
+            out.push_str(&format!(" {:>6}", name));
+        }
+        out.push_str("  dominant\n");
+        let line_width = 24 + n * 7 + 10;
+        out.push_str(&"-".repeat(line_width));
         out.push('\n');
 
         for func in &self.functions {
-            out.push_str(&format!(
-                "{:<24} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6}  {}\n",
-                func.name,
-                func.cost.processor,
-                func.cost.hash,
-                func.cost.u32_table,
-                func.cost.op_stack,
-                func.cost.ram,
-                func.cost.jump_stack,
-                func.cost.dominant_table(),
-            ));
+            out.push_str(&format!("{:<24}", func.name));
+            for i in 0..n {
+                out.push_str(&format!(" {:>6}", func.cost.get(i)));
+            }
+            out.push_str(&format!("  {}\n", func.cost.dominant_table(&short)));
             if let Some((per_iter, bound)) = &func.per_iteration {
-                out.push_str(&format!(
-                    "  per iteration (x{})   {:>6} {:>6} {:>6} {:>6} {:>6} {:>6}\n",
-                    bound,
-                    per_iter.processor,
-                    per_iter.hash,
-                    per_iter.u32_table,
-                    per_iter.op_stack,
-                    per_iter.ram,
-                    per_iter.jump_stack,
-                ));
+                out.push_str(&format!("  per iteration (x{})", bound));
+                let label_len = format!("  per iteration (x{})", bound).len();
+                // Pad to align with columns
+                for _ in label_len..24 {
+                    out.push(' ');
+                }
+                for i in 0..n {
+                    out.push_str(&format!(" {:>6}", per_iter.get(i)));
+                }
+                out.push('\n');
             }
         }
 
-        out.push_str(&"-".repeat(84));
+        out.push_str(&"-".repeat(line_width));
         out.push('\n');
-        out.push_str(&format!(
-            "{:<24} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6}  {}\n",
-            "TOTAL",
-            self.total.processor,
-            self.total.hash,
-            self.total.u32_table,
-            self.total.op_stack,
-            self.total.ram,
-            self.total.jump_stack,
-            self.total.dominant_table(),
-        ));
+        out.push_str(&format!("{:<24}", "TOTAL"));
+        for i in 0..n {
+            out.push_str(&format!(" {:>6}", self.total.get(i)));
+        }
+        out.push_str(&format!("  {}\n", self.total.dominant_table(&short)));
         out.push('\n');
         out.push_str(&format!(
             "Padded height:           {}\n",
@@ -91,43 +85,23 @@ impl ProgramCost {
 
     /// Format a hotspots report (top N cost contributors).
     pub fn format_hotspots(&self, top_n: usize) -> String {
+        let short = self.short_names();
         let mut out = String::new();
         out.push_str(&format!("Top {} cost contributors:\n", top_n));
 
-        let dominant = self.total.dominant_table();
-        let dominant_total = match dominant {
-            "hash" => self.total.hash,
-            "u32" => self.total.u32_table,
-            "ram" => self.total.ram,
-            "proc" => self.total.processor,
-            "opstack" => self.total.op_stack,
-            _ => self.total.jump_stack,
-        };
+        let dominant = self.total.dominant_table(&short);
+        let dominant_idx = self.dominant_index();
+        let dominant_total = self.total.get(dominant_idx);
 
         let mut ranked: Vec<&FunctionCost> = self.functions.iter().collect();
         ranked.sort_by(|a, b| {
-            let av = match dominant {
-                "hash" => a.cost.hash,
-                "u32" => a.cost.u32_table,
-                "ram" => a.cost.ram,
-                _ => a.cost.processor,
-            };
-            let bv = match dominant {
-                "hash" => b.cost.hash,
-                "u32" => b.cost.u32_table,
-                "ram" => b.cost.ram,
-                _ => b.cost.processor,
-            };
+            let av = a.cost.get(dominant_idx);
+            let bv = b.cost.get(dominant_idx);
             bv.cmp(&av)
         });
 
         for (i, func) in ranked.iter().take(top_n).enumerate() {
-            let val = match dominant {
-                "hash" => func.cost.hash,
-                "u32" => func.cost.u32_table,
-                "ram" => func.cost.ram,
-                _ => func.cost.processor,
-            };
+            let val = func.cost.get(dominant_idx);
             let pct = if dominant_total > 0 {
                 (val as f64 / dominant_total as f64) * 100.0
             } else {
@@ -153,31 +127,36 @@ impl ProgramCost {
     }
 
     /// Generate optimization hints (H0001, H0002, H0004).
-    /// H0001: hash table dominance — hash table is >2x taller than processor.
-    /// H0002: headroom hint — significant room below next power-of-2 boundary.
-    /// H0004: loop bound waste — declared bound >> constant iteration count.
     pub fn optimization_hints(&self) -> Vec<Diagnostic> {
+        let short = self.short_names();
         let mut hints = Vec::new();
 
-        // H0001: Hash table dominance
-        if self.total.hash > 0 && self.total.processor > 0 {
-            let ratio = self.total.hash as f64 / self.total.processor as f64;
-            if ratio > 2.0 {
-                let mut diag = Diagnostic::warning(
-                    format!(
-                        "hint[H0001]: hash table is {:.1}x taller than processor table",
-                        ratio
-                    ),
-                    Span::dummy(),
-                );
-                diag.notes
-                    .push("processor optimizations will not reduce proving cost".to_string());
-                diag.help = Some(
-                    "consider: batching data before hashing, reducing Merkle depth, \
-                     or using sponge_absorb_mem instead of repeated sponge_absorb"
-                        .to_string(),
-                );
-                hints.push(diag);
+        // H0001: Secondary table dominance — a non-primary table is much taller than primary.
+        // (For Triton: hash[1] vs processor[0]; generalized to dominant vs first.)
+        if self.total.count >= 2 && self.total.get(0) > 0 {
+            let dominant_idx = self.dominant_index();
+            if dominant_idx > 0 {
+                let ratio = self.total.get(dominant_idx) as f64 / self.total.get(0) as f64;
+                if ratio > 2.0 {
+                    let dominant_name = short.get(dominant_idx).unwrap_or(&"?");
+                    let primary_name = short.first().unwrap_or(&"?");
+                    let mut diag = Diagnostic::warning(
+                        format!(
+                            "hint[H0001]: {} table is {:.1}x taller than {} table",
+                            dominant_name, ratio, primary_name
+                        ),
+                        Span::dummy(),
+                    );
+                    diag.notes.push(format!(
+                        "{} optimizations will not reduce proving cost",
+                        primary_name
+                    ));
+                    diag.help = Some(format!(
+                        "focus on reducing {} table usage to lower padded height",
+                        dominant_name
+                    ));
+                    hints.push(diag);
+                }
             }
         }
 
@@ -230,13 +209,14 @@ impl ProgramCost {
 
     /// Serialize ProgramCost to a JSON string.
     pub fn to_json(&self) -> String {
+        let names = self.long_names();
         let mut out = String::new();
         out.push_str("{\n  \"functions\": {\n");
         for (i, func) in self.functions.iter().enumerate() {
             out.push_str(&format!(
                 "    \"{}\": {}",
                 func.name,
-                func.cost.to_json_value()
+                func.cost.to_json_value(&names)
             ));
             if i + 1 < self.functions.len() {
                 out.push(',');
@@ -244,7 +224,10 @@ impl ProgramCost {
             out.push('\n');
         }
         out.push_str("  },\n");
-        out.push_str(&format!("  \"total\": {},\n", self.total.to_json_value()));
+        out.push_str(&format!(
+            "  \"total\": {},\n",
+            self.total.to_json_value(&names)
+        ));
         out.push_str(&format!("  \"padded_height\": {}\n", self.padded_height));
         out.push_str("}\n");
         out
@@ -264,7 +247,16 @@ impl ProgramCost {
     }
 
     /// Parse a ProgramCost from a JSON string.
+    /// Defaults to Triton table names for backward compatibility.
     pub fn from_json(s: &str) -> Result<ProgramCost, String> {
+        Self::from_json_with_names(
+            s,
+            &["processor", "hash", "u32", "op_stack", "ram", "jump_stack"],
+        )
+    }
+
+    /// Parse a ProgramCost from a JSON string with specific table names.
+    pub fn from_json_with_names(s: &str, names: &[&str]) -> Result<ProgramCost, String> {
         // Extract "functions" block
         let fns_start = s
             .find("\"functions\"")
@@ -294,7 +286,7 @@ impl ProgramCost {
                         let abs_obj_start = after_name + obj_start;
                         if let Some(obj_end) = find_matching_brace(fns_content, abs_obj_start) {
                             let cost_str = &fns_content[abs_obj_start..=obj_end];
-                            if let Some(cost) = TableCost::from_json_value(cost_str) {
+                            if let Some(cost) = TableCost::from_json_value(cost_str, names) {
                                 functions.push(FunctionCost {
                                     name,
                                     cost,
@@ -321,7 +313,7 @@ impl ProgramCost {
                 .ok_or_else(|| "missing total object".to_string())?;
             let obj_end = find_matching_brace(s, obj_start)
                 .ok_or_else(|| "unmatched brace in total".to_string())?;
-            TableCost::from_json_value(&s[obj_start..=obj_end])
+            TableCost::from_json_value(&s[obj_start..=obj_end], names)
                 .ok_or_else(|| "invalid total cost".to_string())?
         };
 
@@ -347,6 +339,8 @@ impl ProgramCost {
             program_name: String::new(),
             functions,
             total,
+            table_names: names.iter().map(|s| s.to_string()).collect(),
+            table_short_names: names.iter().map(|s| s.to_string()).collect(),
             attestation_hash_rows: 0,
             padded_height,
             estimated_proving_secs: 0.0,
@@ -356,11 +350,16 @@ impl ProgramCost {
 
     /// Format a comparison between this cost and another (old vs new).
     pub fn format_comparison(&self, other: &ProgramCost) -> String {
+        let short = self.short_names();
+        let primary = short.first().unwrap_or(&"?");
         let mut out = String::new();
         out.push_str("Cost comparison:\n");
         out.push_str(&format!(
             "{:<20} {:>9} {:>9}  {:>6}\n",
-            "Function", "cc (old)", "cc (new)", "delta"
+            "Function",
+            format!("{} (old)", primary),
+            format!("{} (new)", primary),
+            "delta"
         ));
         out.push_str(&"-".repeat(48));
         out.push('\n');
@@ -379,19 +378,19 @@ impl ProgramCost {
         }
 
         for name in &all_names {
-            let old_cc = self
+            let old_val = self
                 .functions
                 .iter()
                 .find(|f| f.name == *name)
-                .map(|f| f.cost.processor)
+                .map(|f| f.cost.get(0))
                 .unwrap_or(0);
-            let new_cc = other
+            let new_val = other
                 .functions
                 .iter()
                 .find(|f| f.name == *name)
-                .map(|f| f.cost.processor)
+                .map(|f| f.cost.get(0))
                 .unwrap_or(0);
-            let delta = new_cc as i64 - old_cc as i64;
+            let delta = new_val as i64 - old_val as i64;
             let delta_str = if delta > 0 {
                 format!("+{}", delta)
             } else if delta == 0 {
@@ -401,15 +400,15 @@ impl ProgramCost {
             };
             out.push_str(&format!(
                 "{:<20} {:>9} {:>9}  {:>6}\n",
-                name, old_cc, new_cc, delta_str
+                name, old_val, new_val, delta_str
             ));
         }
 
         out.push_str(&"-".repeat(48));
         out.push('\n');
 
-        let old_total = self.total.processor;
-        let new_total = other.total.processor;
+        let old_total = self.total.get(0);
+        let new_total = other.total.get(0);
         let total_delta = new_total as i64 - old_total as i64;
         let total_delta_str = if total_delta > 0 {
             format!("+{}", total_delta)
@@ -442,7 +441,6 @@ impl ProgramCost {
     }
 
     /// Generate diagnostics for power-of-2 boundary proximity.
-    /// Warns when the program is within 12.5% of the next power-of-2 boundary.
     pub fn boundary_warnings(&self) -> Vec<Diagnostic> {
         let mut warnings = Vec::new();
         let max_height = self.total.max_height().max(self.attestation_hash_rows);
@@ -470,5 +468,20 @@ impl ProgramCost {
         }
 
         warnings
+    }
+
+    /// Index of the dominant (tallest) table.
+    fn dominant_index(&self) -> usize {
+        let n = self.total.count as usize;
+        let max = self.total.max_height();
+        if max == 0 {
+            return 0;
+        }
+        for i in 0..n {
+            if self.total.get(i) == max {
+                return i;
+            }
+        }
+        0
     }
 }

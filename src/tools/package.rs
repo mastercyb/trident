@@ -113,9 +113,9 @@ pub fn generate_artifact(
         target_os: target_os.map(|os| os.name.clone()),
         architecture,
         cost: ManifestCost {
-            processor: cost.total.processor,
-            hash: cost.total.hash,
-            u32_table: cost.total.u32_table,
+            processor: cost.total.get(0),
+            hash: cost.total.get(1),
+            u32_table: cost.total.get(2),
             padded_height: cost.padded_height,
         },
         functions,
@@ -499,7 +499,7 @@ mod tests {
         let file = crate::parse_source_silent(source, filename).unwrap();
 
         // Create a minimal cost
-        let cost = crate::cost::CostAnalyzer::new().analyze_file(&file);
+        let cost = crate::cost::CostAnalyzer::default().analyze_file(&file);
 
         let target_vm = TargetConfig::triton();
         let tasm = "push 1\nwrite_io 1\nhalt\n";

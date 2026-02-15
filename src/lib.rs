@@ -333,10 +333,7 @@ pub fn run_tests(
     for result in &results {
         let status = if result.passed { "ok" } else { "FAILED" };
         let cost_str = if let Some(ref c) = result.cost {
-            format!(
-                " (cc={}, hash={}, u32={})",
-                c.processor, c.hash, c.u32_table
-            )
+            format!(" (cc={}, hash={}, u32={})", c.get(0), c.get(1), c.get(2))
         } else {
             String::new()
         };
@@ -371,7 +368,7 @@ pub fn analyze_costs(source: &str, filename: &str) -> Result<cost::ProgramCost, 
         return Err(errors);
     }
 
-    let cost = cost::CostAnalyzer::new().analyze_file(&file);
+    let cost = cost::CostAnalyzer::default().analyze_file(&file);
     Ok(cost)
 }
 
@@ -387,7 +384,7 @@ pub fn analyze_costs_project(
 
     // Analyze costs for the program file (last in topological order)
     if let Some(file) = project.last_file() {
-        let cost = cost::CostAnalyzer::new().analyze_file(file);
+        let cost = cost::CostAnalyzer::for_target(&options.target_config.name).analyze_file(file);
         Ok(cost)
     } else {
         Err(vec![Diagnostic::error(
@@ -488,8 +485,9 @@ pub fn annotate_source(source: &str, filename: &str) -> Result<String, Vec<Diagn
         return Err(errors);
     }
 
-    let mut analyzer = cost::CostAnalyzer::new();
-    analyzer.analyze_file(&file);
+    let mut analyzer = cost::CostAnalyzer::default();
+    let pc = analyzer.analyze_file(&file);
+    let short_names = pc.short_names();
     let stmt_costs = analyzer.stmt_costs(&file, source);
 
     // Build a map from line number to aggregated cost
@@ -513,7 +511,7 @@ pub fn annotate_source(source: &str, filename: &str) -> Result<String, Vec<Diagn
         let line_num = (i + 1) as u32;
         let padded_line = format!("{:<width$}", line, width = max_line_len);
         if let Some(cost) = line_costs.get(&line_num) {
-            let annotation = cost.format_annotation();
+            let annotation = cost.format_annotation(&short_names);
             if !annotation.is_empty() {
                 out.push_str(&format!(
                     "{:>width$} | {}  [{}]\n",
@@ -726,14 +724,14 @@ mod integration_tests {
             .expect("cost analysis should succeed");
 
         // Processor table should be nonzero
-        assert!(cost.total.processor > 0);
+        assert!(cost.total.get(0) > 0);
 
         // Token uses hash heavily (leaf hashing, config hashing, auth verification)
-        assert!(cost.total.hash > 0, "token should have hash table cost");
+        assert!(cost.total.get(1) > 0, "token should have hash table cost");
 
         // Token uses u32 range checks for balance verification
         assert!(
-            cost.total.u32_table > 0,
+            cost.total.get(2) > 0,
             "token should have u32 table cost for range checks"
         );
 
@@ -763,7 +761,10 @@ mod integration_tests {
 
         eprintln!(
             "Token cost: padded_height={}, cc={}, hash={}, u32={}",
-            cost.padded_height, cost.total.processor, cost.total.hash, cost.total.u32_table
+            cost.padded_height,
+            cost.total.get(0),
+            cost.total.get(1),
+            cost.total.get(2)
         );
         eprintln!("{}", cost.format_report());
     }
@@ -884,7 +885,7 @@ fn main() {
         let result = analyze_costs(source, "test.tri");
         assert!(result.is_ok());
         let cost = result.unwrap();
-        assert!(cost.total.processor > 0);
+        assert!(cost.total.get(0) > 0);
         assert!(cost.padded_height.is_power_of_two());
     }
 
@@ -1700,12 +1701,9 @@ fn main() {
         // Round-trip
         let parsed =
             cost::ProgramCost::from_json(&json).expect("should parse JSON back to ProgramCost");
-        assert_eq!(parsed.total.processor, cost_result.total.processor);
-        assert_eq!(parsed.total.hash, cost_result.total.hash);
-        assert_eq!(parsed.total.u32_table, cost_result.total.u32_table);
-        assert_eq!(parsed.total.op_stack, cost_result.total.op_stack);
-        assert_eq!(parsed.total.ram, cost_result.total.ram);
-        assert_eq!(parsed.total.jump_stack, cost_result.total.jump_stack);
+        for i in 0..parsed.total.count as usize {
+            assert_eq!(parsed.total.get(i), cost_result.total.get(i));
+        }
         assert_eq!(parsed.padded_height, cost_result.padded_height);
     }
 

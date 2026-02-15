@@ -25,7 +25,44 @@ mod tests {
     fn analyze(source: &str) -> ProgramCost {
         let (tokens, _, _) = Lexer::new(source, 0).tokenize();
         let file = Parser::new(tokens).parse_file().unwrap();
-        CostAnalyzer::new().analyze_file(&file)
+        CostAnalyzer::default().analyze_file(&file)
+    }
+
+    /// Build a ProgramCost with Triton table names for testing.
+    fn test_cost(total: TableCost, padded_height: u64) -> ProgramCost {
+        test_cost_with_fns(Vec::new(), total, padded_height)
+    }
+
+    fn test_cost_with_fns(
+        functions: Vec<FunctionCost>,
+        total: TableCost,
+        padded_height: u64,
+    ) -> ProgramCost {
+        ProgramCost {
+            program_name: "test".to_string(),
+            functions,
+            total,
+            table_names: vec![
+                "processor".into(),
+                "hash".into(),
+                "u32".into(),
+                "op_stack".into(),
+                "ram".into(),
+                "jump_stack".into(),
+            ],
+            table_short_names: vec![
+                "cc".into(),
+                "hash".into(),
+                "u32".into(),
+                "opstack".into(),
+                "ram".into(),
+                "jump".into(),
+            ],
+            attestation_hash_rows: 0,
+            padded_height,
+            estimated_proving_secs: 0.0,
+            loop_bound_waste: Vec::new(),
+        }
     }
 
     #[test]
@@ -48,13 +85,14 @@ mod tests {
         // a + b: dup a (1cc) + dup b (1cc) + add (1cc + 1opstack)
         // pub_write: dup c (1cc) + write_io (1cc + 1opstack)
         // let bindings: 1cc each (x3)
-        assert!(cost.total.processor > 0);
-        assert_eq!(cost.total.hash, 0);
-        assert_eq!(cost.total.u32_table, 0);
-        assert_eq!(cost.total.ram, 0);
+        assert!(cost.total.get(0) > 0);
+        assert_eq!(cost.total.get(1), 0);
+        assert_eq!(cost.total.get(2), 0);
+        assert_eq!(cost.total.get(4), 0);
         eprintln!(
             "Simple program cost: cc={}, opstack={}",
-            cost.total.processor, cost.total.op_stack
+            cost.total.get(0),
+            cost.total.get(3)
         );
     }
 
@@ -64,14 +102,16 @@ mod tests {
             "program test\nfn main() {\n    let d: Digest = divine5()\n    let h: Digest = hash(d)\n    pub_write(h)\n}",
         );
         // hash: 6 hash table rows
-        assert!(cost.total.hash >= 6);
+        assert!(cost.total.get(1) >= 6);
         // If hash table is the tallest, dominant should be "hash"
-        if cost.total.hash > cost.total.processor {
-            assert_eq!(cost.total.dominant_table(), "hash");
+        let sn = cost.short_names();
+        if cost.total.get(1) > cost.total.get(0) {
+            assert_eq!(cost.total.dominant_table(&sn), "hash");
         }
         eprintln!(
             "Hash program: cc={}, hash={}",
-            cost.total.processor, cost.total.hash
+            cost.total.get(0),
+            cost.total.get(1)
         );
     }
 
@@ -83,11 +123,11 @@ mod tests {
         // Loop body: dup x (1cc) + write_io (1cc) = 2cc + overhead per iteration
         // 10 iterations, so total loop cost should be significantly > 10
         assert!(
-            cost.total.processor >= 10,
+            cost.total.get(0) >= 10,
             "loop cost should be at least 10 cc, got {}",
-            cost.total.processor
+            cost.total.get(0)
         );
-        eprintln!("Loop program: cc={}", cost.total.processor);
+        eprintln!("Loop program: cc={}", cost.total.get(0));
     }
 
     #[test]
@@ -98,9 +138,9 @@ mod tests {
         );
         // If branch has hash (6 rows), else is empty.
         assert!(
-            cost.total.hash >= 6,
+            cost.total.get(1) >= 6,
             "if-branch hash cost should be included, got {}",
-            cost.total.hash
+            cost.total.get(1)
         );
     }
 
@@ -111,12 +151,13 @@ mod tests {
         );
         // Function call adds CALL_OVERHEAD (2cc, 2 jump_stack)
         assert!(
-            cost.total.jump_stack >= 2,
+            cost.total.get(5) >= 2,
             "function call should contribute to jump_stack"
         );
         eprintln!(
             "Call program: cc={}, jump={}",
-            cost.total.processor, cost.total.jump_stack
+            cost.total.get(0),
+            cost.total.get(5)
         );
     }
 
@@ -148,10 +189,7 @@ mod tests {
             "program test\nfn main() {\n    let a: Field = pub_read()\n    let b: Field = pub_read()\n    assert(a < b)\n}",
         );
         // lt uses u32 table
-        assert!(
-            cost.total.u32_table > 0,
-            "lt should contribute to u32 table"
-        );
+        assert!(cost.total.get(2) > 0, "lt should contribute to u32 table");
     }
 
     #[test]
@@ -160,8 +198,12 @@ mod tests {
             "program test\nevent Ev { x: Field, y: Field }\nfn main() {\n    reveal Ev { x: pub_read(), y: pub_read() }\n}",
         );
         // Open reveal should have zero hash cost (no hashing)
-        assert_eq!(cost.total.hash, 0, "open reveal should have zero hash cost");
-        assert!(cost.total.processor > 0);
+        assert_eq!(
+            cost.total.get(1),
+            0,
+            "open reveal should have zero hash cost"
+        );
+        assert!(cost.total.get(0) > 0);
     }
 
     #[test]
@@ -171,31 +213,15 @@ mod tests {
         );
         // Seal should have hash cost (>= 6 rows for one hash)
         assert!(
-            cost.total.hash >= 6,
+            cost.total.get(1) >= 6,
             "seal should have hash cost >= 6, got {}",
-            cost.total.hash
+            cost.total.get(1)
         );
     }
 
     #[test]
     fn test_boundary_warning_when_close() {
-        // Construct a ProgramCost near the boundary
-        let cost = ProgramCost {
-            program_name: "test".to_string(),
-            functions: Vec::new(),
-            total: TableCost {
-                processor: 1020,
-                hash: 0,
-                u32_table: 0,
-                op_stack: 0,
-                ram: 0,
-                jump_stack: 0,
-            },
-            attestation_hash_rows: 0,
-            padded_height: 1024,
-            estimated_proving_secs: 0.0,
-            loop_bound_waste: Vec::new(),
-        };
+        let cost = test_cost(TableCost::from_slice(&[1020, 0, 0, 0, 0, 0]), 1024);
         let warnings = cost.boundary_warnings();
         assert_eq!(warnings.len(), 1, "should warn when 4 rows from boundary");
         assert!(warnings[0].message.contains("4 rows below"));
@@ -203,22 +229,7 @@ mod tests {
 
     #[test]
     fn test_h0001_hash_table_dominance() {
-        let cost = ProgramCost {
-            program_name: "test".to_string(),
-            functions: Vec::new(),
-            total: TableCost {
-                processor: 10,
-                hash: 60,
-                u32_table: 0,
-                op_stack: 0,
-                ram: 0,
-                jump_stack: 0,
-            },
-            attestation_hash_rows: 0,
-            padded_height: 64,
-            estimated_proving_secs: 0.0,
-            loop_bound_waste: Vec::new(),
-        };
+        let cost = test_cost(TableCost::from_slice(&[10, 60, 0, 0, 0, 0]), 64);
         let hints = cost.optimization_hints();
         assert!(
             hints.iter().any(|h| h.message.contains("H0001")),
@@ -228,22 +239,7 @@ mod tests {
 
     #[test]
     fn test_h0002_headroom_hint() {
-        let cost = ProgramCost {
-            program_name: "test".to_string(),
-            functions: Vec::new(),
-            total: TableCost {
-                processor: 500,
-                hash: 0,
-                u32_table: 0,
-                op_stack: 0,
-                ram: 0,
-                jump_stack: 0,
-            },
-            attestation_hash_rows: 0,
-            padded_height: 1024,
-            estimated_proving_secs: 0.0,
-            loop_bound_waste: Vec::new(),
-        };
+        let cost = test_cost(TableCost::from_slice(&[500, 0, 0, 0, 0, 0]), 1024);
         let hints = cost.optimization_hints();
         assert!(
             hints.iter().any(|h| h.message.contains("H0002")),
@@ -253,22 +249,7 @@ mod tests {
 
     #[test]
     fn test_no_boundary_warning_when_far() {
-        let cost = ProgramCost {
-            program_name: "test".to_string(),
-            functions: Vec::new(),
-            total: TableCost {
-                processor: 500,
-                hash: 0,
-                u32_table: 0,
-                op_stack: 0,
-                ram: 0,
-                jump_stack: 0,
-            },
-            attestation_hash_rows: 0,
-            padded_height: 1024,
-            estimated_proving_secs: 0.0,
-            loop_bound_waste: Vec::new(),
-        };
+        let cost = test_cost(TableCost::from_slice(&[500, 0, 0, 0, 0, 0]), 1024);
         let warnings = cost.boundary_warnings();
         assert!(
             warnings.is_empty(),
@@ -309,9 +290,9 @@ mod tests {
         );
         // 3 instruction lines → at least 3 processor cycles
         assert!(
-            cost.total.processor >= 3,
+            cost.total.get(0) >= 3,
             "asm block with 3 instructions should cost at least 3 cc, got {}",
-            cost.total.processor
+            cost.total.get(0)
         );
     }
 
@@ -322,7 +303,7 @@ mod tests {
         );
         // Only 1 real instruction, comment should not count
         assert!(
-            cost.total.processor >= 1,
+            cost.total.get(0) >= 1,
             "asm block cost should count only instructions"
         );
     }
@@ -333,7 +314,7 @@ mod tests {
             "program test\n\nfn main() {\n    let x: Field = pub_read()\n    pub_write(x)\n}\n";
         let (tokens, _, _) = Lexer::new(source, 0).tokenize();
         let file = Parser::new(tokens).parse_file().unwrap();
-        let mut analyzer = CostAnalyzer::new();
+        let mut analyzer = CostAnalyzer::default();
         // Populate fn_bodies for cost_fn
         analyzer.analyze_file(&file);
         let costs = analyzer.stmt_costs(&file, source);
@@ -367,7 +348,7 @@ mod tests {
         for (line, cost) in &costs {
             if *line >= 3 && *line <= 5 {
                 assert!(
-                    cost.processor > 0 || cost.jump_stack > 0,
+                    cost.get(0) > 0 || cost.get(5) > 0,
                     "line {} should have non-zero cost",
                     line
                 );
@@ -377,22 +358,18 @@ mod tests {
 
     #[test]
     fn test_cost_json_roundtrip() {
-        let original = TableCost {
-            processor: 10,
-            hash: 6,
-            u32_table: 33,
-            op_stack: 8,
-            ram: 5,
-            jump_stack: 2,
-        };
-        let json = original.to_json_value();
-        let parsed = TableCost::from_json_value(&json).expect("should parse JSON");
-        assert_eq!(parsed.processor, original.processor);
-        assert_eq!(parsed.hash, original.hash);
-        assert_eq!(parsed.u32_table, original.u32_table);
-        assert_eq!(parsed.op_stack, original.op_stack);
-        assert_eq!(parsed.ram, original.ram);
-        assert_eq!(parsed.jump_stack, original.jump_stack);
+        let names = ["processor", "hash", "u32", "op_stack", "ram", "jump_stack"];
+        let original = TableCost::from_slice(&[10, 6, 33, 8, 5, 2]);
+        let json = original.to_json_value(&names);
+        let parsed = TableCost::from_json_value(&json, &names).expect("should parse JSON");
+        for i in 0..6 {
+            assert_eq!(
+                parsed.get(i),
+                original.get(i),
+                "table {} mismatch",
+                names[i]
+            );
+        }
     }
 
     #[test]
@@ -402,101 +379,51 @@ mod tests {
         );
         let json = cost.to_json();
         let parsed = ProgramCost::from_json(&json).expect("should parse program cost JSON");
-        assert_eq!(parsed.total.processor, cost.total.processor);
-        assert_eq!(parsed.total.hash, cost.total.hash);
+        assert_eq!(parsed.total.get(0), cost.total.get(0));
+        assert_eq!(parsed.total.get(1), cost.total.get(1));
         assert_eq!(parsed.padded_height, cost.padded_height);
         assert_eq!(parsed.functions.len(), cost.functions.len());
         for (orig, loaded) in cost.functions.iter().zip(parsed.functions.iter()) {
             assert_eq!(orig.name, loaded.name);
-            assert_eq!(orig.cost.processor, loaded.cost.processor);
+            assert_eq!(orig.cost.get(0), loaded.cost.get(0));
         }
     }
 
     #[test]
     fn test_comparison_format() {
-        let old_cost = ProgramCost {
-            program_name: "test".to_string(),
-            functions: vec![
+        let old_cost = test_cost_with_fns(
+            vec![
                 FunctionCost {
                     name: "main".to_string(),
-                    cost: TableCost {
-                        processor: 10,
-                        hash: 6,
-                        u32_table: 0,
-                        op_stack: 8,
-                        ram: 0,
-                        jump_stack: 2,
-                    },
+                    cost: TableCost::from_slice(&[10, 6, 0, 8, 0, 2]),
                     per_iteration: None,
                 },
                 FunctionCost {
                     name: "helper".to_string(),
-                    cost: TableCost {
-                        processor: 5,
-                        hash: 0,
-                        u32_table: 0,
-                        op_stack: 3,
-                        ram: 0,
-                        jump_stack: 0,
-                    },
+                    cost: TableCost::from_slice(&[5, 0, 0, 3, 0, 0]),
                     per_iteration: None,
                 },
             ],
-            total: TableCost {
-                processor: 15,
-                hash: 6,
-                u32_table: 0,
-                op_stack: 11,
-                ram: 0,
-                jump_stack: 2,
-            },
-            attestation_hash_rows: 0,
-            padded_height: 32,
-            estimated_proving_secs: 0.0,
-            loop_bound_waste: Vec::new(),
-        };
+            TableCost::from_slice(&[15, 6, 0, 11, 0, 2]),
+            32,
+        );
 
-        let new_cost = ProgramCost {
-            program_name: "test".to_string(),
-            functions: vec![
+        let new_cost = test_cost_with_fns(
+            vec![
                 FunctionCost {
                     name: "main".to_string(),
-                    cost: TableCost {
-                        processor: 12,
-                        hash: 6,
-                        u32_table: 0,
-                        op_stack: 10,
-                        ram: 0,
-                        jump_stack: 2,
-                    },
+                    cost: TableCost::from_slice(&[12, 6, 0, 10, 0, 2]),
                     per_iteration: None,
                 },
                 FunctionCost {
                     name: "helper".to_string(),
-                    cost: TableCost {
-                        processor: 5,
-                        hash: 0,
-                        u32_table: 0,
-                        op_stack: 3,
-                        ram: 0,
-                        jump_stack: 0,
-                    },
+                    cost: TableCost::from_slice(&[5, 0, 0, 3, 0, 0]),
                     per_iteration: None,
                 },
             ],
-            total: TableCost {
-                processor: 17,
-                hash: 6,
-                u32_table: 0,
-                op_stack: 13,
-                ram: 0,
-                jump_stack: 2,
-            },
-            attestation_hash_rows: 0,
-            padded_height: 32,
-            estimated_proving_secs: 0.0,
-            loop_bound_waste: Vec::new(),
-        };
+            TableCost::from_slice(&[17, 6, 0, 13, 0, 2]),
+            32,
+        );
 
         let comparison = old_cost.format_comparison(&new_cost);
         assert!(

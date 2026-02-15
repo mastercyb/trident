@@ -173,6 +173,8 @@ pub fn prepare_artifact(
             program_name: String::new(),
             functions: Vec::new(),
             total: trident::cost::TableCost::ZERO,
+            table_names: Vec::new(),
+            table_short_names: Vec::new(),
             attestation_hash_rows: 0,
             padded_height: 0,
             estimated_proving_secs: 0.0,

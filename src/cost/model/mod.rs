@@ -8,17 +8,26 @@ pub(crate) use triton::TritonCostModel;
 // CostModel trait — target-agnostic cost interface
 // ---------------------------------------------------------------------------
 
+/// Maximum number of cost tables any target can have.
+pub const MAX_TABLES: usize = 8;
+
 /// Trait for target-specific cost models.
 ///
 /// Each target VM implements this to provide table names, per-instruction
 /// costs, and formatting for cost reports. The cost analyzer delegates all
 /// target-specific knowledge through this trait.
+#[allow(dead_code)]
 pub(crate) trait CostModel {
     /// Names of the execution tables (e.g. ["processor", "hash", "u32", ...]).
     fn table_names(&self) -> &[&str];
 
     /// Short display names for compact annotations (e.g. ["cc", "hash", "u32", ...]).
     fn table_short_names(&self) -> &[&str];
+
+    /// Number of active tables for this target.
+    fn table_count(&self) -> u8 {
+        self.table_names().len() as u8
+    }
 
     /// Cost of a builtin function call by name.
     fn builtin_cost(&self, name: &str) -> TableCost;
@@ -46,110 +55,126 @@ pub(crate) trait CostModel {
 }
 
 // ---------------------------------------------------------------------------
-// TableCost — per-table cost vector
+// TableCost — target-generic cost vector
 // ---------------------------------------------------------------------------
 
-/// Cost across all 6 Triton VM tables.
-#[derive(Clone, Debug, Default)]
+/// Cost across execution tables. Fixed-size array indexed by table position
+/// as defined by the target's CostModel. Table names are external metadata,
+/// not baked into this struct.
+#[derive(Clone, Debug)]
 pub struct TableCost {
-    /// Processor Table rows (= clock cycles).
-    pub processor: u64,
-    /// Hash Table rows (6 per hash operation).
-    pub hash: u64,
-    /// U32 Table rows (variable, worst-case 32-bit estimates).
-    pub u32_table: u64,
-    /// Op Stack Table rows.
-    pub op_stack: u64,
-    /// RAM Table rows.
-    pub ram: u64,
-    /// Jump Stack Table rows.
-    pub jump_stack: u64,
+    /// Cost values indexed by table position.
+    pub values: [u64; MAX_TABLES],
+    /// Number of active tables (from CostModel::table_count()).
+    pub count: u8,
+}
+
+impl Default for TableCost {
+    fn default() -> Self {
+        Self::ZERO
+    }
 }
 
 impl TableCost {
     pub const ZERO: TableCost = TableCost {
-        processor: 0,
-        hash: 0,
-        u32_table: 0,
-        op_stack: 0,
-        ram: 0,
-        jump_stack: 0,
+        values: [0; MAX_TABLES],
+        count: 0,
     };
 
-    pub fn add(&self, other: &TableCost) -> TableCost {
+    /// Build from a slice of values (used by CostModel implementations).
+    pub fn from_slice(vals: &[u64]) -> TableCost {
+        let mut values = [0u64; MAX_TABLES];
+        let n = vals.len().min(MAX_TABLES);
+        values[..n].copy_from_slice(&vals[..n]);
         TableCost {
-            processor: self.processor + other.processor,
-            hash: self.hash + other.hash,
-            u32_table: self.u32_table + other.u32_table,
-            op_stack: self.op_stack + other.op_stack,
-            ram: self.ram + other.ram,
-            jump_stack: self.jump_stack + other.jump_stack,
+            values,
+            count: n as u8,
+        }
+    }
+
+    /// Get value at table index.
+    pub fn get(&self, i: usize) -> u64 {
+        self.values[i]
+    }
+
+    /// Check if any table has non-zero cost.
+    pub fn is_nonzero(&self) -> bool {
+        let n = self.count as usize;
+        self.values[..n].iter().any(|&v| v > 0)
+    }
+
+    pub fn add(&self, other: &TableCost) -> TableCost {
+        let n = self.count.max(other.count) as usize;
+        let mut values = [0u64; MAX_TABLES];
+        for i in 0..n {
+            values[i] = self.values[i] + other.values[i];
+        }
+        TableCost {
+            values,
+            count: n as u8,
         }
     }
 
     pub fn scale(&self, factor: u64) -> TableCost {
+        let n = self.count as usize;
+        let mut values = [0u64; MAX_TABLES];
+        for i in 0..n {
+            values[i] = self.values[i].saturating_mul(factor);
+        }
         TableCost {
-            processor: self.processor.saturating_mul(factor),
-            hash: self.hash.saturating_mul(factor),
-            u32_table: self.u32_table.saturating_mul(factor),
-            op_stack: self.op_stack.saturating_mul(factor),
-            ram: self.ram.saturating_mul(factor),
-            jump_stack: self.jump_stack.saturating_mul(factor),
+            values,
+            count: self.count,
         }
     }
 
     pub fn max(&self, other: &TableCost) -> TableCost {
+        let n = self.count.max(other.count) as usize;
+        let mut values = [0u64; MAX_TABLES];
+        for i in 0..n {
+            values[i] = self.values[i].max(other.values[i]);
+        }
         TableCost {
-            processor: self.processor.max(other.processor),
-            hash: self.hash.max(other.hash),
-            u32_table: self.u32_table.max(other.u32_table),
-            op_stack: self.op_stack.max(other.op_stack),
-            ram: self.ram.max(other.ram),
-            jump_stack: self.jump_stack.max(other.jump_stack),
+            values,
+            count: n as u8,
         }
     }
 
-    /// The maximum height across all tables.
+    /// The maximum height across all active tables.
     pub fn max_height(&self) -> u64 {
-        self.processor
-            .max(self.hash)
-            .max(self.u32_table)
-            .max(self.op_stack)
-            .max(self.ram)
-            .max(self.jump_stack)
+        let n = self.count as usize;
+        self.values[..n].iter().copied().max().unwrap_or(0)
     }
 
-    /// Which table is the tallest.
-    pub fn dominant_table(&self) -> &'static str {
+    /// Which table is the tallest, by short name.
+    pub fn dominant_table<'a>(&self, short_names: &[&'a str]) -> &'a str {
+        let n = self.count as usize;
+        if n == 0 || short_names.is_empty() {
+            return "?";
+        }
         let max = self.max_height();
         if max == 0 {
-            return "proc";
+            return short_names[0];
         }
-        if self.hash == max {
-            "hash"
-        } else if self.u32_table == max {
-            "u32"
-        } else if self.ram == max {
-            "ram"
-        } else if self.processor == max {
-            "proc"
-        } else if self.op_stack == max {
-            "opstack"
-        } else {
-            "jump"
+        for i in 0..n.min(short_names.len()) {
+            if self.values[i] == max {
+                return short_names[i];
+            }
         }
+        short_names[0]
     }
 
-    /// Serialize to a JSON object string.
-    pub fn to_json_value(&self) -> String {
-        format!(
-            "{{\"processor\": {}, \"hash\": {}, \"u32_table\": {}, \"op_stack\": {}, \"ram\": {}, \"jump_stack\": {}}}",
-            self.processor, self.hash, self.u32_table, self.op_stack, self.ram, self.jump_stack
-        )
+    /// Serialize to a JSON object string using the given table names as keys.
+    pub fn to_json_value(&self, names: &[&str]) -> String {
+        let n = self.count as usize;
+        let mut parts = Vec::new();
+        for i in 0..n.min(names.len()) {
+            parts.push(format!("\"{}\": {}", names[i], self.values[i]));
+        }
+        format!("{{{}}}", parts.join(", "))
     }
 
-    /// Deserialize from a JSON object string.
-    pub fn from_json_value(s: &str) -> Option<TableCost> {
+    /// Deserialize from a JSON object string using the given table names as keys.
+    pub fn from_json_value(s: &str, names: &[&str]) -> Option<TableCost> {
         fn extract_u64(s: &str, key: &str) -> Option<u64> {
             let needle = format!("\"{}\"", key);
             let idx = s.find(&needle)?;
@@ -162,43 +187,38 @@ impl TableCost {
             after_colon[..end].parse().ok()
         }
 
+        let mut values = [0u64; MAX_TABLES];
+        for (i, name) in names.iter().enumerate() {
+            values[i] = extract_u64(s, name)?;
+        }
         Some(TableCost {
-            processor: extract_u64(s, "processor")?,
-            hash: extract_u64(s, "hash")?,
-            u32_table: extract_u64(s, "u32_table")?,
-            op_stack: extract_u64(s, "op_stack")?,
-            ram: extract_u64(s, "ram")?,
-            jump_stack: extract_u64(s, "jump_stack")?,
+            values,
+            count: names.len() as u8,
         })
     }
 
     /// Format a compact annotation string showing non-zero cost fields.
-    pub fn format_annotation(&self) -> String {
+    pub fn format_annotation(&self, short_names: &[&str]) -> String {
+        let n = self.count as usize;
         let mut parts = Vec::new();
-        if self.processor > 0 {
-            parts.push(format!("cc={}", self.processor));
-        }
-        if self.hash > 0 {
-            parts.push(format!("hash={}", self.hash));
-        }
-        if self.u32_table > 0 {
-            parts.push(format!("u32={}", self.u32_table));
-        }
-        if self.op_stack > 0 {
-            parts.push(format!("opst={}", self.op_stack));
-        }
-        if self.ram > 0 {
-            parts.push(format!("ram={}", self.ram));
-        }
-        if self.jump_stack > 0 {
-            parts.push(format!("jump={}", self.jump_stack));
+        for i in 0..n.min(short_names.len()) {
+            if self.values[i] > 0 {
+                parts.push(format!("{}={}", short_names[i], self.values[i]));
+            }
         }
         parts.join(" ")
     }
 }
 
-/// Convenience function: look up builtin cost using the default Triton cost model.
-/// Used by LSP and other callers that don't have a CostModel reference.
-pub(crate) fn cost_builtin(name: &str) -> TableCost {
-    TritonCostModel.builtin_cost(name)
+/// Look up builtin cost using a named target's cost model.
+pub(crate) fn cost_builtin(target: &str, name: &str) -> TableCost {
+    create_cost_model(target).builtin_cost(name)
+}
+
+/// Select the cost model for a given target name.
+pub(crate) fn create_cost_model(target_name: &str) -> &'static dyn CostModel {
+    match target_name {
+        "triton" => &TritonCostModel,
+        _ => &TritonCostModel, // fallback until other models are implemented
+    }
 }
