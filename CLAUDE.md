@@ -73,7 +73,7 @@ and its output (does the next stage still accept it?).
 Update this map when files are added, removed, renamed, or modules are
 reorganized. Do NOT update for line count changes or content-only edits.
 
-~97 files, ~36k lines. Modules listed in pipeline order, then support.
+~105 files, ~36k lines. Modules listed in pipeline order, then support.
 
 **Pipeline stages:**
 
@@ -198,10 +198,25 @@ lsp/               ~1.6k LOC   Language Server Protocol
   util.rs            ~570       LSP utilities (position mapping, etc.)
 ```
 
+**Public API:**
+
+```
+api/                 ~430 LOC   Public API functions
+  mod.rs             ~430       CompileOptions, compile/check/format/cost/docs entry points
+  tests/           ~1,650       Integration tests (79 tests, 7 files)
+    compile.rs       ~400         Single-file + project compilation
+    check.rs         ~130         Type-check, parse, discovery
+    format.rs        ~120         Formatting roundtrips
+    cost.rs          ~180         Cost analysis, annotation, JSON
+    features.rs      ~270         Generics, cfg, match, pure
+    docs.rs          ~120         generate_docs
+    neptune.rs       ~360         Neptune programs, proofs, XField
+```
+
 **Root files:**
 
 ```
-lib.rs             ~2,200       Crate root — re-exports, compile/format entry points
+lib.rs              ~80        Crate root — module decls, re-exports, parse helpers
 deploy.rs            ~560       Artifact deployment (copy, verify, sign)
 doc.rs               ~300       Documentation generation (trident doc)
 pipeline.rs          ~210       Compilation pipeline orchestration
