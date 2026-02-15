@@ -189,7 +189,7 @@ cli/               ~2.3k LOC   Command-line interface
   hash.rs             ~40       trident hash
   init.rs             ~75       trident init
   package.rs          ~100      trident package
-  registry.rs        ~170       trident registry
+  registry.rs        ~170       trident atlas
   store.rs           ~190       trident store
   test.rs             ~40       trident test
   verify.rs          ~220       trident verify

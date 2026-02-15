@@ -59,8 +59,8 @@ enum Command {
         #[command(subcommand)]
         action: StoreAction,
     },
-    /// Global registry — publish, pull, search definitions
-    Registry {
+    /// Atlas — on-chain package registry: publish, pull, search definitions
+    Atlas {
         #[command(subcommand)]
         action: RegistryAction,
     },
@@ -95,7 +95,7 @@ fn main() {
         Command::Generate(args) => cli::generate::cmd_generate(args),
         Command::View(args) => cli::view::cmd_view(args),
         Command::Store { action } => cli::store::cmd_store(action),
-        Command::Registry { action } => cli::registry::cmd_registry(action),
+        Command::Atlas { action } => cli::registry::cmd_registry(action),
         Command::Equiv(args) => cli::verify::cmd_equiv(args),
         Command::Deps { action } => cli::deps::cmd_deps(action),
         Command::Package(args) => cli::package::cmd_package(args),
