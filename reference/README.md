@@ -58,7 +58,8 @@ and code disagree, the reference wins.
 |----------|-------------|
 | [VM Reference](vm.md) | Virtual machine architecture and instruction sets |
 | [OS Reference](os.md) | Operating system model and bindings |
-| [Standard Library](stdlib.md) | `std.*` modules (sha256, bigint, ecdsa, ...) |
+| [Standard Library](stdlib.md) | `std.*` modules (field, token, nn, private, quantum, ...) |
+| [Skill Reference](skills.md) | All 23 skills: spec tables, recipes, hook IDs, glossary |
 
 Per-target specs live alongside their config:
 - [OS Registry](../../os/README.md) — `os/{name}/README.md` for each of 25 OSes
