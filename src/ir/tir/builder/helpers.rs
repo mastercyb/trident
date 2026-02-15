@@ -110,7 +110,7 @@ impl TIRBuilder {
 
     /// Find depth of a named variable (may trigger reload if spilled).
     pub(crate) fn find_var_depth(&mut self, name: &str) -> u32 {
-        let d = self.stack.find_var_depth(name);
+        let d = self.stack.access_var(name);
         self.flush_stack_effects();
         d
     }

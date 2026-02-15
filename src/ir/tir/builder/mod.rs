@@ -292,18 +292,69 @@ impl TIRBuilder {
         if func.body.is_none() {
             return;
         }
+        let name = func.name.node.clone();
+        let param_widths: Vec<u32> = func
+            .params
+            .iter()
+            .map(|p| resolve_type_width(&p.ty.node, &self.target_config))
+            .collect();
+        let ret_width = func
+            .return_ty
+            .as_ref()
+            .map(|t| resolve_type_width(&t.node, &self.target_config))
+            .unwrap_or(0);
+        self.build_fn_body(&name, func, &param_widths, ret_width);
+    }
 
-        self.ops.push(TIROp::FnStart(func.name.node.clone()));
+    fn build_mono_fn(&mut self, func: &FnDef, inst: &MonoInstance) {
+        if func.body.is_none() {
+            return;
+        }
+        // Set up substitution context.
+        self.current_subs.clear();
+        for (param, val) in func.type_params.iter().zip(inst.size_args.iter()) {
+            self.current_subs.insert(param.node.clone(), *val);
+        }
+        let name = inst.mangled_name();
+        let param_widths: Vec<u32> = func
+            .params
+            .iter()
+            .map(|p| {
+                resolve_type_width_with_subs(&p.ty.node, &self.current_subs, &self.target_config)
+            })
+            .collect();
+        let ret_width = func
+            .return_ty
+            .as_ref()
+            .map(|t| {
+                resolve_type_width_with_subs(&t.node, &self.current_subs, &self.target_config)
+            })
+            .unwrap_or(0);
+        self.build_fn_body(&name, func, &param_widths, ret_width);
+        self.current_subs.clear();
+    }
+
+    /// Shared body for `build_fn` and `build_mono_fn`.
+    ///
+    /// Emits FnStart, registers parameters, compiles the body, cleans up
+    /// the stack, and emits Return + FnEnd.
+    fn build_fn_body(
+        &mut self,
+        name: &str,
+        func: &FnDef,
+        param_widths: &[u32],
+        ret_width: u32,
+    ) {
+        self.ops.push(TIROp::FnStart(name.to_string()));
         self.stack.clear();
 
         // Parameters are already on the real stack. Register them in the model.
-        for param in &func.params {
-            let width = resolve_type_width(&param.ty.node, &self.target_config);
+        for (param, &width) in func.params.iter().zip(param_widths) {
             self.stack.push_named(&param.name.node, width);
             self.flush_stack_effects();
         }
 
-        let body = func.body.as_ref().unwrap();
+        let body = func.body.as_ref().expect("caller checked body.is_some()");
         self.build_block(&body.node);
 
         // Clean up: pop everything except return value (if any).
@@ -311,11 +362,6 @@ impl TIRBuilder {
         let total_width = self.stack.stack_depth();
 
         if has_return && total_width > 0 {
-            let ret_width = func
-                .return_ty
-                .as_ref()
-                .map(|t| resolve_type_width(&t.node, &self.target_config))
-                .unwrap_or(0);
             let to_pop = total_width.saturating_sub(ret_width);
             for _ in 0..to_pop {
                 self.ops.push(TIROp::Swap(1));
@@ -328,61 +374,5 @@ impl TIRBuilder {
         self.ops.push(TIROp::Return);
         self.ops.push(TIROp::FnEnd);
         self.stack.clear();
-    }
-
-    fn build_mono_fn(&mut self, func: &FnDef, inst: &MonoInstance) {
-        if func.body.is_none() {
-            return;
-        }
-
-        // Set up substitution context.
-        self.current_subs.clear();
-        for (param, val) in func.type_params.iter().zip(inst.size_args.iter()) {
-            self.current_subs.insert(param.node.clone(), *val);
-        }
-
-        let mangled = inst.mangled_name();
-        self.ops.push(TIROp::FnStart(mangled));
-        self.stack.clear();
-
-        // Parameters with substituted widths.
-        for param in &func.params {
-            let width = resolve_type_width_with_subs(
-                &param.ty.node,
-                &self.current_subs,
-                &self.target_config,
-            );
-            self.stack.push_named(&param.name.node, width);
-            self.flush_stack_effects();
-        }
-
-        let body = func.body.as_ref().unwrap();
-        self.build_block(&body.node);
-
-        // Clean up: pop everything except return value.
-        let has_return = func.return_ty.is_some();
-        let total_width = self.stack.stack_depth();
-
-        if has_return && total_width > 0 {
-            let ret_width = func
-                .return_ty
-                .as_ref()
-                .map(|t| {
-                    resolve_type_width_with_subs(&t.node, &self.current_subs, &self.target_config)
-                })
-                .unwrap_or(0);
-            let to_pop = total_width.saturating_sub(ret_width);
-            for _ in 0..to_pop {
-                self.ops.push(TIROp::Swap(1));
-                self.ops.push(TIROp::Pop(1));
-            }
-        } else if !has_return {
-            self.emit_pop(total_width);
-        }
-
-        self.ops.push(TIROp::Return);
-        self.ops.push(TIROp::FnEnd);
-        self.stack.clear();
-        self.current_subs.clear();
     }
 }

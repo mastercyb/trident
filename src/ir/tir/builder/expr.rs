@@ -158,7 +158,7 @@ impl TIRBuilder {
             if let Some((_depth, width)) = var_info {
                 self.stack.ensure_space(width);
                 self.flush_stack_effects();
-                let depth = self.stack.find_var_depth(name);
+                let depth = self.stack.access_var(name);
                 self.flush_stack_effects();
 
                 if depth + width - 1 <= 15 {
@@ -171,7 +171,7 @@ impl TIRBuilder {
                     self.flush_stack_effects();
                     self.stack.access_var(name);
                     self.flush_stack_effects();
-                    let depth2 = self.stack.find_var_depth(name);
+                    let depth2 = self.stack.access_var(name);
                     self.flush_stack_effects();
                     if depth2 + width - 1 <= 15 {
                         for _ in 0..width {

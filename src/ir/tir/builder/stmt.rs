@@ -472,11 +472,8 @@ impl TIRBuilder {
             self.ops.push(TIROp::Push(0));
         }
         self.build_block(block);
-        if clears_flag {
-            self.ops.push(TIROp::Return);
-        } else {
-            self.ops.push(TIROp::Return);
-        }
+        self.ops.push(TIROp::Return);
+
         let nested = std::mem::take(&mut self.ops);
         self.ops = saved_ops;
         nested

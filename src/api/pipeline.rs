@@ -13,10 +13,8 @@ use crate::resolve::{resolve_modules, resolve_modules_with_deps};
 use crate::typecheck::{ModuleExports, TypeChecker};
 use crate::CompileOptions;
 
-/// A single parsed module: name, path, source text, and parsed AST.
+/// A single parsed module: path, source text, and parsed AST.
 pub(crate) struct ParsedModule {
-    #[allow(dead_code)]
-    pub name: String,
     pub file_path: PathBuf,
     pub source: String,
     pub file: ast::File,
@@ -45,7 +43,6 @@ impl PreparedProject {
         for m in &resolved {
             let file = crate::parse_source(&m.source, &m.file_path.to_string_lossy())?;
             modules.push(ParsedModule {
-                name: m.name.clone(),
                 file_path: m.file_path.clone(),
                 source: m.source.clone(),
                 file,
@@ -80,49 +77,14 @@ impl PreparedProject {
         Ok(PreparedProject { modules, exports })
     }
 
-    /// Build a project using `TypeChecker::new()` (no target config / cfg flags).
+
+    /// Build a project with default options (Triton target, debug profile).
     ///
     /// Used by `check_project` and `verify_project` which don't need target options.
     pub fn build_default(entry_path: &Path) -> Result<Self, Vec<Diagnostic>> {
-        let resolved = resolve_modules(entry_path)?;
-
-        let mut modules = Vec::new();
-        for m in &resolved {
-            let file = crate::parse_source(&m.source, &m.file_path.to_string_lossy())?;
-            modules.push(ParsedModule {
-                name: m.name.clone(),
-                file_path: m.file_path.clone(),
-                source: m.source.clone(),
-                file,
-            });
-        }
-
-        let mut exports: Vec<ModuleExports> = Vec::new();
-        for pm in &modules {
-            let mut tc = TypeChecker::new();
-            for e in &exports {
-                tc.import_module(e);
-            }
-            match tc.check_file(&pm.file) {
-                Ok(e) => {
-                    if !e.warnings.is_empty() {
-                        render_diagnostics(
-                            &e.warnings,
-                            &pm.file_path.to_string_lossy(),
-                            &pm.source,
-                        );
-                    }
-                    exports.push(e);
-                }
-                Err(errors) => {
-                    render_diagnostics(&errors, &pm.file_path.to_string_lossy(), &pm.source);
-                    return Err(errors);
-                }
-            }
-        }
-
-        Ok(PreparedProject { modules, exports })
+        Self::build(entry_path, &CompileOptions::default())
     }
+
 
     /// Return the program module (last in topological order, has `FileKind::Program`).
     pub fn program_module(&self) -> Option<&ParsedModule> {
