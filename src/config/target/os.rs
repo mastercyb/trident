@@ -179,7 +179,7 @@ impl ResolvedTarget {
 }
 
 /// Parse a minimal TOML string array: `["a", "b", "c"]` → `vec!["a", "b", "c"]`.
-pub(crate) fn parse_string_array(s: &str) -> Vec<String> {
+pub fn parse_string_array(s: &str) -> Vec<String> {
     let s = s.trim();
     if !s.starts_with('[') || !s.ends_with(']') {
         return Vec::new();

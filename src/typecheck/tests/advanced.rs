@@ -1,15 +1,6 @@
 //! TypeChecker unit tests.
 
-use crate::typecheck::{TypeChecker, ModuleExports};
-use crate::diagnostic::Diagnostic;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
-
-fn check(source: &str) -> Result<ModuleExports, Vec<Diagnostic>> {
-    let (tokens, _, _) = Lexer::new(source, 0).tokenize();
-    let file = Parser::new(tokens).parse_file().unwrap();
-    TypeChecker::new().check_file(&file)
-}
+use super::{check, check_err};
 #[test]
 fn test_match_integer_pattern_on_bool_error() {
     let result = check("program test\nfn main() {\n    let b: Bool = pub_read() == pub_read()\n    match b {\n        0 => { pub_write(0) }\n        _ => { pub_write(1) }\n    }\n}");
@@ -120,13 +111,6 @@ fn test_test_fn_not_emitted_in_normal_build() {
 }
 
 // --- Error path tests: message quality ---
-
-fn check_err(source: &str) -> Vec<Diagnostic> {
-    match check(source) {
-        Ok(_) => vec![],
-        Err(diags) => diags,
-    }
-}
 
 #[test]
 fn test_error_binary_op_type_mismatch() {

@@ -1,16 +1,13 @@
 //! TypeChecker unit tests.
 
+use std::collections::HashSet;
+
 use crate::diagnostic::Diagnostic;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::typecheck::{ModuleExports, TypeChecker};
-use std::collections::HashSet;
 
-fn check(source: &str) -> Result<ModuleExports, Vec<Diagnostic>> {
-    let (tokens, _, _) = Lexer::new(source, 0).tokenize();
-    let file = Parser::new(tokens).parse_file().unwrap();
-    TypeChecker::new().check_file(&file)
-}
+use super::check;
 
 #[test]
 fn test_valid_field_arithmetic() {

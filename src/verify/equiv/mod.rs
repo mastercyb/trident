@@ -23,6 +23,7 @@ use crate::ast::display;
 pub(crate) use crate::ast::display::format_ast_type as format_type;
 use crate::ast::{self, File, FnDef, Item, Type};
 use crate::hash;
+use crate::solve::{field_add, field_mul, field_neg};
 use crate::sym::SymValue;
 
 // ─── Result Types ──────────────────────────────────────────────────
@@ -248,25 +249,4 @@ pub(crate) fn find_fn<'a>(file: &'a File, name: &str) -> Option<&'a FnDef> {
         }
     }
     None
-}
-
-/// Goldilocks field addition (mod p).
-pub(crate) fn field_add(a: u64, b: u64) -> u64 {
-    const P: u128 = crate::sym::GOLDILOCKS_P as u128;
-    ((a as u128 + b as u128) % P) as u64
-}
-
-/// Goldilocks field multiplication (mod p).
-pub(crate) fn field_mul(a: u64, b: u64) -> u64 {
-    const P: u128 = crate::sym::GOLDILOCKS_P as u128;
-    ((a as u128 * b as u128) % P) as u64
-}
-
-/// Goldilocks field negation (mod p).
-pub(crate) fn field_neg(a: u64) -> u64 {
-    if a == 0 {
-        0
-    } else {
-        crate::sym::GOLDILOCKS_P - a
-    }
 }

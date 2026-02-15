@@ -41,14 +41,15 @@ pub(crate) fn resolve_modules_with_deps(
     resolver.topological_sort()
 }
 
-/// Find the standard library directory.
+/// Search for a library directory by environment variable name and directory name.
+///
 /// Search order:
-///   1. TRIDENT_STDLIB environment variable
-///   2. `std/` relative to the compiler binary
-///   3. `std/` in the repository root (development)
-pub(crate) fn find_stdlib_dir() -> Option<PathBuf> {
+///   1. `env_var` environment variable
+///   2. `dir_name/` relative to the compiler binary (and ancestors)
+///   3. `dir_name/` in the current working directory (development)
+fn find_lib_dir(env_var: &str, dir_name: &str) -> Option<PathBuf> {
     // 1. Environment variable
-    if let Ok(p) = std::env::var("TRIDENT_STDLIB") {
+    if let Ok(p) = std::env::var(env_var) {
         let path = PathBuf::from(p);
         if path.is_dir() {
             return Some(path);
@@ -58,19 +59,17 @@ pub(crate) fn find_stdlib_dir() -> Option<PathBuf> {
     // 2. Relative to the compiler binary
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let path = dir.join("std");
+            let path = dir.join(dir_name);
             if path.is_dir() {
                 return Some(path);
             }
-            // Also check one level up (e.g. target/debug/../std)
             if let Some(parent) = dir.parent() {
-                let path = parent.join("std");
+                let path = parent.join(dir_name);
                 if path.is_dir() {
                     return Some(path);
                 }
-                // Two levels up for target/debug/../../std
                 if let Some(grandparent) = parent.parent() {
-                    let path = grandparent.join("std");
+                    let path = grandparent.join(dir_name);
                     if path.is_dir() {
                         return Some(path);
                     }
@@ -80,61 +79,32 @@ pub(crate) fn find_stdlib_dir() -> Option<PathBuf> {
     }
 
     // 3. Current working directory
-    let cwd_std = PathBuf::from("std");
-    if cwd_std.is_dir() {
-        return Some(cwd_std);
+    let cwd_path = PathBuf::from(dir_name);
+    if cwd_path.is_dir() {
+        return Some(cwd_path);
     }
 
     None
 }
 
+/// Find the standard library directory.
+pub(crate) fn find_stdlib_dir() -> Option<PathBuf> {
+    find_lib_dir("TRIDENT_STDLIB", "std")
+}
+
 /// Find the OS library directory.
-/// OS-specific extension code lives in `os/<os_name>/`.
-/// Search order mirrors `find_stdlib_dir` but looks for `os/`.
-///   1. TRIDENT_OSLIB environment variable (or legacy TRIDENT_EXTLIB)
-///   2. `os/` relative to the compiler binary (and ancestors)
-///   3. `os/` in the current working directory (development)
+/// Also checks the legacy `TRIDENT_EXTLIB` environment variable.
 pub(crate) fn find_os_dir() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("TRIDENT_OSLIB") {
-        let path = PathBuf::from(p);
-        if path.is_dir() {
-            return Some(path);
-        }
+    if let Some(dir) = find_lib_dir("TRIDENT_OSLIB", "os") {
+        return Some(dir);
     }
-    // Legacy env var
+    // Legacy env var fallback
     if let Ok(p) = std::env::var("TRIDENT_EXTLIB") {
         let path = PathBuf::from(p);
         if path.is_dir() {
             return Some(path);
         }
     }
-
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let path = dir.join("os");
-            if path.is_dir() {
-                return Some(path);
-            }
-            if let Some(parent) = dir.parent() {
-                let path = parent.join("os");
-                if path.is_dir() {
-                    return Some(path);
-                }
-                if let Some(grandparent) = parent.parent() {
-                    let path = grandparent.join("os");
-                    if path.is_dir() {
-                        return Some(path);
-                    }
-                }
-            }
-        }
-    }
-
-    let cwd_os = PathBuf::from("os");
-    if cwd_os.is_dir() {
-        return Some(cwd_os);
-    }
-
     None
 }
 
