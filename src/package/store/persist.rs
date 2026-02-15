@@ -29,7 +29,7 @@ impl Codebase {
                 continue;
             }
             if let Some((name, hex)) = line.split_once('=') {
-                if let Some(hash) = parse_hex_hash(hex.trim()) {
+                if let Some(hash) = ContentHash::from_hex(hex.trim()) {
                     self.names.insert(name.trim().to_string(), hash);
                 }
             }
@@ -59,7 +59,7 @@ impl Codebase {
                     Some(s) => s,
                     None => continue,
                 };
-                let hash = match parse_hex_hash(stem) {
+                let hash = match ContentHash::from_hex(stem) {
                     Some(h) => h,
                     None => continue,
                 };
@@ -90,7 +90,7 @@ impl Codebase {
                 continue;
             }
             let name = parts[0].to_string();
-            let hash = match parse_hex_hash(parts[1]) {
+            let hash = match ContentHash::from_hex(parts[1]) {
                 Some(h) => h,
                 None => continue,
             };
@@ -192,7 +192,7 @@ pub(super) fn deserialize_definition(text: &str) -> Option<Definition> {
                 return Vec::new();
             }
             s.split(',')
-                .filter_map(|h| parse_hex_hash(h.trim()))
+                .filter_map(|h| ContentHash::from_hex(h.trim()))
                 .collect()
         })
         .unwrap_or_default();
@@ -266,33 +266,6 @@ pub(super) fn unescape_newlines(s: &str) -> String {
     result
 }
 
-// ─── Hex Hash Parsing ──────────────────────────────────────────────
-
-pub(super) fn parse_hex_hash(hex: &str) -> Option<ContentHash> {
-    if hex.len() != 64 {
-        return None;
-    }
-    let mut bytes = [0u8; 32];
-    for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
-        if i >= 32 {
-            return None;
-        }
-        let hi = hex_digit(chunk[0])?;
-        let lo = hex_digit(chunk[1])?;
-        bytes[i] = (hi << 4) | lo;
-    }
-    Some(ContentHash(bytes))
-}
-
-pub(super) fn hex_digit(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
-    }
-}
-
 // ─── Helper: Codebase Directory ────────────────────────────────────
 
 pub(super) fn codebase_dir() -> Option<PathBuf> {
@@ -305,8 +278,5 @@ pub(super) fn codebase_dir() -> Option<PathBuf> {
 }
 
 pub(super) fn unix_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
+    crate::package::unix_timestamp()
 }

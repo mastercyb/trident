@@ -1,7 +1,7 @@
 use super::client::*;
 use super::json::*;
-use super::store_integration::*;
 use super::types::*;
+use crate::hash::ContentHash;
 
 #[test]
 fn test_json_escape() {
@@ -52,21 +52,21 @@ fn test_url_encode() {
 #[test]
 fn test_parse_hex_hash_valid() {
     let hex = "a".repeat(64);
-    assert!(parse_hex_hash(&hex).is_some());
+    assert!(ContentHash::from_hex(&hex).is_some());
 }
 
 #[test]
 fn test_parse_hex_hash_invalid_length() {
-    assert!(parse_hex_hash("abc").is_none());
-    assert!(parse_hex_hash(&"a".repeat(63)).is_none());
-    assert!(parse_hex_hash(&"a".repeat(65)).is_none());
+    assert!(ContentHash::from_hex("abc").is_none());
+    assert!(ContentHash::from_hex(&"a".repeat(63)).is_none());
+    assert!(ContentHash::from_hex(&"a".repeat(65)).is_none());
 }
 
 #[test]
 fn test_parse_hex_hash_invalid_chars() {
     let mut hex = "a".repeat(64);
     hex.replace_range(0..1, "g");
-    assert!(parse_hex_hash(&hex).is_none());
+    assert!(ContentHash::from_hex(&hex).is_none());
 }
 
 #[test]

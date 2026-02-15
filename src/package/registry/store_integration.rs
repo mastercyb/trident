@@ -58,7 +58,8 @@ pub fn pull_into_codebase(
     };
 
     let hash =
-        parse_hex_hash(&pull.hash).ok_or_else(|| "invalid hash in pull response".to_string())?;
+        ContentHash::from_hex(&pull.hash)
+        .ok_or_else(|| "invalid hash in pull response".to_string())?;
 
     if codebase.lookup_hash(&hash).is_some() {
         return Ok(pull);
@@ -67,7 +68,7 @@ pub fn pull_into_codebase(
     let deps: Vec<ContentHash> = pull
         .dependencies
         .iter()
-        .filter_map(|h| parse_hex_hash(h))
+        .filter_map(|h| ContentHash::from_hex(h))
         .collect();
 
     let def = Definition {
@@ -79,7 +80,7 @@ pub fn pull_into_codebase(
         dependencies: deps,
         requires: pull.requires.clone(),
         ensures: pull.ensures.clone(),
-        first_seen: unix_timestamp(),
+        first_seen: crate::package::unix_timestamp(),
     };
 
     codebase.store_definition(hash, def);
@@ -92,35 +93,3 @@ pub fn pull_into_codebase(
 
     Ok(pull)
 }
-pub(super) fn parse_hex_hash(hex: &str) -> Option<ContentHash> {
-    if hex.len() != 64 {
-        return None;
-    }
-    let mut bytes = [0u8; 32];
-    for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
-        if i >= 32 || chunk.len() < 2 {
-            return None;
-        }
-        let hi = hex_digit(chunk[0])?;
-        let lo = hex_digit(chunk[1])?;
-        bytes[i] = (hi << 4) | lo;
-    }
-    Some(ContentHash(bytes))
-}
-
-fn hex_digit(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
-    }
-}
-
-fn unix_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-}
-

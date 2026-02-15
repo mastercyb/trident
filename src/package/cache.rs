@@ -252,11 +252,7 @@ pub fn clear() -> Result<(), String> {
 
 /// Get the current timestamp as a string.
 pub fn timestamp() -> String {
-    // Simple timestamp without pulling in chrono
-    let duration = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    format!("{}", duration.as_secs())
+    format!("{}", crate::package::unix_timestamp())
 }
 
 #[cfg(test)]

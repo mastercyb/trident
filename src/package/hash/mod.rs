@@ -39,6 +39,23 @@ impl ContentHash {
         self.0.iter().map(|b| format!("{:02x}", b)).collect()
     }
 
+    /// Parse a 64-character hex string into a ContentHash.
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        if hex.len() != 64 {
+            return None;
+        }
+        let mut bytes = [0u8; 32];
+        for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
+            if i >= 32 || chunk.len() < 2 {
+                return None;
+            }
+            let hi = hex_digit(chunk[0])?;
+            let lo = hex_digit(chunk[1])?;
+            bytes[i] = (hi << 4) | lo;
+        }
+        Some(ContentHash(bytes))
+    }
+
     /// Display as short base-32 (8 characters, 40 bits).
     pub fn to_short(&self) -> String {
         // Take first 5 bytes (40 bits), encode as base-32
@@ -99,6 +116,16 @@ pub fn hash_file_content(file: &File) -> ContentHash {
         buf.extend_from_slice(&hash.0);
     }
     ContentHash(crate::poseidon2::hash_bytes(&buf))
+}
+
+/// Parse a single hex digit (0-9, a-f, A-F) to its numeric value.
+fn hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

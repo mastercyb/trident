@@ -1,8 +1,9 @@
 use super::persist::{
-    deserialize_definition, escape_newlines, parse_hex_hash, serialize_definition,
+    deserialize_definition, escape_newlines, serialize_definition,
     unescape_newlines,
 };
 use super::*;
+use crate::hash::ContentHash;
 
 fn parse_file(source: &str) -> ast::File {
     crate::parse_source_silent(source, "test.tri").unwrap()
@@ -274,13 +275,13 @@ fn test_escape_backslashes() {
 fn test_parse_hex_hash() {
     let hash = ContentHash([0xAB; 32]);
     let hex = hash.to_hex();
-    let parsed = parse_hex_hash(&hex).unwrap();
+    let parsed = ContentHash::from_hex(&hex).unwrap();
     assert_eq!(parsed, hash);
 
     // Invalid: too short.
-    assert!(parse_hex_hash("abcd").is_none());
+    assert!(ContentHash::from_hex("abcd").is_none());
     // Invalid: wrong chars.
-    assert!(parse_hex_hash(&"zz".repeat(32)).is_none());
+    assert!(ContentHash::from_hex(&"zz".repeat(32)).is_none());
 }
 
 #[test]
