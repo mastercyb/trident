@@ -133,7 +133,7 @@ pub fn annotate_source_with_target(
     let stmt_costs = analyzer.stmt_costs(&file, source);
 
     // Build a map from line number to aggregated cost
-    let mut line_costs: HashMap<u32, cost::TableCost> = HashMap::new();
+    let mut line_costs: BTreeMap<u32, cost::TableCost> = BTreeMap::new();
     for (line, cost) in &stmt_costs {
         line_costs
             .entry(*line)

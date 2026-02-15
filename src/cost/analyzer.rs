@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use super::model::{create_cost_model, CostModel, TableCost};
 use super::visit::next_power_of_two;
@@ -55,9 +55,9 @@ pub(crate) struct CostAnalyzer<'a> {
     /// Target-specific cost model.
     pub(crate) cost_model: &'a dyn CostModel,
     /// Function bodies indexed by name (for resolving calls).
-    pub(crate) fn_bodies: HashMap<String, FnDef>,
+    pub(crate) fn_bodies: BTreeMap<String, FnDef>,
     /// Cached function costs to avoid recomputation.
-    fn_costs: HashMap<String, TableCost>,
+    fn_costs: BTreeMap<String, TableCost>,
     /// Recursion guard to prevent infinite loops in cost computation.
     in_progress: Vec<String>,
     /// H0004: collected loop bound waste entries (fn_name, end_value, bound).
@@ -80,8 +80,8 @@ impl<'a> CostAnalyzer<'a> {
     pub(crate) fn with_cost_model(cost_model: &'a dyn CostModel) -> Self {
         Self {
             cost_model,
-            fn_bodies: HashMap::new(),
-            fn_costs: HashMap::new(),
+            fn_bodies: BTreeMap::new(),
+            fn_costs: BTreeMap::new(),
             in_progress: Vec::new(),
             loop_bound_waste: Vec::new(),
         }

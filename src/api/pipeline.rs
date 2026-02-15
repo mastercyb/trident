@@ -3,7 +3,7 @@
 //! Extracts the resolve → parse → typecheck loop that was duplicated across
 //! many public API functions in `lib.rs`.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::ast;
@@ -102,8 +102,8 @@ impl PreparedProject {
     ///
     /// Maps function names (short, qualified, and short-alias qualified) to
     /// their `#[intrinsic(...)]` values.
-    pub fn intrinsic_map(&self) -> HashMap<String, String> {
-        let mut map = HashMap::new();
+    pub fn intrinsic_map(&self) -> BTreeMap<String, String> {
+        let mut map = BTreeMap::new();
         for pm in &self.modules {
             for item in &pm.file.items {
                 if let ast::Item::Fn(func) = &item.node {
@@ -134,8 +134,8 @@ impl PreparedProject {
     }
 
     /// Build module alias map: short name -> full name for dotted modules.
-    pub fn module_aliases(&self) -> HashMap<String, String> {
-        let mut aliases = HashMap::new();
+    pub fn module_aliases(&self) -> BTreeMap<String, String> {
+        let mut aliases = BTreeMap::new();
         for pm in &self.modules {
             let full_name = &pm.file.name.node;
             if let Some(short) = full_name.rsplit('.').next() {
@@ -148,8 +148,8 @@ impl PreparedProject {
     }
 
     /// Build external constants map from all module exports.
-    pub fn external_constants(&self) -> HashMap<String, u64> {
-        let mut constants = HashMap::new();
+    pub fn external_constants(&self) -> BTreeMap<String, u64> {
+        let mut constants = BTreeMap::new();
         for exp in &self.exports {
             let full = &exp.module_name;
             let short = full.rsplit('.').next().unwrap_or(full);

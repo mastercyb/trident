@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::*;
 
 pub(crate) struct ModuleResolver {
@@ -10,7 +12,7 @@ pub(crate) struct ModuleResolver {
     /// Additional directories to search for modules (from locked dependencies).
     pub(crate) dep_dirs: Vec<PathBuf>,
     /// All discovered modules by name.
-    pub(crate) modules: HashMap<String, ModuleInfo>,
+    pub(crate) modules: BTreeMap<String, ModuleInfo>,
     /// Queue of modules to process.
     queue: Vec<String>,
     /// Diagnostics.
@@ -40,7 +42,7 @@ impl ModuleResolver {
             dependencies: deps.clone(),
         };
 
-        let mut modules = HashMap::new();
+        let mut modules = BTreeMap::new();
         modules.insert(entry_name.clone(), info);
 
         Ok(Self {
