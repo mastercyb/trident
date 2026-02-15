@@ -209,7 +209,7 @@ config hash and extracts its dedicated authority and hook. Hooks are
 composed ZK programs — the verifier ensures both the token proof and the
 hook proof are valid.
 
-See [TSP-1 Reference](../../reference/tsp1-coin.md#token-config--10-field-elements)
+See [PLUMB Reference](../../reference/plumb.md#2-token-config--10-field-elements)
 for the full config schema, authority semantics, hook table, and proof
 envelope.
 
@@ -273,7 +273,7 @@ For delegated spending: `auth_hash` derived keys + Delegation skill tracking cum
 
 13 properties covering range checks, replay prevention, time-locks,
 supply conservation, account abstraction, config binding, irreversible
-renounce, and more. See [TSP-1 Security Properties](../../reference/tsp1-coin.md#security-properties)
+renounce, and more. See [PLUMB Security Properties](../../reference/plumb.md#10-security-properties)
 for the full list.
 
 ---
@@ -409,8 +409,9 @@ See the [Skill Library](skill-library.md) for the full skill design space.
 
 ## 🔗 See Also
 
-- [TSP-1 — Coin Reference](../../reference/tsp1-coin.md) — Canonical coin standard specification
-- [TSP-2 — Card Reference](../../reference/tsp2-card.md) — Canonical card standard specification
+- [PLUMB Framework](../../reference/plumb.md) — Shared token framework specification
+- [TSP-1 — Coin Reference](../../reference/tsp1-coin.md) — Divisible asset standard
+- [TSP-2 — Card Reference](../../reference/tsp2-card.md) — Unique asset standard
 - [Skill Library](skill-library.md) — 23 composable token capabilities (DeFi, access control, composition)
 - [Tutorial](../tutorials/tutorial.md) — Language basics
 - [Programming Model](programming-model.md) — Execution model and stack semantics

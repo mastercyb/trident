@@ -239,7 +239,7 @@ std.io
 
 Tokens are the economic foundation. While Layer 0 provides mathematical and cryptographic primitives, and Layer 1 provides computational pillars, the token layer provides the economic substrate — standards for value transfer, unique asset ownership, and composable token behaviors.
 
-All token modules build on the PLUMB framework (Pay, Lock, Update, Mint, Burn) — five operations that cover every token lifecycle event. See the [TSP-1 Coin reference](tsp1-coin.md) and [TSP-2 Card reference](tsp2-card.md) for leaf formats, config models, and circuit constraints.
+All token modules build on the PLUMB framework (Pay, Lock, Update, Mint, Burn) — five operations that cover every token lifecycle event. See the [PLUMB reference](plumb.md) for the shared framework, [TSP-1 Coin](tsp1-coin.md) and [TSP-2 Card](tsp2-card.md) for standard-specific constraints.
 
 ### std.token — PLUMB Framework Primitives
 

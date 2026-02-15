@@ -49,8 +49,9 @@ and code disagree, the reference wins.
 
 | Document | Description |
 |----------|-------------|
-| [TSP-1 — Coin](tsp1-coin.md) | Divisible asset standard (PLUMB). Conservation: `sum(balances) = supply` |
-| [TSP-2 — Card](tsp2-card.md) | Unique asset standard (PLUMB). Conservation: `owner_count(id) = 1` |
+| [PLUMB Framework](plumb.md) | Shared token framework: config, auth, hooks, proof envelope, security |
+| [TSP-1 — Coin](tsp1-coin.md) | Divisible asset standard. Conservation: `sum(balances) = supply` |
+| [TSP-2 — Card](tsp2-card.md) | Unique asset standard. Conservation: `owner_count(id) = 1` |
 
 ## Platform Reference
 
