@@ -1,3 +1,6 @@
+pub mod display;
+pub mod navigate;
+
 use crate::span::Spanned;
 
 /// A parsed `.tri` file — either a program or a library module.

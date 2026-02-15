@@ -28,18 +28,18 @@ pub fn cmd_view(args: ViewArgs) {
     let fn_hashes = trident::hash::hash_file(&file);
 
     // Try to find the function: by hash prefix or by name
-    let (fn_name, func) = if trident::view::looks_like_hash(&name) {
+    let (fn_name, func) = if trident::ast::navigate::looks_like_hash(&name) {
         if let Some((found_name, found_func)) =
-            trident::view::find_function_by_hash(&file, &fn_hashes, &name)
+            trident::ast::navigate::find_function_by_hash(&file, &fn_hashes, &name)
         {
             (found_name, found_func.clone())
-        } else if let Some(found_func) = trident::view::find_function(&file, &name) {
+        } else if let Some(found_func) = trident::ast::navigate::find_function(&file, &name) {
             (name.clone(), found_func.clone())
         } else {
             eprintln!("error: no function matching '{}' found", name);
             process::exit(1);
         }
-    } else if let Some(found_func) = trident::view::find_function(&file, &name) {
+    } else if let Some(found_func) = trident::ast::navigate::find_function(&file, &name) {
         (name.clone(), found_func.clone())
     } else {
         eprintln!("error: function '{}' not found in '{}'", name, filename);
@@ -54,7 +54,7 @@ pub fn cmd_view(args: ViewArgs) {
         process::exit(1);
     };
 
-    let formatted = trident::view::format_function(&func);
+    let formatted = trident::ast::display::format_function(&func);
 
     if let Some(hash) = fn_hashes.get(&fn_name) {
         if full {

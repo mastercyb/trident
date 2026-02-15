@@ -1,69 +1,9 @@
-//! Pretty-printing and diff utilities for Trident definitions.
+//! Diff and formatting utilities for Trident definitions.
 //!
-//! Used by `trident view` to reconstruct human-readable source from
-//! stored ASTs and to display definition metadata (hashes, history).
+//! Used by `trident view` to display definition metadata (hashes, history).
+//! AST navigation and pretty-printing live in `crate::ast::{navigate, display}`.
 
-use crate::ast::{File, FileKind, FnDef, Item};
-use crate::format;
 use crate::hash::ContentHash;
-use crate::span::Spanned;
-
-// ─── Pretty-print a single function ───────────────────────────────
-
-/// Pretty-print a single function definition by wrapping it in a
-/// minimal synthetic `File` and running the canonical formatter.
-pub fn format_function(func: &FnDef) -> String {
-    // Build a minimal File containing only this function.
-    let file = File {
-        kind: FileKind::Program,
-        name: Spanned::dummy("_view".to_string()),
-        uses: Vec::new(),
-        declarations: Vec::new(),
-        items: vec![Spanned::dummy(Item::Fn(func.clone()))],
-    };
-
-    let formatted = format::format_file(&file, &[]);
-
-    // The formatter emits "program _view\n\n<fn>\n".
-    // Strip the synthetic header to isolate the function text.
-    strip_synthetic_header(&formatted)
-}
-
-/// Pretty-print a function with an optional cost annotation appended
-/// as a trailing comment on the signature line.
-pub fn format_function_with_cost(func: &FnDef, cost: Option<&str>) -> String {
-    let base = format_function(func);
-    match cost {
-        Some(c) => {
-            // Insert cost comment after the opening brace of the function
-            if let Some(brace_pos) = base.find('{') {
-                let (before, after) = base.split_at(brace_pos + 1);
-                format!("{} // cost: {}{}", before.trim_end(), c, after)
-            } else {
-                // No body (intrinsic) — append at end of first line
-                let mut lines: Vec<&str> = base.lines().collect();
-                if let Some(first) = lines.first_mut() {
-                    return format!("{} // cost: {}", first, c);
-                }
-                base
-            }
-        }
-        None => base,
-    }
-}
-
-/// Strip the synthetic "program _view\n\n" header produced by the
-/// formatter when we wrap a single function in a dummy File.
-fn strip_synthetic_header(formatted: &str) -> String {
-    // The formatter produces: "program _view\n\n<items>\n"
-    // Find the first blank line and take everything after it.
-    if let Some(pos) = formatted.find("\n\n") {
-        let rest = &formatted[pos + 2..];
-        rest.to_string()
-    } else {
-        formatted.to_string()
-    }
-}
 
 // ─── Line-based diff ──────────────────────────────────────────────
 
@@ -290,111 +230,9 @@ fn days_to_civil(days: u64) -> (i64, u32, u32) {
     (y, m as u32, d as u32)
 }
 
-// ─── Helpers for the CLI ─────────────────────────────────────────
-
-/// Find a function by name in a parsed file.
-pub fn find_function<'a>(file: &'a File, name: &str) -> Option<&'a FnDef> {
-    for item in &file.items {
-        if let Item::Fn(func) = &item.node {
-            if func.name.node == name {
-                return Some(func);
-            }
-        }
-    }
-    None
-}
-
-/// Find a function by content hash prefix in a parsed file.
-///
-/// Returns `Some((name, func))` if exactly one function matches the
-/// given hex prefix. Returns `None` if no match or ambiguous.
-pub fn find_function_by_hash<'a>(
-    file: &'a File,
-    fn_hashes: &std::collections::HashMap<String, ContentHash>,
-    prefix: &str,
-) -> Option<(String, &'a FnDef)> {
-    let prefix_lower = prefix.to_lowercase();
-    let mut matches: Vec<(String, &FnDef)> = Vec::new();
-
-    for item in &file.items {
-        if let Item::Fn(func) = &item.node {
-            if let Some(hash) = fn_hashes.get(&func.name.node) {
-                let hex = hash.to_hex();
-                let short = hash.to_short();
-                if hex.starts_with(&prefix_lower) || short.starts_with(&prefix_lower) {
-                    matches.push((func.name.node.clone(), func));
-                }
-            }
-        }
-    }
-
-    if matches.len() == 1 {
-        Some(matches.into_iter().next().unwrap())
-    } else {
-        None
-    }
-}
-
-/// Check if a string looks like a hex hash prefix (all hex digits).
-pub fn looks_like_hash(s: &str) -> bool {
-    !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit())
-}
-
-// ─── Tests ───────────────────────────────────────────────────────
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hash;
-
-    fn parse_file(source: &str) -> File {
-        crate::parse_source_silent(source, "test.tri").unwrap()
-    }
-
-    #[test]
-    fn test_format_function_produces_valid_source() {
-        let source = "program test\n\nfn add(a: Field, b: Field) -> Field {\n    a + b\n}\n";
-        let file = parse_file(source);
-        let func = find_function(&file, "add").expect("add function should exist");
-        let formatted = format_function(func);
-
-        assert!(formatted.contains("fn add("));
-        assert!(formatted.contains("a: Field, b: Field"));
-        assert!(formatted.contains("-> Field"));
-        assert!(formatted.contains("a + b"));
-    }
-
-    #[test]
-    fn test_format_function_with_annotations() {
-        let source = "program test\n\n#[requires(a + b < 1000)]\n#[ensures(result == a + b)]\nfn add(a: Field, b: Field) -> Field {\n    a + b\n}\n";
-        let file = parse_file(source);
-        let func = find_function(&file, "add").expect("add function should exist");
-        let formatted = format_function(func);
-
-        assert!(formatted.contains("#[requires("));
-        assert!(formatted.contains("#[ensures("));
-        assert!(formatted.contains("fn add("));
-    }
-
-    #[test]
-    fn test_format_function_pub() {
-        let source = "module test\n\npub fn helper(x: Field) -> Field {\n    x + 1\n}\n";
-        let file = parse_file(source);
-        let func = find_function(&file, "helper").expect("helper function should exist");
-        let formatted = format_function(func);
-
-        assert!(formatted.contains("pub fn helper("));
-    }
-
-    #[test]
-    fn test_format_function_with_cost() {
-        let source = "program test\n\nfn add(a: Field, b: Field) -> Field {\n    a + b\n}\n";
-        let file = parse_file(source);
-        let func = find_function(&file, "add").expect("add function should exist");
-        let formatted = format_function_with_cost(func, Some("cc=5, hash=0"));
-
-        assert!(formatted.contains("// cost: cc=5, hash=0"));
-    }
 
     #[test]
     fn test_format_summary_extracts_signature() {
@@ -443,11 +281,8 @@ mod tests {
 
         let d = diff(old, new);
 
-        // Common lines should be prefixed with "  "
         assert!(d.contains("  fn main() {"));
-        // Removed line
         assert!(d.contains("- "));
-        // Added lines
         assert!(d.contains("+ "));
     }
 
@@ -456,7 +291,6 @@ mod tests {
         let text = "fn main() {\n    42\n}\n";
         let d = diff(text, text);
 
-        // All lines should be "keep" (prefixed with "  ")
         for line in d.lines() {
             assert!(
                 line.starts_with("  "),
@@ -477,8 +311,6 @@ mod tests {
     fn test_format_history_chronological() {
         let h1 = ContentHash([0xAA; 32]);
         let h2 = ContentHash([0xBB; 32]);
-        // 2026-02-10 09:00:00 UTC = 1770681600
-        // 2026-02-09 15:30:00 UTC = 1770618600
         let entries = vec![(h1, 1770681600), (h2, 1770618600)];
 
         let history = format_history("main", &entries);
@@ -487,7 +319,6 @@ mod tests {
         assert!(history.contains("(current)"));
         assert!(history.contains(&h1.to_string()));
         assert!(history.contains(&h2.to_string()));
-        // Only the first entry should be marked current
         let lines: Vec<&str> = history.lines().collect();
         assert!(lines[1].contains("(current)"));
         assert!(!lines[2].contains("(current)"));
@@ -495,7 +326,6 @@ mod tests {
 
     #[test]
     fn test_format_unix_timestamp() {
-        // 2026-02-10 00:00:00 UTC = 1770681600
         let ts = format_unix_timestamp(1770681600);
         assert_eq!(ts, "2026-02-10 00:00:00");
     }
@@ -504,43 +334,6 @@ mod tests {
     fn test_format_unix_timestamp_epoch() {
         let ts = format_unix_timestamp(0);
         assert_eq!(ts, "1970-01-01 00:00:00");
-    }
-
-    #[test]
-    fn test_looks_like_hash() {
-        assert!(looks_like_hash("a1b2c3d4"));
-        assert!(looks_like_hash("ABCDEF"));
-        assert!(looks_like_hash("0123456789"));
-        assert!(!looks_like_hash("main"));
-        assert!(!looks_like_hash(""));
-        assert!(!looks_like_hash("a1b2g3")); // 'g' is not hex
-    }
-
-    #[test]
-    fn test_find_function_by_name() {
-        let source =
-            "program test\n\nfn main() {\n    pub_write(0)\n}\n\nfn helper(x: Field) -> Field {\n    x + 1\n}\n";
-        let file = parse_file(source);
-        assert!(find_function(&file, "main").is_some());
-        assert!(find_function(&file, "helper").is_some());
-        assert!(find_function(&file, "nonexistent").is_none());
-    }
-
-    #[test]
-    fn test_find_function_by_hash_prefix() {
-        let source =
-            "program test\n\nfn main() {\n    pub_write(0)\n}\n\nfn helper(x: Field) -> Field {\n    x + 1\n}\n";
-        let file = parse_file(source);
-        let fn_hashes = hash::hash_file(&file);
-
-        // Get the hash for "main" and use its first 6 hex chars as prefix
-        let main_hash = &fn_hashes["main"];
-        let prefix = &main_hash.to_hex()[..6];
-
-        let result = find_function_by_hash(&file, &fn_hashes, prefix);
-        assert!(result.is_some());
-        let (name, _func) = result.unwrap();
-        assert_eq!(name, "main");
     }
 
     #[test]

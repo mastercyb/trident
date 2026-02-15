@@ -13,10 +13,10 @@
 
 use std::fmt;
 
+use crate::ast::display;
 use crate::ast::{self, File, FnDef, Item, Type};
 use crate::hash;
 use crate::sym::SymValue;
-use crate::view;
 
 // ─── Result Types ──────────────────────────────────────────────────
 
@@ -552,8 +552,8 @@ fn build_differential_program(file: &File, fn_a: &str, fn_b: &str) -> Option<Str
     let func_b = find_fn(file, fn_b)?;
 
     // Get formatted source for each function.
-    let src_a = view::format_function(func_a);
-    let src_b = view::format_function(func_b);
+    let src_a = display::format_function(func_a);
+    let src_b = display::format_function(func_b);
 
     // Build input reads and argument lists based on func_a's parameters.
     let mut reads = String::new();
