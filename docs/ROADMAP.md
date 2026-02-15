@@ -22,7 +22,7 @@ are the remaining roadmap.
 ## Milestone 3: Content-Addressed Codebase
 
 - [x] Complete — AST normalization, content hashing, store (add/list/view/rename/stats/history/deps), compilation caching, global registry (HTTP API, publish/pull, search, certificate sharing), semantic equivalence checking
-- [ ] On-chain Merkle registry (target: 0.2) — content-addressed definitions anchored on-chain with provable registration and verification
+- [ ] On-chain Merkle registry (target: 0.2) — TSP-2 Card collection per OS: each package is a Card (`asset_id = hash(name)`, `metadata_hash = content_hash(artifact)`), publishing = mint, version update = metadata update, three-tier resolution (local → cache → on-chain)
 
 ## Milestone 4: Multi-Target Backends
 
@@ -44,7 +44,8 @@ backend is fully implemented; others are stubs.
 - [ ] Browser extension integration library
 - [ ] ZK coprocessor programs (Axiom, Brevis, Herodotus integration)
 - [ ] Editor extension download page + marketplace listings
-- [ ] Reimplement store registry using gold standards with name auction
+- [ ] Reimplement store registry as TSP-2 Card collection with per-OS namespace governance
+- [ ] Ship `std.token`, `std.coin`, `std.card`, `std.skill.*` (23 skills) as standard library modules
 
 ## Language Evolution
 
