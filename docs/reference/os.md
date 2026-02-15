@@ -169,8 +169,10 @@ currency between neurons. `os.token` provides the full PLUMB lifecycle —
 Pay, Lock, Update, Mint, Burn — plus read queries,
 for both coins and uniqs.
 
-See the [Gold Standard](../explanation/gold-standard.md) for the full
-PLUMB specification, leaf formats, config model, and hook system.
+See [TSP-1 — Coin](tsp1-coin.md) and [TSP-2 — Card](tsp2-card.md) for
+leaf formats, config model, and circuit constraints. See the
+[Gold Standard](../explanation/gold-standard.md) for the PLUMB framework
+design rationale and skill library.
 
 #### PLUMB Operations — Coins
 

@@ -45,6 +45,13 @@ and code disagree, the reference wins.
 | [Intermediate Representation](ir.md) | TIR operations (54 ops, 4 tiers), lowering paths |
 | [Target Reference](targets.md) | OS model, target profiles, cost models |
 
+## Token Standards
+
+| Document | Description |
+|----------|-------------|
+| [TSP-1 — Coin](tsp1-coin.md) | Divisible asset standard (PLUMB). Conservation: `sum(balances) = supply` |
+| [TSP-2 — Card](tsp2-card.md) | Unique asset standard (PLUMB). Conservation: `owner_count(id) = 1` |
+
 ## Platform Reference
 
 | Document | Description |

@@ -634,6 +634,8 @@ See the [Skill Library](skill-library.md) for the full skill design space.
 
 ## 🔗 See Also
 
+- [TSP-1 — Coin Reference](../reference/tsp1-coin.md) — Canonical coin standard specification
+- [TSP-2 — Card Reference](../reference/tsp2-card.md) — Canonical card standard specification
 - [Skill Library](skill-library.md) — 23 composable token capabilities (DeFi, access control, composition)
 - [Tutorial](../tutorials/tutorial.md) — Language basics
 - [Programming Model](programming-model.md) — Execution model and stack semantics

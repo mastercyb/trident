@@ -738,7 +738,7 @@ trident build main.tri --costs
 The `os/neptune/` directory contains a complete ZK-native coin
 with pay, lock, update, mint, and burn operations. See
 `os/neptune/standards/coin.tri` for the implementation and
-`docs/reference/tsp1-coin.md` for the design.
+[TSP-1 — Coin](../reference/tsp1-coin.md) for the design.
 
 ### 4. Build and Check Costs
 
