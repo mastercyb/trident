@@ -29,7 +29,7 @@ disagree, reference/ wins.
 
 ```
 vm.*              Compiler intrinsics       TIR ops (hash, sponge, pub_read, assert)
-std.*             Real libraries            Implemented in Trident (sha256, bigint, ecdsa)
+std.*             Real libraries            Implemented in Trident (token, coin, card, skill, crypto)
 os.*              Portable runtime          os.signal, os.neuron, os.state, os.time
 os.<os>.*         OS-specific APIs          os.neptune.xfield, os.solana.pda
 ```
@@ -39,7 +39,7 @@ Source tree:
 ```
 src/          Compiler in Rust            Shrinks as self-hosting progresses
 vm/           VM intrinsics in Trident    vm/core/, vm/io/, vm/crypto/ — source code
-std/          Standard library in Trident sha256, bigint, ecdsa — source code
+std/          Standard library in Trident token, coin, card, skill, crypto, io — source code
 os/           OS bindings in Trident      Per-OS config, docs, and extensions
 ```
 
