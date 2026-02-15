@@ -27,7 +27,7 @@ pub(crate) fn generate_docs(
     // Compute cost analysis per module
     let mut module_costs: Vec<Option<cost::ProgramCost>> = Vec::new();
     for pm in &project.modules {
-        let pc = cost::CostAnalyzer::default().analyze_file(&pm.file);
+        let pc = cost::CostAnalyzer::for_target(&options.target_config.name).analyze_file(&pm.file);
         module_costs.push(Some(pc));
     }
 

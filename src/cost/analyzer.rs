@@ -128,9 +128,10 @@ impl<'a> CostAnalyzer<'a> {
         let max_height = total.max_height().max(attestation_hash_rows);
         let padded_height = next_power_of_two(max_height);
 
-        // Proving time estimate: padded_height * 300 columns * log2(ph) * 3ns field op
+        // Proving time estimate: padded_height * columns * log2(ph) * 3ns field op
+        let columns = self.cost_model.trace_column_count() as f64;
         let log_ph = (padded_height as f64).log2();
-        let estimated_proving_secs = (padded_height as f64) * 300.0 * log_ph * 3e-9;
+        let estimated_proving_secs = (padded_height as f64) * columns * log_ph * 3e-9;
 
         // H0004: scan for loop bound waste (bound >> constant end)
         for item in &file.items {
@@ -284,11 +285,12 @@ impl<'a> CostAnalyzer<'a> {
                 let scrutinee_cost = self.cost_expr(&expr.node);
                 // Per arm: dup + push + eq + skiz/call overhead = ~5 rows
                 let arm_overhead = stack_op.scale(3).add(&self.cost_model.if_overhead());
-                let num_literal_arms = arms
+                // All non-wildcard arms need comparison overhead
+                let num_checked_arms = arms
                     .iter()
-                    .filter(|a| matches!(a.pattern.node, MatchPattern::Literal(_)))
+                    .filter(|a| !matches!(a.pattern.node, MatchPattern::Wildcard))
                     .count() as u64;
-                let check_cost = arm_overhead.scale(num_literal_arms);
+                let check_cost = arm_overhead.scale(num_checked_arms);
                 // Worst-case body: max across all arms
                 let max_body = arms
                     .iter()
@@ -298,16 +300,20 @@ impl<'a> CostAnalyzer<'a> {
             }
             Stmt::Seal { fields, .. } => {
                 // push tag + field exprs + padding pushes + hash + write_io 5
+                // Hash rate is 10 (tag + up to 9 fields); excess fields need extra hashes.
                 let mut cost = stack_op.clone(); // push tag
                 for (_name, val) in fields {
                     cost = cost.add(&self.cost_expr(&val.node));
                 }
-                let padding = 10 - 1 - fields.len();
+                let padding = 9usize.saturating_sub(fields.len());
                 for _ in 0..padding {
                     cost = cost.add(&stack_op); // push 0 padding
                 }
-                // hash
-                cost = cost.add(&self.cost_model.builtin_cost("hash"));
+                // hash (one per 10 elements; extra hashes if >9 fields)
+                let hash_count = (1 + fields.len()).div_ceil(10);
+                for _ in 0..hash_count {
+                    cost = cost.add(&self.cost_model.builtin_cost("hash"));
+                }
                 // write_io 5
                 cost = cost.add(&self.cost_model.builtin_cost("pub_write5"));
                 cost

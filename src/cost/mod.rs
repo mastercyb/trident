@@ -14,7 +14,7 @@ pub use model::TableCost;
 // Crate-internal re-exports
 #[allow(unused_imports)]
 pub(crate) use analyzer::{next_power_of_two, CostAnalyzer, FunctionCost};
-pub(crate) use model::cost_builtin;
+pub(crate) use model::{cost_builtin, create_cost_model};
 
 #[cfg(test)]
 mod tests {

@@ -257,6 +257,7 @@ pub fn run_tests(
 
     // For each test function, compile a mini-program and report
     let mut results: Vec<TestResult> = Vec::new();
+    let mut short_names: Vec<String> = Vec::new();
     for (module_name, test_name) in &test_fns {
         // Find the source file for this module
         let source_entry = project
@@ -282,6 +283,11 @@ pub fn run_tests(
                     // Compute cost for the test function
                     let test_cost =
                         analyze_costs(&mini_source, &pm.file_path.to_string_lossy()).ok();
+                    if short_names.is_empty() {
+                        if let Some(ref pc) = test_cost {
+                            short_names = pc.table_short_names.clone();
+                        }
+                    }
                     let fn_cost = test_cost.as_ref().and_then(|pc| {
                         pc.functions
                             .iter()
@@ -333,7 +339,13 @@ pub fn run_tests(
     for result in &results {
         let status = if result.passed { "ok" } else { "FAILED" };
         let cost_str = if let Some(ref c) = result.cost {
-            format!(" (cc={}, hash={}, u32={})", c.get(0), c.get(1), c.get(2))
+            let sn: Vec<&str> = short_names.iter().map(|s| s.as_str()).collect();
+            let ann = c.format_annotation(&sn);
+            if ann.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", ann)
+            }
         } else {
             String::new()
         };

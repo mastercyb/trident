@@ -879,7 +879,8 @@ fn format_ast_type(ty: &ast::Type) -> String {
 /// Only shows non-zero tables (except `cc` which is always shown).
 /// Example output: `cc=1, hash=6 | dominant: hash`
 fn format_cost_inline(cost: &crate::cost::TableCost) -> String {
-    let short_names = ["cc", "hash", "u32", "opstack", "ram", "jump"];
+    let model = crate::cost::create_cost_model("triton");
+    let short_names = model.table_short_names();
     let n = cost.count as usize;
     let mut parts = Vec::new();
     for i in 0..n.min(short_names.len()) {

@@ -50,6 +50,9 @@ pub(crate) trait CostModel {
     /// Number of hash table rows per hash permutation.
     fn hash_rows_per_permutation(&self) -> u64;
 
+    /// Number of trace columns (used for proving time estimation).
+    fn trace_column_count(&self) -> u64;
+
     /// Target display name for reports.
     fn target_name(&self) -> &str;
 }
@@ -61,7 +64,7 @@ pub(crate) trait CostModel {
 /// Cost across execution tables. Fixed-size array indexed by table position
 /// as defined by the target's CostModel. Table names are external metadata,
 /// not baked into this struct.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TableCost {
     /// Cost values indexed by table position.
     pub values: [u64; MAX_TABLES],
@@ -76,6 +79,9 @@ impl Default for TableCost {
 }
 
 impl TableCost {
+    /// Zero cost with no active tables. When added to a real cost,
+    /// the result inherits the other cost's `count` (via `max`).
+    /// Use `from_slice(&[0; N])` when you need a zero cost with a specific table count.
     pub const ZERO: TableCost = TableCost {
         values: [0; MAX_TABLES],
         count: 0,
@@ -216,9 +222,17 @@ pub(crate) fn cost_builtin(target: &str, name: &str) -> TableCost {
 }
 
 /// Select the cost model for a given target name.
+///
+/// Falls back to Triton for unknown targets with an eprintln warning.
 pub(crate) fn create_cost_model(target_name: &str) -> &'static dyn CostModel {
     match target_name {
         "triton" => &TritonCostModel,
-        _ => &TritonCostModel, // fallback until other models are implemented
+        other => {
+            eprintln!(
+                "warning: no cost model for target '{}', falling back to triton",
+                other
+            );
+            &TritonCostModel
+        }
     }
 }

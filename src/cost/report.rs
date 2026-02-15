@@ -183,9 +183,9 @@ impl ProgramCost {
             hints.push(diag);
         }
 
-        // H0004: Loop bound waste
+        // H0004: Loop bound waste (entries already filtered at 4x+ in analyzer)
         for (fn_name, end_val, bound) in &self.loop_bound_waste {
-            let ratio = *bound as f64 / *end_val as f64;
+            let ratio = *bound as f64 / *end_val.max(&1) as f64;
             let mut diag = Diagnostic::warning(
                 format!(
                     "hint[H0004]: loop in '{}' bounded {} but iterates only {} times",

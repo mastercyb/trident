@@ -147,6 +147,10 @@ impl CostModel for TritonCostModel {
         6
     }
 
+    fn trace_column_count(&self) -> u64 {
+        300
+    }
+
     fn target_name(&self) -> &str {
         "Triton VM"
     }
