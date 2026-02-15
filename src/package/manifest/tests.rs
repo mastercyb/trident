@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use super::parse::{is_hex_hash, parse_inline_table};
@@ -125,7 +126,7 @@ fn test_lockfile_roundtrip() {
     let dir = tempfile::tempdir().unwrap();
     let lock_path = dir.path().join("trident.lock");
 
-    let mut locked = HashMap::new();
+    let mut locked = BTreeMap::new();
     locked.insert(
         "crypto_utils".to_string(),
         LockedDep {
@@ -205,7 +206,7 @@ fn test_resolve_path_dep() {
     )
     .unwrap();
 
-    let mut locked = HashMap::new();
+    let mut locked = BTreeMap::new();
     resolve_path_dep(
         project_root,
         "helper",
@@ -221,7 +222,7 @@ fn test_resolve_path_dep() {
     assert!(dep.source.starts_with("path:"));
 
     // Hash is deterministic.
-    let mut locked2 = HashMap::new();
+    let mut locked2 = BTreeMap::new();
     resolve_path_dep(
         project_root,
         "helper",
@@ -246,7 +247,7 @@ fn test_resolve_path_dep_directory() {
     )
     .unwrap();
 
-    let mut locked = HashMap::new();
+    let mut locked = BTreeMap::new();
     resolve_path_dep(project_root, "my_dep", Path::new("my_dep"), &mut locked).unwrap();
 
     assert_eq!(locked.len(), 1);
@@ -256,7 +257,7 @@ fn test_resolve_path_dep_directory() {
 #[test]
 fn test_resolve_path_dep_missing() {
     let dir = tempfile::tempdir().unwrap();
-    let mut locked = HashMap::new();
+    let mut locked = BTreeMap::new();
     let result = resolve_path_dep(
         dir.path(),
         "missing",
@@ -271,7 +272,7 @@ fn test_resolve_path_dep_missing() {
 #[test]
 fn test_dependency_search_paths() {
     let root = PathBuf::from("/project");
-    let mut locked = HashMap::new();
+    let mut locked = BTreeMap::new();
     locked.insert(
         "a".to_string(),
         LockedDep {
@@ -364,7 +365,7 @@ fn test_lockfile_sorted_output() {
     let dir = tempfile::tempdir().unwrap();
     let lock_path = dir.path().join("trident.lock");
 
-    let mut locked = HashMap::new();
+    let mut locked = BTreeMap::new();
     locked.insert(
         "zebra".to_string(),
         LockedDep {

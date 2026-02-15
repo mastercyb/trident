@@ -1,6 +1,6 @@
 //! Static analysis: recursion detection, call graph collection, used-module tracking.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use crate::ast::*;
 
@@ -9,8 +9,8 @@ use super::TypeChecker;
 impl TypeChecker {
     /// Build a call graph from the file's functions and report any cycles.
     pub(super) fn detect_recursion(&mut self, file: &File) {
-        // Build adjacency list: fn_name → set of called fn_names
-        let mut call_graph: HashMap<String, Vec<String>> = HashMap::new();
+        // Build adjacency list: fn_name -> set of called fn_names
+        let mut call_graph: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
         for item in &file.items {
             if let Item::Fn(func) = &item.node {
@@ -24,7 +24,7 @@ impl TypeChecker {
 
         // DFS cycle detection
         let fn_names: Vec<String> = call_graph.keys().cloned().collect();
-        let mut visited = HashMap::new(); // 0=unvisited, 1=in-stack, 2=done
+        let mut visited = BTreeMap::new(); // 0=unvisited, 1=in-stack, 2=done
 
         for name in &fn_names {
             visited.insert(name.clone(), 0u8);
@@ -61,8 +61,8 @@ impl TypeChecker {
     fn dfs_cycle(
         &self,
         node: &str,
-        graph: &HashMap<String, Vec<String>>,
-        visited: &mut HashMap<String, u8>,
+        graph: &BTreeMap<String, Vec<String>>,
+        visited: &mut BTreeMap<String, u8>,
         path: &mut Vec<String>,
     ) -> bool {
         visited.insert(node.to_string(), 1); // in-stack
@@ -226,7 +226,7 @@ impl TypeChecker {
         match expr {
             Expr::Call { path, args, .. } => {
                 let dotted = path.node.as_dotted();
-                // "module.func" → module is used
+                // "module.func" -> module is used
                 if let Some(dot_pos) = dotted.rfind('.') {
                     let prefix = &dotted[..dot_pos];
                     used.insert(prefix.to_string());
@@ -236,7 +236,7 @@ impl TypeChecker {
                 }
             }
             Expr::Var(name) => {
-                // "module.CONST" → module is used
+                // "module.CONST" -> module is used
                 if let Some(dot_pos) = name.rfind('.') {
                     let prefix = &name[..dot_pos];
                     used.insert(prefix.to_string());

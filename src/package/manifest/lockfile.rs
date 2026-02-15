@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use super::parse::parse_inline_table;
@@ -18,7 +18,7 @@ pub fn load_lockfile(path: &Path) -> Result<Lockfile, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("cannot read lockfile '{}': {}", path.display(), e))?;
 
-    let mut locked: HashMap<String, LockedDep> = HashMap::new();
+    let mut locked: BTreeMap<String, LockedDep> = BTreeMap::new();
     let mut in_lock_section = false;
 
     for line in content.lines() {

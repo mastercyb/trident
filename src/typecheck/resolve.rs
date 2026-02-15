@@ -1,6 +1,6 @@
-//! Type resolution: constant detection, size inference, type unification, AST→Ty lowering.
+//! Type resolution: constant detection, size inference, type unification, AST->Ty lowering.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::ast::*;
 use crate::span::Span;
@@ -22,7 +22,7 @@ impl TypeChecker {
         arg_tys: &[Ty],
         span: Span,
     ) -> Vec<u64> {
-        let mut subs: HashMap<String, u64> = HashMap::new();
+        let mut subs: BTreeMap<String, u64> = BTreeMap::new();
 
         for ((_, param_ty), arg_ty) in gdef.params.iter().zip(arg_tys.iter()) {
             Self::unify_sizes(param_ty, arg_ty, &mut subs);
@@ -47,8 +47,12 @@ impl TypeChecker {
     }
 
     /// Recursively match an AST type pattern against a concrete Ty to extract
-    /// size parameter bindings. E.g. `[Field; N]` vs `[Field; 5]` → N=5.
-    pub(super) fn unify_sizes(pattern: &Type, concrete: &Ty, subs: &mut HashMap<String, u64>) {
+    /// size parameter bindings. E.g. `[Field; N]` vs `[Field; 5]` -> N=5.
+    pub(super) fn unify_sizes(
+        pattern: &Type,
+        concrete: &Ty,
+        subs: &mut BTreeMap<String, u64>,
+    ) {
         match (pattern, concrete) {
             (Type::Array(inner_pat, ArraySize::Param(name)), Ty::Array(inner_ty, size)) => {
                 subs.insert(name.clone(), *size);
@@ -67,11 +71,15 @@ impl TypeChecker {
     }
 
     pub(super) fn resolve_type(&self, ty: &Type) -> Ty {
-        self.resolve_type_with_subs(ty, &HashMap::new())
+        self.resolve_type_with_subs(ty, &BTreeMap::new())
     }
 
     /// Resolve an AST type to a semantic type, substituting size parameters.
-    pub(super) fn resolve_type_with_subs(&self, ty: &Type, subs: &HashMap<String, u64>) -> Ty {
+    pub(super) fn resolve_type_with_subs(
+        &self,
+        ty: &Type,
+        subs: &BTreeMap<String, u64>,
+    ) -> Ty {
         match ty {
             Type::Field => Ty::Field,
             Type::XField => Ty::XField(self.target_config.xfield_width),

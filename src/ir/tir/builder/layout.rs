@@ -1,6 +1,6 @@
 //! Type width helpers and struct layout registration/lookup.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::ast::*;
 use crate::span::Spanned;
@@ -42,7 +42,7 @@ pub(crate) fn resolve_type_width(ty: &Type, tc: &TargetConfig) -> u32 {
 
 pub(crate) fn resolve_type_width_with_subs(
     ty: &Type,
-    subs: &HashMap<String, u64>,
+    subs: &BTreeMap<String, u64>,
     tc: &TargetConfig,
 ) -> u32 {
     match ty {
@@ -69,7 +69,7 @@ impl TIRBuilder {
         if let Type::Named(path) = ty {
             let struct_name = path.0.last().map(|s| s.as_str()).unwrap_or("");
             if let Some(sdef) = self.struct_types.get(struct_name).cloned() {
-                let mut field_map = HashMap::new();
+                let mut field_map = BTreeMap::new();
                 let total: u32 = sdef
                     .fields
                     .iter()

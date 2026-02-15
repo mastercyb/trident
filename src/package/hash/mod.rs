@@ -16,7 +16,7 @@
 //! - Renaming a function does not change its hash.
 //! - Adding/removing comments or formatting does not change the hash.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::ast::*;
 
@@ -25,7 +25,7 @@ const HASH_VERSION: u8 = 1;
 // ─── Content Hash ──────────────────────────────────────────────────
 
 /// A 256-bit BLAKE3 content hash.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ContentHash(pub [u8; 32]);
 
 impl ContentHash {
@@ -91,12 +91,12 @@ pub use normalize::Normalizer;
 // ─── Public API ────────────────────────────────────────────────────
 
 /// Hash a single function.
-pub fn hash_function(func: &FnDef, deps: HashMap<String, ContentHash>) -> ContentHash {
+pub fn hash_function(func: &FnDef, deps: BTreeMap<String, ContentHash>) -> ContentHash {
     Normalizer::hash_fn(func, deps)
 }
 
 /// Hash all functions in a file, returning name → hash map.
-pub fn hash_file(file: &File) -> HashMap<String, ContentHash> {
+pub fn hash_file(file: &File) -> BTreeMap<String, ContentHash> {
     Normalizer::hash_file(file)
 }
 

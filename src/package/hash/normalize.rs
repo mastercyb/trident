@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::ast::*;
 
@@ -115,7 +115,7 @@ pub struct Normalizer {
     /// De Bruijn environment.
     pub(super) env: DeBruijnEnv,
     /// Hashes of known functions (for dependency substitution).
-    pub(super) fn_hashes: HashMap<String, ContentHash>,
+    pub(super) fn_hashes: BTreeMap<String, ContentHash>,
 }
 
 impl Normalizer {
@@ -123,12 +123,12 @@ impl Normalizer {
         Self {
             buf: Vec::new(),
             env: DeBruijnEnv::new(),
-            fn_hashes: HashMap::new(),
+            fn_hashes: BTreeMap::new(),
         }
     }
 
     /// Set known function hashes for dependency substitution.
-    pub fn with_fn_hashes(mut self, hashes: HashMap<String, ContentHash>) -> Self {
+    pub fn with_fn_hashes(mut self, hashes: BTreeMap<String, ContentHash>) -> Self {
         self.fn_hashes = hashes;
         self
     }
@@ -174,16 +174,16 @@ impl Normalizer {
     }
 
     /// Hash a single function definition using Poseidon2 over Goldilocks.
-    pub fn hash_fn(func: &FnDef, fn_hashes: HashMap<String, ContentHash>) -> ContentHash {
+    pub fn hash_fn(func: &FnDef, fn_hashes: BTreeMap<String, ContentHash>) -> ContentHash {
         let mut normalizer = Normalizer::new().with_fn_hashes(fn_hashes);
         let bytes = normalizer.normalize_fn(func);
         ContentHash(crate::poseidon2::hash_bytes(&bytes))
     }
 
     /// Hash all functions in a file.
-    pub fn hash_file(file: &File) -> HashMap<String, ContentHash> {
-        let mut result = HashMap::new();
-        let mut fn_hashes = HashMap::new();
+    pub fn hash_file(file: &File) -> BTreeMap<String, ContentHash> {
+        let mut result = BTreeMap::new();
+        let mut fn_hashes = BTreeMap::new();
 
         // First pass: hash functions without dependency info
         // (For a proper implementation, this would do topological ordering)
@@ -196,7 +196,7 @@ impl Normalizer {
         }
 
         // Second pass: re-hash with dependency info
-        let mut stable = HashMap::new();
+        let mut stable = BTreeMap::new();
         for item in &file.items {
             if let Item::Fn(func) = &item.node {
                 let hash = Self::hash_fn(func, fn_hashes.clone());

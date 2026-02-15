@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::ast::{self, Expr, Stmt};
 use crate::hash::ContentHash;
@@ -8,7 +8,7 @@ use crate::hash::ContentHash;
 /// Extract dependencies from a function body by walking for Call expressions.
 pub(super) fn extract_dependencies(
     func: &ast::FnDef,
-    fn_hashes: &HashMap<String, ContentHash>,
+    fn_hashes: &BTreeMap<String, ContentHash>,
 ) -> Vec<ContentHash> {
     let mut deps = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -22,7 +22,7 @@ pub(super) fn extract_dependencies(
 
 fn walk_block_for_calls(
     block: &ast::Block,
-    fn_hashes: &HashMap<String, ContentHash>,
+    fn_hashes: &BTreeMap<String, ContentHash>,
     self_name: &str,
     deps: &mut Vec<ContentHash>,
     seen: &mut std::collections::HashSet<ContentHash>,
@@ -37,7 +37,7 @@ fn walk_block_for_calls(
 
 fn walk_stmt_for_calls(
     stmt: &Stmt,
-    fn_hashes: &HashMap<String, ContentHash>,
+    fn_hashes: &BTreeMap<String, ContentHash>,
     self_name: &str,
     deps: &mut Vec<ContentHash>,
     seen: &mut std::collections::HashSet<ContentHash>,
@@ -93,7 +93,7 @@ fn walk_stmt_for_calls(
 
 fn walk_expr_for_calls(
     expr: &Expr,
-    fn_hashes: &HashMap<String, ContentHash>,
+    fn_hashes: &BTreeMap<String, ContentHash>,
     self_name: &str,
     deps: &mut Vec<ContentHash>,
     seen: &mut std::collections::HashSet<ContentHash>,

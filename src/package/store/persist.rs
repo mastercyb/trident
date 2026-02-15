@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use crate::hash::ContentHash;
@@ -155,7 +155,7 @@ pub(super) fn serialize_definition(def: &Definition) -> String {
 }
 
 pub(super) fn deserialize_definition(text: &str) -> Option<Definition> {
-    let mut map: HashMap<String, String> = HashMap::new();
+    let mut map: BTreeMap<String, String> = BTreeMap::new();
     for line in text.lines() {
         if let Some((key, value)) = line.split_once('=') {
             map.insert(key.trim().to_string(), value.to_string());

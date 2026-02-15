@@ -19,8 +19,7 @@ mod stmt;
 #[cfg(test)]
 mod tests;
 
-#[allow(dead_code)]
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use crate::ast::*;
 use crate::target::TargetConfig;
@@ -42,29 +41,29 @@ pub struct TIRBuilder {
     /// Stack model: LRU-based manager with automatic RAM spill/reload.
     pub(crate) stack: StackManager,
     /// Struct field layouts: var_name -> { field_name -> (offset_from_top, field_width) }.
-    pub(crate) struct_layouts: HashMap<String, HashMap<String, (u32, u32)>>,
+    pub(crate) struct_layouts: BTreeMap<String, BTreeMap<String, (u32, u32)>>,
     /// Return widths of user-defined functions.
-    pub(crate) fn_return_widths: HashMap<String, u32>,
+    pub(crate) fn_return_widths: BTreeMap<String, u32>,
     /// Event tags: event name -> sequential integer tag.
-    pub(crate) event_tags: HashMap<String, u64>,
+    pub(crate) event_tags: BTreeMap<String, u64>,
     /// Event field names in declaration order: event name -> [field_name, ...].
-    pub(crate) event_defs: HashMap<String, Vec<String>>,
+    pub(crate) event_defs: BTreeMap<String, Vec<String>>,
     /// Struct type definitions: struct_name -> StructDef.
-    pub(crate) struct_types: HashMap<String, StructDef>,
+    pub(crate) struct_types: BTreeMap<String, StructDef>,
     /// Constants: qualified or short name -> integer value.
-    pub(crate) constants: HashMap<String, u64>,
+    pub(crate) constants: BTreeMap<String, u64>,
     /// Next temporary RAM address for runtime array ops.
     pub(crate) temp_ram_addr: u64,
     /// Intrinsic map: function name -> intrinsic TASM name.
-    pub(crate) intrinsic_map: HashMap<String, String>,
+    pub(crate) intrinsic_map: BTreeMap<String, String>,
     /// Module alias map: short name -> full module name.
-    pub(crate) module_aliases: HashMap<String, String>,
+    pub(crate) module_aliases: BTreeMap<String, String>,
     /// Monomorphized generic function instances to emit.
     pub(crate) mono_instances: Vec<MonoInstance>,
     /// Generic function AST definitions (name -> FnDef).
-    pub(crate) generic_fn_defs: HashMap<String, FnDef>,
+    pub(crate) generic_fn_defs: BTreeMap<String, FnDef>,
     /// Current size parameter substitutions during monomorphized emission.
-    pub(crate) current_subs: HashMap<String, u64>,
+    pub(crate) current_subs: BTreeMap<String, u64>,
     /// Per-call-site resolutions from the type checker.
     pub(crate) call_resolutions: Vec<MonoInstance>,
     /// Index into call_resolutions for the next generic call.
@@ -86,18 +85,18 @@ impl TIRBuilder {
             ops: Vec::new(),
             label_counter: 0,
             stack,
-            struct_layouts: HashMap::new(),
-            fn_return_widths: HashMap::new(),
-            event_tags: HashMap::new(),
-            event_defs: HashMap::new(),
-            struct_types: HashMap::new(),
-            constants: HashMap::new(),
+            struct_layouts: BTreeMap::new(),
+            fn_return_widths: BTreeMap::new(),
+            event_tags: BTreeMap::new(),
+            event_defs: BTreeMap::new(),
+            struct_types: BTreeMap::new(),
+            constants: BTreeMap::new(),
             temp_ram_addr: target_config.spill_ram_base / 2,
-            intrinsic_map: HashMap::new(),
-            module_aliases: HashMap::new(),
+            intrinsic_map: BTreeMap::new(),
+            module_aliases: BTreeMap::new(),
             mono_instances: Vec::new(),
-            generic_fn_defs: HashMap::new(),
-            current_subs: HashMap::new(),
+            generic_fn_defs: BTreeMap::new(),
+            current_subs: BTreeMap::new(),
             call_resolutions: Vec::new(),
             call_resolution_idx: 0,
             cfg_flags: HashSet::from(["debug".to_string()]),
@@ -112,17 +111,17 @@ impl TIRBuilder {
         self
     }
 
-    pub fn with_intrinsics(mut self, map: HashMap<String, String>) -> Self {
+    pub fn with_intrinsics(mut self, map: BTreeMap<String, String>) -> Self {
         self.intrinsic_map = map;
         self
     }
 
-    pub fn with_module_aliases(mut self, aliases: HashMap<String, String>) -> Self {
+    pub fn with_module_aliases(mut self, aliases: BTreeMap<String, String>) -> Self {
         self.module_aliases = aliases;
         self
     }
 
-    pub fn with_constants(mut self, constants: HashMap<String, u64>) -> Self {
+    pub fn with_constants(mut self, constants: BTreeMap<String, u64>) -> Self {
         self.constants.extend(constants);
         self
     }
@@ -165,7 +164,7 @@ impl TIRBuilder {
         // ── Pre-scan: register return widths for monomorphized instances ──
         for inst in &self.mono_instances.clone() {
             if let Some(gdef) = self.generic_fn_defs.get(&inst.name).cloned() {
-                let mut subs = HashMap::new();
+                let mut subs = BTreeMap::new();
                 for (param, val) in gdef.type_params.iter().zip(inst.size_args.iter()) {
                     subs.insert(param.node.clone(), *val);
                 }
@@ -326,9 +325,7 @@ impl TIRBuilder {
         let ret_width = func
             .return_ty
             .as_ref()
-            .map(|t| {
-                resolve_type_width_with_subs(&t.node, &self.current_subs, &self.target_config)
-            })
+            .map(|t| resolve_type_width_with_subs(&t.node, &self.current_subs, &self.target_config))
             .unwrap_or(0);
         self.build_fn_body(&name, func, &param_widths, ret_width);
         self.current_subs.clear();
@@ -338,13 +335,7 @@ impl TIRBuilder {
     ///
     /// Emits FnStart, registers parameters, compiles the body, cleans up
     /// the stack, and emits Return + FnEnd.
-    fn build_fn_body(
-        &mut self,
-        name: &str,
-        func: &FnDef,
-        param_widths: &[u32],
-        ret_width: u32,
-    ) {
+    fn build_fn_body(&mut self, name: &str, func: &FnDef, param_widths: &[u32], ret_width: u32) {
         self.ops.push(TIROp::FnStart(name.to_string()));
         self.stack.clear();
 

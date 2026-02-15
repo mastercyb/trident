@@ -1,6 +1,6 @@
 //! Block, statement, and match compilation.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::ast::*;
 use crate::span::Spanned;
@@ -45,7 +45,7 @@ impl TIRBuilder {
                             }
                             // Record struct field layout from struct init.
                             if let Expr::StructInit { fields, .. } = &init.node {
-                                let mut field_map = HashMap::new();
+                                let mut field_map = BTreeMap::new();
                                 let widths = self.compute_struct_field_widths(ty, fields);
                                 let total: u32 = widths.iter().sum();
                                 let mut offset = 0u32;

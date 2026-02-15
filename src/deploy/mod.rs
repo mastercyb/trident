@@ -10,7 +10,7 @@
 //!
 //! The packaged artifact can then be deployed via `trident deploy`.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::ast;
@@ -255,7 +255,7 @@ fn json_string(s: &str) -> String {
 /// Skips test functions.
 fn extract_functions(
     file: &ast::File,
-    fn_hashes: &HashMap<String, ContentHash>,
+    fn_hashes: &BTreeMap<String, ContentHash>,
 ) -> Vec<ManifestFunction> {
     let mut functions = Vec::new();
     for item in &file.items {

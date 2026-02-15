@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use super::{Dependency, Manifest};
@@ -12,7 +12,7 @@ use super::{Dependency, Manifest};
 ///   name = { name = "x", registry = "url" }      -> Registry dep
 ///   name = { path = "relative/path" }             -> Path dep
 pub fn parse_dependencies(toml_content: &str) -> Manifest {
-    let mut deps: HashMap<String, Dependency> = HashMap::new();
+    let mut deps: BTreeMap<String, Dependency> = BTreeMap::new();
     let mut in_deps_section = false;
 
     for line in toml_content.lines() {
@@ -77,8 +77,8 @@ pub fn parse_dependencies(toml_content: &str) -> Manifest {
 }
 
 /// Parse a TOML inline table body: `name = "x", registry = "url"`.
-pub(super) fn parse_inline_table(s: &str) -> HashMap<String, String> {
-    let mut map = HashMap::new();
+pub(super) fn parse_inline_table(s: &str) -> BTreeMap<String, String> {
+    let mut map = BTreeMap::new();
     for pair in s.split(',') {
         let pair = pair.trim();
         if let Some((k, v)) = pair.split_once('=') {

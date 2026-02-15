@@ -19,7 +19,7 @@
 //! uniquely identifies content, so the same hash always maps to the same
 //! result.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use crate::hash::ContentHash;
@@ -139,7 +139,7 @@ impl CachedVerification {
 
     /// Deserialize from text format.
     fn deserialize(text: &str) -> Option<Self> {
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         for line in text.lines() {
             if let Some((key, value)) = line.split_once('=') {
                 map.insert(key.trim().to_string(), value.trim().to_string());

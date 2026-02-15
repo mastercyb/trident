@@ -145,7 +145,7 @@ impl ArraySize {
     }
 
     /// Evaluate with substitutions for size parameters.
-    pub fn eval(&self, subs: &std::collections::HashMap<String, u64>) -> u64 {
+    pub fn eval(&self, subs: &std::collections::BTreeMap<String, u64>) -> u64 {
         match self {
             ArraySize::Literal(n) => *n,
             ArraySize::Param(name) => subs.get(name).copied().unwrap_or(0),

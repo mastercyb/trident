@@ -8,7 +8,7 @@
 //!   - **Registry** — resolved via a `RegistryClient` by name.
 //!   - **Path** — local filesystem, re-read every build.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 // ─── Data Types ────────────────────────────────────────────────────
@@ -35,13 +35,13 @@ pub struct LockedDep {
 /// Package manifest: parsed `[dependencies]` from trident.toml.
 #[derive(Clone, Debug, Default)]
 pub struct Manifest {
-    pub dependencies: HashMap<String, Dependency>,
+    pub dependencies: BTreeMap<String, Dependency>,
 }
 
 /// Lock file contents.
 #[derive(Clone, Debug, Default)]
 pub struct Lockfile {
-    pub locked: HashMap<String, LockedDep>,
+    pub locked: BTreeMap<String, LockedDep>,
 }
 
 mod lockfile;

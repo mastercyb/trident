@@ -1,6 +1,6 @@
 //! AST navigation: find functions by name or content hash.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use super::{File, FnDef, Item};
 use crate::hash::ContentHash;
@@ -23,7 +23,7 @@ pub fn find_function<'a>(file: &'a File, name: &str) -> Option<&'a FnDef> {
 /// given hex prefix. Returns `None` if no match or ambiguous.
 pub fn find_function_by_hash<'a>(
     file: &'a File,
-    fn_hashes: &HashMap<String, ContentHash>,
+    fn_hashes: &BTreeMap<String, ContentHash>,
     prefix: &str,
 ) -> Option<(String, &'a FnDef)> {
     let prefix_lower = prefix.to_lowercase();

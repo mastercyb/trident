@@ -107,14 +107,9 @@ pub fn compile_project_with_options(
 
     let project = PreparedProject::build(entry_path, options)?;
 
-    // Pipeline methods return BTreeMap for determinism; convert to HashMap
-    // at the TIRBuilder boundary (builder accepts HashMap).
-    let intrinsic_map: std::collections::HashMap<_, _> =
-        project.intrinsic_map().into_iter().collect();
-    let module_aliases: std::collections::HashMap<_, _> =
-        project.module_aliases().into_iter().collect();
-    let external_constants: std::collections::HashMap<_, _> =
-        project.external_constants().into_iter().collect();
+    let intrinsic_map = project.intrinsic_map();
+    let module_aliases = project.module_aliases();
+    let external_constants = project.external_constants();
 
     // Emit TASM for each module
     let mut tasm_modules = Vec::new();

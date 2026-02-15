@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::registry::{PullResult, RegistryClient};
@@ -60,7 +60,7 @@ pub fn resolve_dependencies(
     existing_lock: &Option<Lockfile>,
     default_registry: &str,
 ) -> Result<Lockfile, String> {
-    let mut locked: HashMap<String, LockedDep> = HashMap::new();
+    let mut locked: BTreeMap<String, LockedDep> = BTreeMap::new();
 
     for (dep_name, dep) in &manifest.dependencies {
         match dep {
@@ -99,7 +99,7 @@ fn resolve_hash_dep(
     hash: &str,
     existing_lock: &Option<Lockfile>,
     default_registry: &str,
-    locked: &mut HashMap<String, LockedDep>,
+    locked: &mut BTreeMap<String, LockedDep>,
 ) -> Result<(), String> {
     let cached = dep_source_path(project_root, hash);
     if cached.exists() {
@@ -146,7 +146,7 @@ fn resolve_registry_dep(
     registry_name: &str,
     registry_url: &str,
     default_registry: &str,
-    locked: &mut HashMap<String, LockedDep>,
+    locked: &mut BTreeMap<String, LockedDep>,
 ) -> Result<(), String> {
     let url = if registry_url.is_empty() {
         default_registry
@@ -178,7 +178,7 @@ pub(super) fn resolve_path_dep(
     project_root: &Path,
     dep_name: &str,
     rel_path: &Path,
-    locked: &mut HashMap<String, LockedDep>,
+    locked: &mut BTreeMap<String, LockedDep>,
 ) -> Result<(), String> {
     let abs_path = project_root.join(rel_path);
 

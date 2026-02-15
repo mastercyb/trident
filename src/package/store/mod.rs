@@ -14,7 +14,7 @@
 //!   history.txt
 //! ```
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::ast::{self, Item};
@@ -28,11 +28,11 @@ use crate::hash::{self, ContentHash};
 /// Persisted to disk at `~/.trident/codebase/` (or `$TRIDENT_CODEBASE_DIR`).
 pub struct Codebase {
     /// Hash -> definition source code.
-    pub(super) definitions: HashMap<ContentHash, Definition>,
+    pub(super) definitions: BTreeMap<ContentHash, Definition>,
     /// Name -> hash mapping (current bindings).
-    pub(super) names: HashMap<String, ContentHash>,
+    pub(super) names: BTreeMap<String, ContentHash>,
     /// Hash -> list of names that have pointed to it (history).
-    pub(super) name_history: HashMap<ContentHash, Vec<NameEntry>>,
+    pub(super) name_history: BTreeMap<ContentHash, Vec<NameEntry>>,
     /// Root directory for persistence.
     pub(super) root: PathBuf,
 }
@@ -119,9 +119,9 @@ impl Codebase {
         std::fs::create_dir_all(root.join("defs"))?;
 
         let mut cb = Codebase {
-            definitions: HashMap::new(),
-            names: HashMap::new(),
-            name_history: HashMap::new(),
+            definitions: BTreeMap::new(),
+            names: BTreeMap::new(),
+            name_history: BTreeMap::new(),
             root: root.to_path_buf(),
         };
 

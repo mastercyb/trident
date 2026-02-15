@@ -1,6 +1,6 @@
 //! Expression type checking: check_expr, check_binop.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::ast::*;
 use crate::span::Span;
@@ -116,7 +116,7 @@ impl TypeChecker {
                     };
 
                     // Build substitution map.
-                    let mut subs = HashMap::new();
+                    let mut subs = BTreeMap::new();
                     for (param_name, size_val) in gdef.type_params.iter().zip(size_args.iter()) {
                         subs.insert(param_name.clone(), *size_val);
                     }
