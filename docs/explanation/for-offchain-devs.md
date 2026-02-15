@@ -4,9 +4,9 @@ A guide to Trident and zero-knowledge programming for developers coming from
 Rust, Python, Go, JavaScript, C++, or any conventional language. No prior
 knowledge of cryptography, ZK proofs, or field arithmetic is assumed.
 
-Trident is a universal language for provable computation. It currently targets
-Triton VM by default, with a multi-target architecture designed to compile to
-any zkVM (Miden, Cairo, SP1/RISC Zero, and others) from a single source.
+Trident is a universal language for provable computation. The first target is
+Triton VM. The roadmap includes quantum, ML, ZK, and classical backends —
+the same source will compile to new targets as they ship.
 
 ---
 
@@ -37,7 +37,7 @@ silently or throw exceptions. In Trident, the basic numeric type is a field
 element -- an integer that wraps around at a specific prime number instead of
 at a power of two.
 
-Each target VM uses its own prime. Triton VM (the default target) uses
+Each target VM uses its own prime. Triton VM (the first target) uses
 `p = 2^64 - 2^32 + 1`, known as the
 [Goldilocks prime](https://xn--2-umb.com/22/goldilocks/). Think of it as a
 64-bit integer where arithmetic wraps at `p` instead of at `2^64`:
@@ -323,10 +323,10 @@ Quantum safety. STARK proofs are based on hash functions, not elliptic
 curves. When quantum computers arrive, your proofs remain secure.
 
 Multi-target deployment. The same Trident source is designed to compile to
-multiple zkVMs via `--target`. Write your program once, then deploy to Triton
-VM, Miden VM, Cairo, or other backends without rewriting. The universal core of the language
-is portable across all targets; backend extensions let you access
-target-specific capabilities when needed.
+multiple targets via `--target`. Write your program once, then deploy to new
+backends — quantum, ML, ZK, and classical — as they ship. The universal core
+of the language is portable across all targets; backend extensions let you
+access target-specific capabilities when needed.
 
 Cost certainty. The compiler tells you exactly how much proving will cost
 before you run anything. `trident build --costs` gives you the precise trace

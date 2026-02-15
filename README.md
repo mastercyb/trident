@@ -18,11 +18,11 @@ field arithmetic. Trident sits at their intersection because its native
 The convergence is a
 [mathematical inevitability](docs/explanation/quantum.md).
 
-Today Trident compiles to [Triton VM](https://triton-vm.org/), powering
-[Neptune Cash](https://neptune.cash/) — the only programmable, private,
-mineable, quantum-safe blockchain that exists. The architecture supports
-[multi-target compilation](docs/explanation/multi-target.md) — the same
-source will compile to other proving backends as they ship.
+Today Trident compiles to [Triton VM](https://triton-vm.org/) — the first
+target — powering [Neptune Cash](https://neptune.cash/), the only
+programmable, private, mineable, quantum-safe blockchain that exists. The
+[multi-target architecture](docs/explanation/multi-target.md) supports
+quantum, ML, ZK, and classical backends as they ship.
 
 ```trident
 program hello

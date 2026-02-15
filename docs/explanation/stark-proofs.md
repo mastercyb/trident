@@ -3,8 +3,8 @@
 *From execution traces to quantum-safe cryptographic proofs*
 
 > Triton VM target. This document describes the proof system used by the
-> Triton VM backend -- Trident's current default compilation target. Other
-> backends (future or third-party) may use different proof systems, different
+> Triton VM backend -- Trident's first compilation target. Other backends
+> (future or third-party) may use different proof systems, different
 > arithmetizations, or different hash functions. The concepts here -- execution
 > traces, AIR constraints, FRI, Fiat-Shamir -- are broadly applicable to all
 > STARK systems, but the specific tables, cost numbers, and instruction

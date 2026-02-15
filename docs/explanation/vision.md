@@ -102,8 +102,8 @@ and the first programming language positioned at the convergence point of
 all three revolutions.
 
 Source code compiles through a [54-operation IR](../reference/ir.md) that
-lowers to any target VM. The default target is Triton VM, with the
-architecture ready for Miden, Cairo, RISC-V, EVM, Nock, and native backends.
+lowers to a target VM. The first target is Triton VM. The roadmap includes
+quantum, ML, ZK, and classical backends.
 
 The design constraints are deliberate:
 

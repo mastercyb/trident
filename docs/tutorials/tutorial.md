@@ -573,7 +573,7 @@ The standard library is organized in three universal layers plus backend extensi
 | `std.crypto` | `merkle`, `auth` | Merkle proofs, authorization |
 | `os.neptune` | `xfield`, `kernel`, `utxo`, `storage` | Triton VM-specific operations |
 
-The `vm.*` and `std.*` modules are target-agnostic and work across all backends. The `os.neptune.*` modules are available only when compiling with `--target triton` (the default). Importing an `os.<os>.*` module while targeting a different backend is a compile error.
+The `vm.*` and `std.*` modules are target-agnostic and work across all backends. The `os.neptune.*` modules are available only when compiling with `--target triton` (the first target). Importing an `os.<os>.*` module while targeting a different backend is a compile error.
 
 See the [Reference](../reference/language.md) for a complete list of standard library functions, and the [Programming Model](../explanation/programming-model.md) for how I/O interacts with the prover and verifier.
 

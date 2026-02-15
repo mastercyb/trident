@@ -244,7 +244,7 @@ flags = ["release"]
 | `name` | Project name (used for output file naming) |
 | `version` | Project version |
 | `entry` | Entry point file (default: `main.tri`) |
-| `target` | Default VM target (optional, overrides `--target` default) |
+| `target` | VM target (optional, overrides `--target` default) |
 
 Profile-specific flags enable conditional compilation with `cfg` attributes. Use `--profile` to select which flag set is active:
 
@@ -254,7 +254,7 @@ trident build . --profile release
 
 ## 🎯 Targeting VMs
 
-Trident's compiler is parameterized by a `TargetConfig` that defines every target-specific constant: stack depth, digest width, hash rate, field prime, cost tables, and output extension. The default target is Triton VM.
+Trident's compiler is parameterized by a `TargetConfig` that defines every target-specific constant: stack depth, digest width, hash rate, field prime, cost tables, and output extension. The first target is Triton VM.
 
 ```bash
 trident build main.tri --target triton    # explicit (same as default)
