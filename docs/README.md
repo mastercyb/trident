@@ -62,7 +62,7 @@ Per-target documentation lives alongside its config:
 
 | Document | Description |
 |----------|-------------|
-| [Vision](explanation/vision.md) | Why Trident exists |
+| [Vision](explanation/vision.md) | Three revolutions, one field — why Trident exists |
 | [Multi-Target Compilation](explanation/multi-target.md) | One source, every chain |
 | [Programming Model](explanation/programming-model.md) | Execution model, OS abstraction, six concerns |
 | [How STARK Proofs Work](explanation/stark-proofs.md) | From traces to quantum-safe proofs |
