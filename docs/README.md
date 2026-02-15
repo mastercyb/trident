@@ -73,7 +73,9 @@ Per-target documentation lives alongside its config:
 | [Skill Library](explanation/skill-library.md) | 23 composable token capabilities |
 | [For Offchain Devs](explanation/for-offchain-devs.md) | Zero-knowledge from scratch |
 | [For Onchain Devs](explanation/for-onchain-devs.md) | Mental model migration from Solidity/Anchor/CosmWasm |
+| [Privacy](explanation/privacy.md) | The privacy trilateral: ZK + FHE + MPC over one field |
 | [Quantum Computing](explanation/quantum.md) | Why prime field arithmetic is quantum-native |
+| [Verifiable AI](explanation/trident-ai-zkml-deep-dive.md) | Why the next generation of zkML starts from prime fields |
 | [Cyber License](explanation/cyber-license.md) | Don't trust. Don't fear. Don't beg. |
 
 ## 🗺️ Project

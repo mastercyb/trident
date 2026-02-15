@@ -6,8 +6,8 @@
   <img src="media/tri.gif" width="100%" alt="Trident" />
 </p>
 
-Trident is a programming language for provable, intelligent, quantum-native
-computation. Every variable, every operation, every function compiles to
+Trident is a programming language for provable, private, intelligent,
+quantum-native computation. Every variable, every operation, every function compiles to
 arithmetic over the Goldilocks prime field (p = 2^64 - 2^32 + 1). Programs
 produce STARK proofs — hash-based, post-quantum secure, no trusted setup.
 
@@ -82,7 +82,10 @@ Same structure. Three readings.
 > Trident makes prime field elements its fundamental primitive. The
 > convergence is structural.
 
-See [Quantum Computing](docs/explanation/quantum.md) for the full proof.
+See [Quantum Computing](docs/explanation/quantum.md),
+[Privacy](docs/explanation/privacy.md), and
+[Verifiable AI](docs/explanation/trident-ai-zkml-deep-dive.md)
+for the full treatment of each pillar.
 
 ---
 
