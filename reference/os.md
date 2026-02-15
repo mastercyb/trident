@@ -424,94 +424,28 @@ See each OS doc for the full API reference.
 
 ---
 
-## Per-OS On-Chain Registry
+## Per-OS On-Chain Registry (Atlas)
 
-Each OS maintains a package registry as a TSP-2 Card collection anchored
-on-chain. Packages are Cards. Publishing is minting. Updating is metadata
-update. Transferring ownership is a pay operation. The registry reuses the
-same PLUMB framework that powers all tokens — no separate registry protocol
-needed.
+Each OS can maintain an on-chain package registry called Atlas — a
+TSP-2 Card collection where packages are Cards. See
+[Atlas Reference](atlas.md) for the complete specification: registry
+model, three-tier resolution, CLI commands, wire protocol, and security
+model.
 
-### Registry Model
+### OS Configuration
 
-| Concept | TSP-2 Mapping |
-|---------|---------------|
-| Package | Card (one Card per package name) |
-| Package name | `asset_id = hash(name)` |
-| Package version | `metadata_hash = content_hash(compiled_artifact)` |
-| Publisher | `owner_id` (Card owner) |
-| Publish | Mint (TSP-2 Op 3) — requires registry mint authority |
-| New version | Update metadata (TSP-2 Op 2) — owner updates `metadata_hash` |
-| Transfer ownership | Pay (TSP-2 Op 0) — transfer Card to new owner |
-| Deprecate | Burn (TSP-2 Op 4) — if BURNABLE flag set |
-
-Each OS has its own registry collection with its own mint authority. This
-allows each OS community to govern its own namespace independently —
-different chains, different governance, different naming policies, same
-underlying standard.
-
-### Three-Tier Resolution
-
-When the compiler encounters an import, it resolves through three tiers:
-
-```text
-use my_package.module
-
-1. Local files     → ./my_package/module.tri (project-relative)
-2. Registry cache  → ~/.trident/cache/<os>/my_package/module.tri
-3. On-chain query  → os.<os>.registry.my_package → resolve Card → fetch artifact
-```
-
-Local files always win. The registry cache stores previously fetched
-artifacts to avoid repeated on-chain queries. On-chain resolution is the
-fallback — the compiler queries the OS's registry collection, finds the
-Card with `asset_id = hash("my_package")`, reads `metadata_hash`, and
-fetches the corresponding content-addressed artifact.
-
-### Registry Namespace
-
-Registry packages are accessible under `os.<os>.registry.*`:
-
-```trident
-use os.neptune.registry.my_skill    // Resolved from Neptune's on-chain registry
-use os.ethereum.registry.my_lib     // Resolved from Ethereum's on-chain registry
-```
-
-This keeps registry-resolved names explicitly scoped to their OS. A
-package published on Neptune's registry has no relationship to a package
-with the same name on Ethereum's registry — they are independent
-collections with independent governance.
-
-### Import / Deploy / Reference
-
-The same `.tri` source code participates in three modes:
-
-| Mode | Mechanism | When |
-|------|-----------|------|
-| **Import** | `use std.skill.liquidity` | Compile-time inlining — code becomes part of your circuit |
-| **Deploy** | `trident deploy skill.tri --target neptune` | Publish compiled artifact to OS registry as a Card |
-| **Reference** | Hook config points to content hash or registry name | Verifier loads and composes the proof independently at verification time |
-
-Import is for libraries you want to include in your circuit. Deploy is
-for programs you want others to reference. Reference is for hook programs
-that compose proofs independently — the token circuit and the hook circuit
-are proven separately, then the verifier checks both.
-
-### OS TOML Configuration
-
-Each OS that supports an on-chain registry declares it in `target.toml`:
+Each OS that supports Atlas declares it in `target.toml`:
 
 ```toml
-[registry]
+[atlas]
 collection_id = "0x..."       # TSP-2 collection address on this OS
 mint_authority = "governance"  # Who can publish new packages
 resolution = "on-chain"       # "on-chain", "http", or "local-only"
 cache_dir = "~/.trident/cache"
 ```
 
-See [TSP-2 Card reference](tsp2-card.md) for the Card leaf format and
-operations. See [CLI Reference](cli.md) for `trident registry` and
-`trident deploy` commands.
+See [Atlas CLI Commands](atlas.md#7-cli-commands) for `trident atlas`
+and `trident deploy` usage.
 
 ---
 

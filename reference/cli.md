@@ -74,11 +74,11 @@ trident store list                      # List all definitions
 trident store lookup <hash>             # Find definition by hash
 trident store diff <file>               # Show changed definitions
 
-# Registry
-trident registry serve                  # Start local registry server
-trident registry publish                # Publish codebase to registry
-trident registry pull <hash>            # Pull definition by hash
-trident registry search <query>         # Search definitions
+# Atlas (Package Registry)
+trident atlas publish                # Publish definitions to Atlas
+trident atlas pull <hash|name>       # Pull definition by hash or name
+trident atlas search <query>         # Search definitions
+trident atlas serve                  # Start local Atlas server
 # Dependencies
 trident deps list                       # Show declared dependencies
 trident deps lock                       # Lock dependency versions
