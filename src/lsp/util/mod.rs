@@ -3,8 +3,10 @@
 
 use tower_lsp::lsp_types::*;
 
-use crate::ast;
 use crate::span::Span;
+
+// Re-export canonical formatters so lsp/mod.rs can import them via util::.
+pub use crate::ast::display::{format_ast_type, format_fn_signature};
 
 pub fn to_lsp_diagnostic(diag: &crate::diagnostic::Diagnostic, source: &str) -> Diagnostic {
     let start = byte_offset_to_position(source, diag.span.start as usize);
@@ -143,35 +145,6 @@ pub fn is_ident_char(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }
 
-pub fn format_fn_signature(f: &ast::FnDef) -> String {
-    let params: Vec<String> = f
-        .params
-        .iter()
-        .map(|p| format!("{}: {}", p.name.node, format_ast_type(&p.ty.node)))
-        .collect();
-    let ret = match &f.return_ty {
-        Some(ty) => format!(" -> {}", format_ast_type(&ty.node)),
-        None => String::new(),
-    };
-    format!("fn {}({}){}", f.name.node, params.join(", "), ret)
-}
-
-pub fn format_ast_type(ty: &ast::Type) -> String {
-    match ty {
-        ast::Type::Field => "Field".to_string(),
-        ast::Type::XField => "XField".to_string(),
-        ast::Type::Bool => "Bool".to_string(),
-        ast::Type::U32 => "U32".to_string(),
-        ast::Type::Digest => "Digest".to_string(),
-        ast::Type::Array(inner, n) => format!("[{}; {}]", format_ast_type(inner), n),
-        ast::Type::Tuple(elems) => {
-            let parts: Vec<_> = elems.iter().map(format_ast_type).collect();
-            format!("({})", parts.join(", "))
-        }
-        ast::Type::Named(path) => path.as_dotted(),
-    }
-}
-
 /// Format a `TableCost` as a compact inline string for hover display.
 pub fn format_cost_inline(cost: &crate::cost::TableCost) -> String {
     let model = crate::cost::create_cost_model("triton");
@@ -228,7 +201,6 @@ pub fn find_call_context(source: &str, pos: Position) -> Option<(String, u32)> {
     }
     None
 }
-
 
 #[cfg(test)]
 mod tests;

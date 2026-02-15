@@ -6,6 +6,7 @@
 use std::path::Path;
 
 use crate::ast;
+use crate::ast::display::{format_ast_type, format_const_value, format_fn_signature};
 use crate::ast::FileKind;
 use crate::cost;
 use crate::diagnostic::Diagnostic;
@@ -232,23 +233,6 @@ pub(crate) fn generate_docs(
     Ok(doc)
 }
 
-/// Format an AST type for documentation display.
-pub(crate) fn format_ast_type(ty: &ast::Type) -> String {
-    match ty {
-        ast::Type::Field => "Field".to_string(),
-        ast::Type::XField => "XField".to_string(),
-        ast::Type::Bool => "Bool".to_string(),
-        ast::Type::U32 => "U32".to_string(),
-        ast::Type::Digest => "Digest".to_string(),
-        ast::Type::Array(inner, size) => format!("[{}; {}]", format_ast_type(inner), size),
-        ast::Type::Tuple(elems) => {
-            let parts: Vec<_> = elems.iter().map(format_ast_type).collect();
-            format!("({})", parts.join(", "))
-        }
-        ast::Type::Named(path) => path.as_dotted(),
-    }
-}
-
 /// Compute the width in field elements for an AST type (best-effort).
 pub(crate) fn ast_type_width(ty: &ast::Type, config: &TargetConfig) -> u32 {
     match ty {
@@ -262,41 +246,5 @@ pub(crate) fn ast_type_width(ty: &ast::Type, config: &TargetConfig) -> u32 {
         }
         ast::Type::Tuple(elems) => elems.iter().map(|e| ast_type_width(e, config)).sum(),
         ast::Type::Named(_) => 1, // unknown, default to 1
-    }
-}
-
-/// Format a function signature for documentation.
-pub(crate) fn format_fn_signature(func: &ast::FnDef) -> String {
-    let mut sig = String::from("fn ");
-    sig.push_str(&func.name.node);
-
-    // Type params
-    if !func.type_params.is_empty() {
-        let params: Vec<_> = func.type_params.iter().map(|p| p.node.clone()).collect();
-        sig.push_str(&format!("<{}>", params.join(", ")));
-    }
-
-    sig.push('(');
-    let params: Vec<String> = func
-        .params
-        .iter()
-        .map(|p| format!("{}: {}", p.name.node, format_ast_type(&p.ty.node)))
-        .collect();
-    sig.push_str(&params.join(", "));
-    sig.push(')');
-
-    if let Some(ref ret) = func.return_ty {
-        sig.push_str(&format!(" -> {}", format_ast_type(&ret.node)));
-    }
-
-    sig
-}
-
-/// Format a constant value expression for documentation.
-pub(crate) fn format_const_value(expr: &ast::Expr) -> String {
-    match expr {
-        ast::Expr::Literal(ast::Literal::Integer(n)) => n.to_string(),
-        ast::Expr::Literal(ast::Literal::Bool(b)) => b.to_string(),
-        _ => "...".to_string(),
     }
 }

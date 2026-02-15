@@ -1,6 +1,9 @@
-//! Pretty-printing utilities for AST function definitions.
+//! Pretty-printing utilities for AST nodes.
+//!
+//! This module is the single source of truth for converting AST types,
+//! function signatures, and constant values to display strings.
 
-use super::{File, FileKind, FnDef, Item};
+use super::{Expr, File, FileKind, FnDef, Item, Literal, Type};
 use crate::format;
 use crate::span::Spanned;
 
@@ -23,29 +26,6 @@ pub fn format_function(func: &FnDef) -> String {
     strip_synthetic_header(&formatted)
 }
 
-/// Pretty-print a function with an optional cost annotation appended
-/// as a trailing comment on the signature line.
-pub fn format_function_with_cost(func: &FnDef, cost: Option<&str>) -> String {
-    let base = format_function(func);
-    match cost {
-        Some(c) => {
-            // Insert cost comment after the opening brace of the function
-            if let Some(brace_pos) = base.find('{') {
-                let (before, after) = base.split_at(brace_pos + 1);
-                format!("{} // cost: {}{}", before.trim_end(), c, after)
-            } else {
-                // No body (intrinsic) — append at end of first line
-                let mut lines: Vec<&str> = base.lines().collect();
-                if let Some(first) = lines.first_mut() {
-                    return format!("{} // cost: {}", first, c);
-                }
-                base
-            }
-        }
-        None => base,
-    }
-}
-
 /// Strip the synthetic "program _view\n\n" header produced by the
 /// formatter when we wrap a single function in a dummy File.
 fn strip_synthetic_header(formatted: &str) -> String {
@@ -56,6 +36,62 @@ fn strip_synthetic_header(formatted: &str) -> String {
         rest.to_string()
     } else {
         formatted.to_string()
+    }
+}
+
+// ─── Canonical formatting helpers ──────────────────────────────────
+
+/// Format an AST type for display (documentation, diagnostics, hover).
+pub fn format_ast_type(ty: &Type) -> String {
+    match ty {
+        Type::Field => "Field".to_string(),
+        Type::XField => "XField".to_string(),
+        Type::Bool => "Bool".to_string(),
+        Type::U32 => "U32".to_string(),
+        Type::Digest => "Digest".to_string(),
+        Type::Array(inner, size) => format!("[{}; {}]", format_ast_type(inner), size),
+        Type::Tuple(elems) => {
+            let parts: Vec<_> = elems.iter().map(format_ast_type).collect();
+            format!("({})", parts.join(", "))
+        }
+        Type::Named(path) => path.as_dotted(),
+    }
+}
+
+/// Format a function signature for display (documentation, diagnostics).
+///
+/// Includes type parameters, parameter names and types, and return type.
+pub fn format_fn_signature(func: &FnDef) -> String {
+    let mut sig = String::from("fn ");
+    sig.push_str(&func.name.node);
+
+    if !func.type_params.is_empty() {
+        let params: Vec<_> = func.type_params.iter().map(|p| p.node.clone()).collect();
+        sig.push_str(&format!("<{}>", params.join(", ")));
+    }
+
+    sig.push('(');
+    let params: Vec<String> = func
+        .params
+        .iter()
+        .map(|p| format!("{}: {}", p.name.node, format_ast_type(&p.ty.node)))
+        .collect();
+    sig.push_str(&params.join(", "));
+    sig.push(')');
+
+    if let Some(ref ret) = func.return_ty {
+        sig.push_str(&format!(" -> {}", format_ast_type(&ret.node)));
+    }
+
+    sig
+}
+
+/// Format a constant value expression for display (documentation).
+pub fn format_const_value(expr: &Expr) -> String {
+    match expr {
+        Expr::Literal(Literal::Integer(n)) => n.to_string(),
+        Expr::Literal(Literal::Bool(b)) => b.to_string(),
+        _ => "...".to_string(),
     }
 }
 
@@ -101,15 +137,5 @@ mod tests {
         let formatted = format_function(func);
 
         assert!(formatted.contains("pub fn helper("));
-    }
-
-    #[test]
-    fn test_format_function_with_cost() {
-        let source = "program test\n\nfn add(a: Field, b: Field) -> Field {\n    a + b\n}\n";
-        let file = parse_file(source);
-        let func = find_function(&file, "add").expect("add function should exist");
-        let formatted = format_function_with_cost(func, Some("cc=5, hash=0"));
-
-        assert!(formatted.contains("// cost: cc=5, hash=0"));
     }
 }

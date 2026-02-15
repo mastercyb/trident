@@ -4,6 +4,9 @@
 /// (`#[requires(...)]` and `#[ensures(...)]`), and empty or stub bodies.
 /// `trident generate` fills in scaffolding: TODO comments, placeholder
 /// return values, and assertion stubs that mirror the spec annotations.
+use crate::ast::display::{
+    format_ast_type as format_type, format_const_value as format_const_expr,
+};
 use crate::ast::{File, FnDef, Item, Param, Type};
 
 // ---------------------------------------------------------------------------
@@ -290,32 +293,6 @@ pub fn extract_variables(spec: &str) -> Vec<String> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Format a Type as Trident source text.
-fn format_type(ty: &Type) -> String {
-    match ty {
-        Type::Field => "Field".to_string(),
-        Type::XField => "XField".to_string(),
-        Type::Bool => "Bool".to_string(),
-        Type::U32 => "U32".to_string(),
-        Type::Digest => "Digest".to_string(),
-        Type::Array(inner, size) => format!("[{}; {}]", format_type(inner), size),
-        Type::Tuple(elems) => {
-            let parts: Vec<String> = elems.iter().map(|t| format_type(t)).collect();
-            format!("({})", parts.join(", "))
-        }
-        Type::Named(path) => path.as_dotted(),
-    }
-}
-
-/// Format a constant expression in a best-effort way.
-fn format_const_expr(expr: &crate::ast::Expr) -> String {
-    match expr {
-        crate::ast::Expr::Literal(crate::ast::Literal::Integer(n)) => n.to_string(),
-        crate::ast::Expr::Literal(crate::ast::Literal::Bool(b)) => b.to_string(),
-        _ => "0".to_string(),
-    }
-}
-
 /// Try to synthesise a result expression from `ensures` clauses.
 ///
 /// Simple heuristic: if an ensures clause has the form `result == <expr>`
@@ -398,7 +375,6 @@ fn ensures_to_assertion(clause: &str, _ret_ty: &Type) -> String {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
-
 
 #[cfg(test)]
 mod tests;

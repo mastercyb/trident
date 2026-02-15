@@ -20,6 +20,7 @@ use polynomial::*;
 use std::fmt;
 
 use crate::ast::display;
+pub(crate) use crate::ast::display::format_ast_type as format_type;
 use crate::ast::{self, File, FnDef, Item, Type};
 use crate::hash;
 use crate::sym::SymValue;
@@ -247,23 +248,6 @@ pub(crate) fn find_fn<'a>(file: &'a File, name: &str) -> Option<&'a FnDef> {
         }
     }
     None
-}
-
-/// Format a Type for source-code output.
-pub(crate) fn format_type(ty: &Type) -> String {
-    match ty {
-        Type::Field => "Field".to_string(),
-        Type::XField => "XField".to_string(),
-        Type::Bool => "Bool".to_string(),
-        Type::U32 => "U32".to_string(),
-        Type::Digest => "Digest".to_string(),
-        Type::Array(inner, size) => format!("[{}; {}]", format_type(inner), size),
-        Type::Tuple(elems) => {
-            let parts: Vec<_> = elems.iter().map(|t| format_type(t)).collect();
-            format!("({})", parts.join(", "))
-        }
-        Type::Named(path) => path.as_dotted(),
-    }
 }
 
 /// Goldilocks field addition (mod p).
