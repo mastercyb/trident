@@ -73,143 +73,143 @@ and its output (does the next stage still accept it?).
 Update this map when files are added, removed, renamed, or modules are
 reorganized. Do NOT update for line count changes or content-only edits.
 
-97 files, ~35,700 lines. Modules listed in pipeline order, then support.
+~97 files, ~36k lines. Modules listed in pipeline order, then support.
 
 **Pipeline stages:**
 
 ```
-syntax/            4,347 LOC   Lexer, parser, formatter
-  lexer.rs           796       Tokenizer (keywords, operators, literals)
-  lexeme.rs          172       Token types and display
-  parser/          2,082       Recursive descent parser
-    mod.rs           183         Core parser (expect, peek, advance)
-    expr.rs          280         Expression parsing (precedence climbing)
-    stmts.rs         368         Statement parsing (let, if, while, for, return)
-    items.rs         457         Top-level items (fn, struct, enum, impl, use)
-    types.rs         109         Type annotation parsing
-    tests.rs         685         Parser tests
-  format/          1,293       Code formatter (trident fmt)
-    mod.rs           216         Formatter core + indent tracking
-    expr.rs          100         Expression formatting
-    stmts.rs         333         Statement formatting
-    items.rs         205         Item formatting
-    tests.rs         439         Formatter tests
+syntax/            ~4.3k LOC   Lexer, parser, formatter
+  lexer.rs           ~800       Tokenizer (keywords, operators, literals)
+  lexeme.rs          ~170       Token types and display
+  parser/          ~2.1k       Recursive descent parser
+    mod.rs           ~180         Core parser (expect, peek, advance)
+    expr.rs          ~280         Expression parsing (precedence climbing)
+    stmts.rs         ~370         Statement parsing (let, if, while, for, return)
+    items.rs         ~460         Top-level items (fn, struct, enum, impl, use)
+    types.rs         ~110         Type annotation parsing
+    tests.rs         ~690         Parser tests
+  format/          ~1.3k       Code formatter (trident fmt)
+    mod.rs           ~220         Formatter core + indent tracking
+    expr.rs          ~100         Expression formatting
+    stmts.rs         ~330         Statement formatting
+    items.rs         ~200         Item formatting
+    tests.rs         ~440         Formatter tests
 
-ast/                 603 LOC   Abstract syntax tree
-  mod.rs             387       AST node definitions (Expr, Stmt, Item, Type)
-  navigate.rs        101       Tree navigation helpers
-  display.rs         115       Pretty-printing AST nodes
+ast/                 ~600 LOC   Abstract syntax tree
+  mod.rs             ~390       AST node definitions (Expr, Stmt, Item, Type)
+  navigate.rs        ~100       Tree navigation helpers
+  display.rs         ~120       Pretty-printing AST nodes
 
-typecheck/         3,084 LOC   Type checker
-  mod.rs             443       Environment, type context, entry point
-  expr.rs            448       Expression type inference
-  stmt.rs            606       Statement checking (assignment, control flow)
-  builtins.rs        347       Built-in function signatures (vm.*)
-  resolve.rs         101       Name resolution
-  analysis.rs        270       Type analysis utilities
-  tests.rs           869       Type checker tests
+typecheck/         ~3.1k LOC   Type checker
+  mod.rs             ~440       Environment, type context, entry point
+  expr.rs            ~450       Expression type inference
+  stmt.rs            ~600       Statement checking (assignment, control flow)
+  builtins.rs        ~350       Built-in function signatures (vm.*)
+  resolve.rs         ~100       Name resolution
+  analysis.rs        ~270       Type analysis utilities
+  tests.rs           ~870       Type checker tests
 
-kir/                  56 LOC   Kernel IR (high-level typed IR)
-  mod.rs              25       KIR definitions
-  lower/mod.rs        31       KIR → TIR lowering stub
+kir/                  ~60 LOC   Kernel IR (high-level typed IR)
+  mod.rs              ~25       KIR definitions
+  lower/mod.rs        ~30       KIR → TIR lowering stub
 
-tir/               3,678 LOC   Trident IR (stack-based, target-generic)
-  mod.rs             422       TIROp enum, program representation
-  stack.rs           474       Stack effect tracking and validation
-  builder/         2,242       AST → TIR compilation
-    mod.rs           388         Builder context, function compilation
-    expr.rs          351         Expression lowering
-    stmt.rs          484         Statement lowering
-    call.rs          290         Function call compilation
-    helpers.rs       143         Shared builder utilities
-    layout.rs        131         Struct field layout computation
-    tests.rs         455         Builder tests
-  lower/             540       TIR → target lowering
-    mod.rs            23         Lowering trait definition
-    triton.rs        305         TIR → Triton VM assembly
-    tests.rs         212         Lowering tests
+tir/               ~3.7k LOC   Trident IR (stack-based, target-generic)
+  mod.rs             ~420       TIROp enum, program representation
+  stack.rs           ~470       Stack effect tracking and validation
+  builder/         ~2.2k       AST → TIR compilation
+    mod.rs           ~390         Builder context, function compilation
+    expr.rs          ~350         Expression lowering
+    stmt.rs          ~480         Statement lowering
+    call.rs          ~290         Function call compilation
+    helpers.rs       ~140         Shared builder utilities
+    layout.rs        ~130         Struct field layout computation
+    tests.rs         ~460         Builder tests
+  lower/             ~540       TIR → target lowering
+    mod.rs            ~25         Lowering trait definition
+    triton.rs        ~300         TIR → Triton VM assembly
+    tests.rs         ~210         Lowering tests
 
-lir/                 768 LOC   Low-level IR (target-specific)
-  mod.rs             609       LIR instruction set
-  convert.rs         130       LIR conversion utilities
-  lower/mod.rs        29       LIR lowering stub
+lir/                 ~770 LOC   Low-level IR (target-specific)
+  mod.rs             ~610       LIR instruction set
+  convert.rs         ~130       LIR conversion utilities
+  lower/mod.rs        ~30       LIR lowering stub
 
-tree/                207 LOC   Tree IR (structured control flow)
-  mod.rs              33       Tree node definitions
-  lower/mod.rs       174       Tree → flat lowering
+tree/                ~210 LOC   Tree IR (structured control flow)
+  mod.rs              ~35       Tree node definitions
+  lower/mod.rs       ~175       Tree → flat lowering
 ```
 
 **Support modules:**
 
 ```
-config/            2,268 LOC   Project configuration
-  project.rs         199       Trident.toml parsing
-  resolve.rs         669       Module path resolution (vm/std/os dispatch)
-  scaffold.rs        645       Project scaffolding (trident init)
-  target.rs          751       Target registry (VM + OS loading)
+config/            ~2.3k LOC   Project configuration
+  project.rs         ~200       Trident.toml parsing
+  resolve.rs         ~670       Module path resolution (vm/std/os dispatch)
+  scaffold.rs        ~650       Project scaffolding (trident init)
+  target.rs          ~750       Target registry (VM + OS loading)
 
-cost/              1,966 LOC   Cost modeling
-  mod.rs             449       Cost types, table definitions
-  analyzer.rs        605       AST cost annotation
-  report.rs          504       Cost report generation (JSON, text)
-  model/             408       Per-target cost models
-    mod.rs           251         Cost model trait + generic table
-    triton.rs        157         Triton VM cycle costs
+cost/              ~2.0k LOC   Cost modeling
+  mod.rs             ~450       Cost types, table definitions
+  analyzer.rs        ~600       AST cost annotation
+  report.rs          ~500       Cost report generation (JSON, text)
+  model/             ~410       Per-target cost models
+    mod.rs           ~250         Cost model trait + generic table
+    triton.rs        ~160         Triton VM cycle costs
 
-cli/               2,347 LOC   Command-line interface
-  mod.rs             361       Arg parsing (clap), command dispatch
-  build.rs           151       trident build
-  check.rs            45       trident check
-  bench.rs           119       trident bench
-  deploy.rs          148       trident deploy
-  deps.rs            144       trident deps
-  doc.rs              50       trident doc
-  fmt.rs              67       trident fmt
-  generate.rs         51       trident generate
-  hash.rs             39       trident hash
-  init.rs             73       trident init
-  package.rs          97       trident package
-  registry.rs        172       trident registry
-  store.rs           194       trident store
-  test.rs             39       trident test
-  verify.rs          218       trident verify
-  view.rs            379       trident view (AST/TIR inspector)
+cli/               ~2.3k LOC   Command-line interface
+  mod.rs             ~360       Arg parsing (clap), command dispatch
+  build.rs           ~150       trident build
+  check.rs            ~45       trident check
+  bench.rs           ~120       trident bench
+  deploy.rs          ~150       trident deploy
+  deps.rs            ~140       trident deps
+  doc.rs              ~50       trident doc
+  fmt.rs              ~70       trident fmt
+  generate.rs         ~50       trident generate
+  hash.rs             ~40       trident hash
+  init.rs             ~75       trident init
+  package.rs          ~100      trident package
+  registry.rs        ~170       trident registry
+  store.rs           ~190       trident store
+  test.rs             ~40       trident test
+  verify.rs          ~220       trident verify
+  view.rs            ~380       trident view (AST/TIR inspector)
 
-package/           5,290 LOC   Package management
-  store.rs         1,706       Content-addressed artifact store
-  registry.rs      1,018       Package registry (publish, fetch)
-  manifest.rs        856       Package manifest parsing
-  hash.rs            806       Content hashing (blake3, Merkle)
-  poseidon2.rs       452       Poseidon2 hash for proof-friendly addressing
-  cache.rs           445       Download and build cache
+package/           ~5.3k LOC   Package management
+  store.rs         ~1,700       Content-addressed artifact store
+  registry.rs      ~1,000       Package registry (publish, fetch)
+  manifest.rs        ~860       Package manifest parsing
+  hash.rs            ~800       Content hashing (blake3, Merkle)
+  poseidon2.rs       ~450       Poseidon2 hash for proof-friendly addressing
+  cache.rs           ~450       Download and build cache
 
-verify/            5,570 LOC   Formal verification
-  synthesize.rs    1,307       Theorem synthesis from Trident code
-  solve.rs         1,032       Constraint solving
-  equiv.rs         1,015       Equivalence checking (optimized vs original)
-  sym.rs           1,005       Symbolic execution engine
-  report.rs          671       Verification report generation
-  smt.rs             534       SMT-LIB2 formula encoding
+verify/            ~5.6k LOC   Formal verification
+  synthesize.rs    ~1,300       Theorem synthesis from Trident code
+  solve.rs         ~1,000       Constraint solving
+  equiv.rs         ~1,000       Equivalence checking (optimized vs original)
+  sym.rs           ~1,000       Symbolic execution engine
+  report.rs          ~670       Verification report generation
+  smt.rs             ~530       SMT-LIB2 formula encoding
 
-lsp/               1,625 LOC   Language Server Protocol
-  mod.rs             397       LSP server (tower-lsp, hover, diagnostics)
-  intelligence.rs    339       Go-to-definition, find-references
-  builtins.rs        317       Builtin docs for hover
-  util.rs            572       LSP utilities (position mapping, etc.)
+lsp/               ~1.6k LOC   Language Server Protocol
+  mod.rs             ~400       LSP server (tower-lsp, hover, diagnostics)
+  intelligence.rs    ~340       Go-to-definition, find-references
+  builtins.rs        ~320       Builtin docs for hover
+  util.rs            ~570       LSP utilities (position mapping, etc.)
 ```
 
 **Root files:**
 
 ```
-lib.rs             2,245       Crate root — re-exports, compile/format entry points
-deploy.rs            558       Artifact deployment (copy, verify, sign)
-doc.rs               302       Documentation generation (trident doc)
-pipeline.rs          206       Compilation pipeline orchestration
-diagnostic.rs        173       Error/warning diagnostic rendering (ariadne)
-linker.rs            134       Multi-module linking
-main.rs              110       Binary entry point (clap dispatch)
-types.rs              77       Shared type definitions (Span re-export, etc.)
-span.rs               61       Source span tracking
+lib.rs             ~2,200       Crate root — re-exports, compile/format entry points
+deploy.rs            ~560       Artifact deployment (copy, verify, sign)
+doc.rs               ~300       Documentation generation (trident doc)
+pipeline.rs          ~210       Compilation pipeline orchestration
+diagnostic.rs        ~170       Error/warning diagnostic rendering (ariadne)
+linker.rs            ~130       Multi-module linking
+main.rs              ~110       Binary entry point (clap dispatch)
+types.rs              ~80       Shared type definitions (Span re-export, etc.)
+span.rs               ~60       Source span tracking
 ```
 
 ## File Size Limit
