@@ -4,41 +4,28 @@
 
 ## The Problem
 
-Today, if you want to build a provable program on the only quantum-safe,
-private, programmable, mineable OS that exists --
-[Neptune Cash](https://neptune.cash/) running on
-[Triton VM](https://triton-vm.org/) -- you write raw assembly. TASM. ~45
-instructions. No types. No modules. No error messages beyond "assertion
-failed." You manage a 16-element operand stack by hand, track six algebraic
-tables in your head, and debug by staring at execution traces.
+Three computational revolutions -- quantum computing, privacy, and
+artificial intelligence -- are advancing in isolation. Each builds its own
+toolchain, its own field arithmetic, its own proof systems. Quantum teams
+design qudit gates over prime fields. Privacy teams build ZK/FHE/MPC over
+prime fields. AI teams quantize neural networks into field arithmetic for
+verifiable inference. They share a common algebraic foundation and do not
+know it. The isolation is artificial. The convergence is structural.
 
-Neptune Cash did this. Their team wrote a working recursive STARK verifier,
-a full transaction validation engine, and a Proof-of-Work blockchain -- all in
-raw TASM. It took years. It produced an inflation bug. It works, but it
-doesn't scale to a world where more than three people need to write provable
-programs.
+No language exists at their intersection. Quantum programming languages
+cannot produce zero-knowledge proofs. ZK languages cannot express quantum
+circuits. Neither can run neural network inference natively. Every team
+reinvents field arithmetic from scratch, in incompatible toolchains, for
+one application at a time.
 
-The alternative ecosystems each sacrifice at least one essential property:
-
-| OS | VM | Quantum-Safe | Private | Programmable | Mineable |
-|----|-----|:---:|:---:|:---:|:---:|
-| StarkNet | Cairo/Stwo | Yes | Yes | Yes | No (PoS L2) |
-| Boundless | SP1 | No (Groth16 wrap) | No | Yes | No |
-| RISC Zero | RISC Zero | No (Groth16 wrap) | Yes | Yes | No |
-| Jolt (a16z) | Jolt | No (BN254 curves) | No | Yes | No |
-| Aleo | AVM | No (Pasta curves) | Yes | Yes | Partial (stake-gated) |
-| Mina | Kimchi | No (Pasta curves) | Partial | Partial | No |
-| Nockchain | Nock | No (no STARK hash) | No | Partial (Jock alpha) | Yes |
-| Neptune | Triton | Yes | Yes | Yes | Yes |
-
-Neptune is the only OS that passes all four tests today. Trident is the
-language that makes it accessible.
-
-But there is a deeper problem. Three computational revolutions -- quantum
-computing, privacy, and artificial intelligence -- are advancing in
-isolation. Each builds its own toolchain, its own field arithmetic, its own
-proof systems. Yet they share a common mathematical foundation. The
-isolation is artificial. The convergence is structural.
+Meanwhile, the only blockchain that passes all four tests -- quantum-safe,
+private, programmable, mineable --
+is [Neptune Cash](https://neptune.cash/) running on
+[Triton VM](https://triton-vm.org/). Neptune's team wrote a recursive
+STARK verifier, a transaction engine, and a Proof-of-Work blockchain in
+raw assembly. It works, but raw TASM does not scale beyond a handful of
+developers. Trident exists to make Neptune accessible -- and to unify the
+three revolutions that share its field.
 
 ---
 
