@@ -49,6 +49,7 @@ backend is fully implemented; others are stubs.
 ## Language Evolution
 
 - [x] Pattern matching on structs, const generic expressions, `#[pure]` annotation, proof composition primitives
+- [ ] Indexed assignment (`arr[i] = val`, `s.field = val` via Place::FieldAccess/Index)
 - [ ] Trait-like interfaces for backend extensions (generic over hash function)
 
 ## Research Directions

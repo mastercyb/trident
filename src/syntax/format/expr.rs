@@ -75,22 +75,11 @@ pub(crate) fn format_expr(expr: &Expr) -> String {
 /// Format an expression with parentheses if needed for precedence.
 fn format_expr_precedence(expr: &Expr, parent_op: &BinOp, _is_left: bool) -> String {
     if let Expr::BinOp { op, .. } = expr {
-        if precedence(op) < precedence(parent_op) {
+        if op.binding_power().0 < parent_op.binding_power().0 {
             return format!("({})", format_expr(expr));
         }
     }
     format_expr(expr)
-}
-
-pub(super) fn precedence(op: &BinOp) -> u8 {
-    match op {
-        BinOp::Eq => 2,
-        BinOp::Lt => 4,
-        BinOp::Add => 6,
-        BinOp::Mul | BinOp::XFieldMul => 8,
-        BinOp::BitAnd | BinOp::BitXor => 10,
-        BinOp::DivMod => 12,
-    }
 }
 
 /// Format a place (l-value) to string.

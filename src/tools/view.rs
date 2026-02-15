@@ -22,7 +22,7 @@ pub fn format_function(func: &FnDef) -> String {
         items: vec![Spanned::dummy(Item::Fn(func.clone()))],
     };
 
-    let formatted = format::format_file(&file, &[], "");
+    let formatted = format::format_file(&file, &[]);
 
     // The formatter emits "program _view\n\n<fn>\n".
     // Strip the synthetic header to isolate the function text.

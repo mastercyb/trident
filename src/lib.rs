@@ -543,7 +543,7 @@ pub fn format_source(source: &str, _filename: &str) -> Result<String, Vec<Diagno
         return Err(lex_errors);
     }
     let file = Parser::new(tokens).parse_file()?;
-    Ok(format::format_file(&file, &comments, source))
+    Ok(format::format_file(&file, &comments))
 }
 
 /// Type-check only, without rendering diagnostics to stderr.

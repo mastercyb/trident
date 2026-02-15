@@ -28,7 +28,7 @@ impl Parser {
                 _ => break,
             };
 
-            let (l_bp, r_bp) = op_binding_power(op);
+            let (l_bp, r_bp) = op.binding_power();
             if l_bp < min_bp {
                 break;
             }
@@ -276,17 +276,5 @@ impl Parser {
             Expr::Var(name) => Spanned::new(Place::Var(name.clone()), expr.span),
             _ => Spanned::new(Place::Var("_error_".to_string()), expr.span),
         }
-    }
-}
-
-/// Returns (left binding power, right binding power) for a binary operator.
-fn op_binding_power(op: BinOp) -> (u8, u8) {
-    match op {
-        BinOp::Eq => (2, 3),
-        BinOp::Lt => (4, 5),
-        BinOp::Add => (6, 7),
-        BinOp::Mul | BinOp::XFieldMul => (8, 9),
-        BinOp::BitAnd | BinOp::BitXor => (10, 11),
-        BinOp::DivMod => (12, 13),
     }
 }

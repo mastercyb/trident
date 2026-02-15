@@ -368,4 +368,17 @@ impl BinOp {
             BinOp::XFieldMul => "*.",
         }
     }
+
+    /// Pratt binding power: (left, right). Higher binds tighter.
+    /// Single source of truth for both parser and formatter.
+    pub fn binding_power(&self) -> (u8, u8) {
+        match self {
+            BinOp::Eq => (2, 3),
+            BinOp::Lt => (4, 5),
+            BinOp::Add => (6, 7),
+            BinOp::Mul | BinOp::XFieldMul => (8, 9),
+            BinOp::BitAnd | BinOp::BitXor => (10, 11),
+            BinOp::DivMod => (12, 13),
+        }
+    }
 }

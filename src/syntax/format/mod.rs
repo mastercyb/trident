@@ -14,8 +14,8 @@ const MAX_WIDTH: usize = 80;
 const INDENT: &str = "    ";
 
 /// Format a parsed Trident file back to source, preserving comments.
-pub(crate) fn format_file(file: &File, comments: &[Comment], source: &str) -> String {
-    let mut ctx = FormatCtx::new(comments, source);
+pub(crate) fn format_file(file: &File, comments: &[Comment]) -> String {
+    let mut ctx = FormatCtx::new(comments);
     ctx.emit_file(file);
     let mut out = ctx.output;
     // Ensure single trailing newline
@@ -28,10 +28,9 @@ pub(crate) fn format_file(file: &File, comments: &[Comment], source: &str) -> St
     out
 }
 
-pub(super) struct FormatCtx<'a> {
+pub(super) struct FormatCtx {
     pub(super) output: String,
     pub(super) comments: Vec<CommentEntry>,
-    _source: &'a str,
 }
 
 #[derive(Clone)]
@@ -42,8 +41,8 @@ pub(super) struct CommentEntry {
     pub(super) used: bool,
 }
 
-impl<'a> FormatCtx<'a> {
-    fn new(comments: &[Comment], source: &'a str) -> Self {
+impl FormatCtx {
+    fn new(comments: &[Comment]) -> Self {
         let entries = comments
             .iter()
             .map(|c| CommentEntry {
@@ -56,7 +55,6 @@ impl<'a> FormatCtx<'a> {
         Self {
             output: String::new(),
             comments: entries,
-            _source: source,
         }
     }
 

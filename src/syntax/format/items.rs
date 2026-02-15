@@ -4,7 +4,7 @@ use crate::span::Spanned;
 use super::expr::format_type;
 use super::{FormatCtx, INDENT, MAX_WIDTH};
 
-impl<'a> FormatCtx<'a> {
+impl FormatCtx {
     pub(super) fn emit_item(&mut self, item: &Spanned<Item>, indent: &str) {
         self.emit_leading_comments(item.span.start, indent);
         match &item.node {

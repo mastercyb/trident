@@ -173,56 +173,35 @@ impl Parser {
             let is_pub = self.eat(&Lexeme::Pub);
 
             if self.at(&Lexeme::Const) {
-                if intrinsic_attr.is_some() {
-                    self.error_at_current("#[intrinsic] is only allowed on functions");
-                }
-                if is_test {
-                    self.error_at_current("#[test] is only allowed on functions");
-                }
-                if is_pure {
-                    self.error_at_current("#[pure] is only allowed on functions");
-                }
-                if !requires_attrs.is_empty() || !ensures_attrs.is_empty() {
-                    self.error_at_current(
-                        "#[requires] and #[ensures] are only allowed on functions",
-                    );
-                }
+                self.reject_fn_only_attrs(
+                    &intrinsic_attr,
+                    is_test,
+                    is_pure,
+                    &requires_attrs,
+                    &ensures_attrs,
+                );
                 let item = self.parse_const(is_pub, cfg_attr);
                 let span = start.merge(self.prev_span());
                 items.push(Spanned::new(Item::Const(item), span));
             } else if self.at(&Lexeme::Struct) {
-                if intrinsic_attr.is_some() {
-                    self.error_at_current("#[intrinsic] is only allowed on functions");
-                }
-                if is_test {
-                    self.error_at_current("#[test] is only allowed on functions");
-                }
-                if is_pure {
-                    self.error_at_current("#[pure] is only allowed on functions");
-                }
-                if !requires_attrs.is_empty() || !ensures_attrs.is_empty() {
-                    self.error_at_current(
-                        "#[requires] and #[ensures] are only allowed on functions",
-                    );
-                }
+                self.reject_fn_only_attrs(
+                    &intrinsic_attr,
+                    is_test,
+                    is_pure,
+                    &requires_attrs,
+                    &ensures_attrs,
+                );
                 let item = self.parse_struct(is_pub, cfg_attr);
                 let span = start.merge(self.prev_span());
                 items.push(Spanned::new(Item::Struct(item), span));
             } else if self.at(&Lexeme::Event) {
-                if intrinsic_attr.is_some() {
-                    self.error_at_current("#[intrinsic] is only allowed on functions");
-                }
-                if is_test {
-                    self.error_at_current("#[test] is only allowed on functions");
-                }
-                if is_pure {
-                    self.error_at_current("#[pure] is only allowed on functions");
-                }
-                if !requires_attrs.is_empty() || !ensures_attrs.is_empty() {
-                    self.error_at_current(
-                        "#[requires] and #[ensures] are only allowed on functions",
-                    );
-                }
+                self.reject_fn_only_attrs(
+                    &intrinsic_attr,
+                    is_test,
+                    is_pure,
+                    &requires_attrs,
+                    &ensures_attrs,
+                );
                 let item = self.parse_event(cfg_attr);
                 let span = start.merge(self.prev_span());
                 items.push(Spanned::new(Item::Event(item), span));
@@ -247,6 +226,28 @@ impl Parser {
             }
         }
         items
+    }
+
+    fn reject_fn_only_attrs(
+        &mut self,
+        intrinsic: &Option<Spanned<String>>,
+        is_test: bool,
+        is_pure: bool,
+        requires: &[Spanned<String>],
+        ensures: &[Spanned<String>],
+    ) {
+        if intrinsic.is_some() {
+            self.error_at_current("#[intrinsic] is only allowed on functions");
+        }
+        if is_test {
+            self.error_at_current("#[test] is only allowed on functions");
+        }
+        if is_pure {
+            self.error_at_current("#[pure] is only allowed on functions");
+        }
+        if !requires.is_empty() || !ensures.is_empty() {
+            self.error_at_current("#[requires] and #[ensures] are only allowed on functions");
+        }
     }
 
     fn parse_const(&mut self, is_pub: bool, cfg: Option<Spanned<String>>) -> ConstDef {

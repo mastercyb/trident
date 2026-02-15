@@ -9,7 +9,7 @@ fn fmt(source: &str) -> String {
     let (tokens, comments, lex_errors) = Lexer::new(source, 0).tokenize();
     assert!(lex_errors.is_empty(), "lex errors: {:?}", lex_errors);
     let file = Parser::new(tokens).parse_file().unwrap();
-    format_file(&file, &comments, source)
+    format_file(&file, &comments)
 }
 
 // --- Basic formatting ---
