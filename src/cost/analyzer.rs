@@ -28,7 +28,7 @@ pub struct ProgramCost {
     /// Program attestation adds ceil(instruction_count / 10) * 6 hash rows.
     pub attestation_hash_rows: u64,
     pub padded_height: u64,
-    pub estimated_proving_secs: f64,
+    pub estimated_proving_ns: u64,
     /// H0004: loops where declared bound >> actual constant end.
     pub loop_bound_waste: Vec<(String, u64, u64)>, // (fn_name, end_value, bound)
 }
@@ -129,10 +129,10 @@ impl<'a> CostAnalyzer<'a> {
         let max_height = total.max_height().max(attestation_hash_rows);
         let padded_height = next_power_of_two(max_height);
 
-        // Proving time estimate: padded_height * columns * log2(ph) * 3ns field op
-        let columns = self.cost_model.trace_column_count() as f64;
-        let log_ph = (padded_height as f64).log2();
-        let estimated_proving_secs = (padded_height as f64) * columns * log_ph * 3e-9;
+        // Proving time estimate: padded_height * columns * log2(ph) * 3 nanoseconds per field op
+        let columns = self.cost_model.trace_column_count();
+        let log2_padded = 64 - padded_height.leading_zeros() as u64;
+        let estimated_proving_ns = padded_height * columns * log2_padded * 3;
 
         // H0004: scan for loop bound waste (bound >> constant end)
         for item in &file.items {
@@ -161,7 +161,7 @@ impl<'a> CostAnalyzer<'a> {
                 .collect(),
             attestation_hash_rows,
             padded_height,
-            estimated_proving_secs,
+            estimated_proving_ns,
             loop_bound_waste: std::mem::take(&mut self.loop_bound_waste),
         }
     }

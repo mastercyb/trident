@@ -126,9 +126,9 @@ fn main() {}
         .iter()
         .filter(|s| s.function == "range_check")
         .collect();
-    let has_range_pre = rc_specs.iter().any(|s| {
-        s.kind == SpecKind::Precondition && s.expression.contains("val <= 4294967295")
-    });
+    let has_range_pre = rc_specs
+        .iter()
+        .any(|s| s.kind == SpecKind::Precondition && s.expression.contains("val <= 4294967295"));
     assert!(
         has_range_pre,
         "should infer U32 range precondition from as_u32(val)"
@@ -307,7 +307,7 @@ fn test_format_nonempty_report() {
         function: "test".to_string(),
         kind: SpecKind::Postcondition,
         expression: "result == 0".to_string(),
-        confidence: 0.9,
+        confidence: 90,
         explanation: "test explanation".to_string(),
     }];
     let report = format_report(&specs);

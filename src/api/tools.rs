@@ -126,7 +126,6 @@ pub struct FunctionBenchmark {
     pub name: String,
     pub compiled_instructions: usize,
     pub baseline_instructions: usize,
-    pub overhead_ratio: f64,
 }
 
 /// Module-level benchmark result with per-function comparisons.
@@ -136,7 +135,6 @@ pub struct ModuleBenchmarkResult {
     pub functions: Vec<FunctionBenchmark>,
     pub total_compiled: usize,
     pub total_baseline: usize,
-    pub overall_ratio: f64,
 }
 
 /// Format a number with comma separators (e.g. 2097152 -> "2,097,152").
@@ -155,18 +153,20 @@ fn fmt_num(n: usize) -> String {
     result
 }
 
-fn fmt_ratio(ratio: f64) -> String {
-    if ratio <= 0.0 {
+fn fmt_ratio(num: usize, den: usize) -> String {
+    if den == 0 {
         "\u{2014}".to_string()
     } else {
-        format!("{:.2}x", ratio)
+        // Two decimal places via integer math: ratio_100 = num * 100 / den
+        let ratio_100 = num * 100 / den;
+        format!("{}.{:02}x", ratio_100 / 100, ratio_100 % 100)
     }
 }
 
-fn status_icon(ratio: f64) -> &'static str {
-    if ratio <= 0.0 {
+fn status_icon(num: usize, den: usize) -> &'static str {
+    if den == 0 {
         " "
-    } else if ratio <= 2.0 {
+    } else if num <= 2 * den {
         "\u{2713}"
     } else {
         "\u{25b3}"
@@ -209,8 +209,8 @@ impl ModuleBenchmarkResult {
             self.module_path,
             fmt_num(self.total_compiled),
             fmt_num(self.total_baseline),
-            fmt_ratio(self.overall_ratio),
-            status_icon(self.overall_ratio),
+            fmt_ratio(self.total_compiled, self.total_baseline),
+            status_icon(self.total_compiled, self.total_baseline),
         )
     }
 
@@ -220,8 +220,8 @@ impl ModuleBenchmarkResult {
             f.name,
             fmt_num(f.compiled_instructions),
             fmt_num(f.baseline_instructions),
-            fmt_ratio(f.overhead_ratio),
-            status_icon(f.overhead_ratio),
+            fmt_ratio(f.compiled_instructions, f.baseline_instructions),
+            status_icon(f.compiled_instructions, f.baseline_instructions),
         )
     }
 
@@ -236,8 +236,21 @@ impl ModuleBenchmarkResult {
         )
     }
 
-    pub fn format_summary(avg: f64, max: f64, count: usize) -> String {
-        format!("  Avg: {:.2}x  Max: {:.2}x  ({} modules)", avg, max, count)
+    /// Format a summary line. `avg_num`/`avg_den` and `max_num`/`max_den` are
+    /// numerator/denominator pairs for the average and max ratios.
+    pub fn format_summary(
+        avg_num: usize,
+        avg_den: usize,
+        max_num: usize,
+        max_den: usize,
+        count: usize,
+    ) -> String {
+        format!(
+            "  Avg: {}  Max: {}  ({} modules)",
+            fmt_ratio(avg_num, avg_den),
+            fmt_ratio(max_num, max_den),
+            count
+        )
     }
 }
 

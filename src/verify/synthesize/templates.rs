@@ -46,7 +46,7 @@ pub(crate) fn match_templates(func: &FnDef) -> Vec<SynthesizedSpec> {
                                         "{} >= {}",
                                         pattern.acc_var, pattern.init_value
                                     ),
-                                    confidence: 0.6,
+                                    confidence: 60,
                                     explanation: format!(
                                         "Accumulation pattern: {} is additively updated in loop over {}",
                                         pattern.acc_var, pattern.loop_var
@@ -60,7 +60,7 @@ pub(crate) fn match_templates(func: &FnDef) -> Vec<SynthesizedSpec> {
                                         "{} == sum of additions over 0..{}",
                                         pattern.acc_var, end_str
                                     ),
-                                    confidence: 0.5,
+                                    confidence: 50,
                                     explanation: format!(
                                         "After the loop, {} holds the accumulated sum",
                                         pattern.acc_var
@@ -77,7 +77,7 @@ pub(crate) fn match_templates(func: &FnDef) -> Vec<SynthesizedSpec> {
                                         "{} >= {}",
                                         pattern.acc_var, pattern.init_value
                                     ),
-                                    confidence: 0.5,
+                                    confidence: 50,
                                     explanation: format!(
                                         "Multiplicative accumulation: {} is scaled each iteration",
                                         pattern.acc_var
@@ -95,7 +95,7 @@ pub(crate) fn match_templates(func: &FnDef) -> Vec<SynthesizedSpec> {
                                         "{} <= {}",
                                         pattern.acc_var, loop_var_name
                                     ),
-                                    confidence: 0.8,
+                                    confidence: 80,
                                     explanation: format!(
                                         "Counting pattern: {} increments conditionally, bounded by loop variable {}",
                                         pattern.acc_var, loop_var_name
@@ -106,7 +106,7 @@ pub(crate) fn match_templates(func: &FnDef) -> Vec<SynthesizedSpec> {
                                     function: fn_name.clone(),
                                     kind: SpecKind::Postcondition,
                                     expression: format!("{} <= {}", pattern.acc_var, end_str),
-                                    confidence: 0.8,
+                                    confidence: 80,
                                     explanation: format!(
                                         "After the loop, {} is at most {}",
                                         pattern.acc_var, end_str
@@ -126,7 +126,7 @@ pub(crate) fn match_templates(func: &FnDef) -> Vec<SynthesizedSpec> {
                                 loop_var: pattern.loop_var.clone(),
                             },
                             expression: format!("{} >= {}", pattern.var, pattern.init_value),
-                            confidence: 0.7,
+                            confidence: 70,
                             explanation: format!(
                                 "Monotonic update: {} only increases in loop over {}",
                                 pattern.var, pattern.loop_var
@@ -307,7 +307,7 @@ pub(crate) fn check_identity_preservation(func: &FnDef) -> Option<SynthesizedSpe
                         function: func.name.node.clone(),
                         kind: SpecKind::Postcondition,
                         expression: format!("result == {}", param_name),
-                        confidence: 1.0,
+                        confidence: 100,
                         explanation: format!(
                             "Function returns its parameter {} unchanged (identity)",
                             param_name
@@ -336,7 +336,7 @@ pub(crate) fn check_range_preservation(func: &FnDef) -> Option<SynthesizedSpec> 
             function: func.name.node.clone(),
             kind: SpecKind::Postcondition,
             expression: "result <= 4294967295".to_string(),
-            confidence: 0.9,
+            confidence: 90,
             explanation: "U32 input(s) and U32 output suggest result fits in U32 range".to_string(),
         })
     } else {
@@ -356,7 +356,7 @@ pub(crate) fn check_constant_result(func: &FnDef, body: &Block) -> Option<Synthe
                 function: func.name.node.clone(),
                 kind: SpecKind::Postcondition,
                 expression: format!("result == {}", n),
-                confidence: 1.0,
+                confidence: 100,
                 explanation: format!("Function always returns the constant {}", n),
             });
         }
@@ -365,11 +365,10 @@ pub(crate) fn check_constant_result(func: &FnDef, body: &Block) -> Option<Synthe
                 function: func.name.node.clone(),
                 kind: SpecKind::Postcondition,
                 expression: format!("result == {}", b),
-                confidence: 1.0,
+                confidence: 100,
                 explanation: format!("Function always returns the constant {}", b),
             });
         }
     }
     None
 }
-

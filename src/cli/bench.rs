@@ -82,33 +82,20 @@ pub fn cmd_bench(args: BenchArgs) {
 
         for (name, &baseline_count) in &baseline_fns {
             let compiled_count = compiled_fns.get(name).copied().unwrap_or(0);
-            let ratio = if baseline_count > 0 {
-                compiled_count as f64 / baseline_count as f64
-            } else {
-                0.0
-            };
             total_compiled += compiled_count;
             total_baseline += baseline_count;
             fn_results.push(trident::FunctionBenchmark {
                 name: name.clone(),
                 compiled_instructions: compiled_count,
                 baseline_instructions: baseline_count,
-                overhead_ratio: ratio,
             });
         }
-
-        let overall_ratio = if total_baseline > 0 {
-            total_compiled as f64 / total_baseline as f64
-        } else {
-            0.0
-        };
 
         results.push(trident::ModuleBenchmarkResult {
             module_path: module_name,
             functions: fn_results,
             total_compiled,
             total_baseline,
-            overall_ratio,
         });
     }
 
@@ -130,8 +117,8 @@ pub fn cmd_bench(args: BenchArgs) {
                 result.module_path,
                 fmt_num(result.total_compiled),
                 fmt_num(result.total_baseline),
-                fmt_ratio(result.overall_ratio),
-                status_icon(result.overall_ratio),
+                fmt_ratio(result.total_compiled, result.total_baseline),
+                status_icon(result.total_compiled, result.total_baseline),
             );
         }
         for f in &result.functions {
@@ -140,17 +127,32 @@ pub fn cmd_bench(args: BenchArgs) {
     }
     eprintln!("{}", trident::ModuleBenchmarkResult::format_separator());
 
-    // Summary
+    // Summary: average = total_compiled_all / total_baseline_all
+    // max = module with highest compiled/baseline ratio (by cross-multiply)
     if !results.is_empty() {
-        let avg_ratio: f64 =
-            results.iter().map(|r| r.overall_ratio).sum::<f64>() / results.len() as f64;
-        let max_ratio = results
+        let sum_compiled: usize = results.iter().map(|r| r.total_compiled).sum();
+        let sum_baseline: usize = results.iter().map(|r| r.total_baseline).sum();
+        // Find module with maximum ratio via cross-multiplication
+        let (max_compiled, max_baseline) = results
             .iter()
-            .map(|r| r.overall_ratio)
-            .fold(0.0f64, f64::max);
+            .map(|r| (r.total_compiled, r.total_baseline))
+            .fold((0usize, 1usize), |(ac, ad), (bc, bd)| {
+                // Compare ac/ad vs bc/bd via cross-multiply: ac*bd vs bc*ad
+                if ac * bd >= bc * ad {
+                    (ac, ad)
+                } else {
+                    (bc, bd)
+                }
+            });
         eprintln!(
             "{}",
-            trident::ModuleBenchmarkResult::format_summary(avg_ratio, max_ratio, results.len())
+            trident::ModuleBenchmarkResult::format_summary(
+                sum_compiled,
+                sum_baseline,
+                max_compiled,
+                max_baseline,
+                results.len(),
+            )
         );
     }
     eprintln!();
@@ -171,18 +173,19 @@ fn fmt_num(n: usize) -> String {
     result
 }
 
-fn fmt_ratio(ratio: f64) -> String {
-    if ratio <= 0.0 {
+fn fmt_ratio(num: usize, den: usize) -> String {
+    if den == 0 {
         "\u{2014}".to_string()
     } else {
-        format!("{:.2}x", ratio)
+        let ratio_100 = num * 100 / den;
+        format!("{}.{:02}x", ratio_100 / 100, ratio_100 % 100)
     }
 }
 
-fn status_icon(ratio: f64) -> &'static str {
-    if ratio <= 0.0 {
+fn status_icon(num: usize, den: usize) -> &'static str {
+    if den == 0 {
         " "
-    } else if ratio <= 2.0 {
+    } else if num <= 2 * den {
         "\u{2713}"
     } else {
         "\u{25b3}"

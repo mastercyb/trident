@@ -73,7 +73,7 @@ fn check_expr_for_preconditions(
                         function: fn_name.to_string(),
                         kind: SpecKind::Precondition,
                         expression: cond_str.clone(),
-                        confidence: 0.8,
+                        confidence: 80,
                         explanation: format!(
                             "Function asserts {}, which constrains input parameters",
                             cond_str
@@ -90,7 +90,7 @@ fn check_expr_for_preconditions(
                     function: fn_name.to_string(),
                     kind: SpecKind::Precondition,
                     expression: eq_str.clone(),
-                    confidence: 0.8,
+                    confidence: 80,
                     explanation: format!(
                         "Function asserts equality {}, which constrains input parameters",
                         eq_str
@@ -105,7 +105,7 @@ fn check_expr_for_preconditions(
                         function: fn_name.to_string(),
                         kind: SpecKind::Precondition,
                         expression: format!("{} <= 4294967295", arg_str),
-                        confidence: 0.9,
+                        confidence: 90,
                         explanation: format!(
                             "as_u32({}) requires the value fits in U32 range",
                             arg_str
@@ -141,7 +141,7 @@ pub(crate) fn infer_postconditions_from_body(func: &FnDef, body: &Block) -> Vec<
                     function: fn_name.clone(),
                     kind: SpecKind::Postcondition,
                     expression: format!("result == {} {} {}", lhs_str, op_str, rhs_str),
-                    confidence: 0.7,
+                    confidence: 70,
                     explanation: format!(
                         "Function returns {} {} {}, directly computed from parameters",
                         lhs_str, op_str, rhs_str
@@ -188,7 +188,7 @@ pub(crate) fn cegis_refine(
                     function: func.name.node.clone(),
                     kind: SpecKind::Assertion,
                     expression: current_candidate.clone(),
-                    confidence: 0.9,
+                    confidence: 90,
                     explanation: "Verified by CEGIS solver loop".to_string(),
                 });
                 break;
@@ -295,7 +295,7 @@ pub(crate) fn infer_postconditions_from_constraints(
                     function: fn_name.clone(),
                     kind: SpecKind::Postcondition,
                     expression: format!("output[{}] == {}", i, c),
-                    confidence: 1.0,
+                    confidence: 100,
                     explanation: format!("Output {} is always the constant {}", i, c),
                 });
             }
@@ -307,7 +307,7 @@ pub(crate) fn infer_postconditions_from_constraints(
                             function: fn_name.clone(),
                             kind: SpecKind::Postcondition,
                             expression: format!("output[{}] == input[{}]", i, input.name),
-                            confidence: 0.9,
+                            confidence: 90,
                             explanation: format!(
                                 "Output {} directly passes through input {}",
                                 i, input.name
@@ -337,7 +337,7 @@ pub(crate) fn infer_postconditions_from_constraints(
                 function: fn_name.clone(),
                 kind: SpecKind::Assertion,
                 expression: format!("{} == {}", var_name, value),
-                confidence: 0.7,
+                confidence: 70,
                 explanation: format!(
                     "Variable {} is constrained to equal {} by assertions",
                     var_name, value

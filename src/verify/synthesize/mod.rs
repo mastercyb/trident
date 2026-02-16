@@ -34,8 +34,8 @@ pub struct SynthesizedSpec {
     pub kind: SpecKind,
     /// The invariant/spec expression as a string.
     pub expression: String,
-    /// Confidence level (0.0 - 1.0).
-    pub confidence: f64,
+    /// Confidence level (0-100 percent).
+    pub confidence: u8,
     /// Human-readable explanation.
     pub explanation: String,
 }
@@ -51,9 +51,9 @@ impl SynthesizedSpec {
             SpecKind::Precondition => "precondition (#[requires])".to_string(),
             SpecKind::Assertion => "assertion".to_string(),
         };
-        let confidence_str = if self.confidence >= 0.9 {
+        let confidence_str = if self.confidence >= 90 {
             "high"
-        } else if self.confidence >= 0.6 {
+        } else if self.confidence >= 60 {
             "medium"
         } else {
             "low"
@@ -176,7 +176,7 @@ fn synthesize_for_function(func: &FnDef, file: &File) -> Vec<SynthesizedSpec> {
         // Update confidence for candidates that were verified
         for spec in &mut specs {
             if refined.iter().any(|r| r.expression == spec.expression) {
-                spec.confidence = spec.confidence.max(0.9);
+                spec.confidence = spec.confidence.max(90);
             }
         }
     }

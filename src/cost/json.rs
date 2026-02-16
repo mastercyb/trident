@@ -167,7 +167,7 @@ impl ProgramCost {
             table_short_names: names.iter().map(|s| s.to_string()).collect(),
             attestation_hash_rows: 0,
             padded_height,
-            estimated_proving_secs: 0.0,
+            estimated_proving_ns: 0,
             loop_bound_waste: Vec::new(),
         })
     }

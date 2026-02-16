@@ -59,10 +59,9 @@ impl ProgramCost {
             "Program attestation:     {} hash rows\n",
             self.attestation_hash_rows
         ));
-        out.push_str(&format!(
-            "Estimated proving time:  ~{:.1}s\n",
-            self.estimated_proving_secs
-        ));
+        let secs = self.estimated_proving_ns / 1_000_000_000;
+        let tenths = (self.estimated_proving_ns / 100_000_000) % 10;
+        out.push_str(&format!("Estimated proving time:  ~{}.{}s\n", secs, tenths));
 
         // Power-of-2 boundary warning.
         let headroom = self.padded_height - self.total.max_height();
@@ -101,12 +100,12 @@ impl ProgramCost {
         for (i, func) in ranked.iter().take(top_n).enumerate() {
             let val = func.cost.get(dominant_idx);
             let pct = if dominant_total > 0 {
-                (val as f64 / dominant_total as f64) * 100.0
+                val * 100 / dominant_total
             } else {
-                0.0
+                0
             };
             out.push_str(&format!(
-                "  {}. {:<24} {:>6} {} rows ({:.0}% of {} table)\n",
+                "  {}. {:<24} {:>6} {} rows ({}% of {} table)\n",
                 i + 1,
                 func.name,
                 val,
@@ -134,14 +133,25 @@ impl ProgramCost {
         if self.total.count >= 2 && self.total.get(0) > 0 {
             let dominant_idx = self.dominant_index();
             if dominant_idx > 0 {
-                let ratio = self.total.get(dominant_idx) as f64 / self.total.get(0) as f64;
-                if ratio > 2.0 {
+                let dominant_val = self.total.get(dominant_idx);
+                let primary_val = self.total.get(0);
+                // ratio > 2.0 equivalent: dominant_val > 2 * primary_val
+                if dominant_val > 2 * primary_val {
                     let dominant_name = short.get(dominant_idx).unwrap_or(&"?");
                     let primary_name = short.first().unwrap_or(&"?");
+                    // Integer ratio with one decimal: ratio_10 = dominant * 10 / primary
+                    let ratio_10 = if primary_val > 0 {
+                        dominant_val * 10 / primary_val
+                    } else {
+                        0
+                    };
                     let mut diag = Diagnostic::warning(
                         format!(
-                            "hint[H0001]: {} table is {:.1}x taller than {} table",
-                            dominant_name, ratio, primary_name
+                            "hint[H0001]: {} table is {}.{}x taller than {} table",
+                            dominant_name,
+                            ratio_10 / 10,
+                            ratio_10 % 10,
+                            primary_name
                         ),
                         Span::dummy(),
                     );
@@ -162,7 +172,11 @@ impl ProgramCost {
         let max_height = self.total.max_height().max(self.attestation_hash_rows);
         let headroom = self.padded_height - max_height;
         if headroom > self.padded_height / 4 && self.padded_height >= 16 {
-            let headroom_pct = (headroom as f64 / self.padded_height as f64) * 100.0;
+            let headroom_pct = if self.padded_height > 0 {
+                headroom * 100 / self.padded_height
+            } else {
+                0
+            };
             let mut diag = Diagnostic::warning(
                 format!(
                     "hint[H0002]: padded height is {}, but max table height is only {}",
@@ -171,11 +185,11 @@ impl ProgramCost {
                 Span::dummy(),
             );
             diag.notes.push(format!(
-                "you have {} rows of headroom ({:.0}%) before the next doubling",
+                "you have {} rows of headroom ({}%) before the next doubling",
                 headroom, headroom_pct
             ));
             diag.help = Some(format!(
-                "this program could be {:.0}% more complex at zero additional proving cost",
+                "this program could be {}% more complex at zero additional proving cost",
                 headroom_pct
             ));
             hints.push(diag);
@@ -199,7 +213,8 @@ impl ProgramCost {
                 );
                 hints.push(diag);
             } else {
-                let ratio = *bound as f64 / *end_val.max(&1) as f64;
+                let actual = *end_val.max(&1);
+                let ratio = *bound / actual;
                 let mut diag = Diagnostic::warning(
                     format!(
                         "hint[H0004]: loop in '{}' bounded {} but iterates only {} times",
@@ -208,7 +223,7 @@ impl ProgramCost {
                     Span::dummy(),
                 );
                 diag.notes.push(format!(
-                    "declared bound is {:.0}x the actual iteration count",
+                    "declared bound is {}x the actual iteration count",
                     ratio
                 ));
                 diag.help = Some(format!(
