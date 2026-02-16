@@ -71,7 +71,9 @@ pub fn cmd_verify(args: VerifyArgs) {
 
     if synthesize {
         // parsed_file is always Some here because synthesize is included in need_parse
-        let file = parsed_file.as_ref().unwrap();
+        let file = parsed_file
+            .as_ref()
+            .expect("synthesize is included in need_parse");
         let specs = trident::synthesize::synthesize_specs(file);
         eprintln!("\n{}", trident::synthesize::format_report(&specs));
     }

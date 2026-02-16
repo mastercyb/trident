@@ -100,7 +100,11 @@ impl<'a> CostAnalyzer<'a> {
         let mut functions = Vec::new();
         let fn_names: Vec<String> = self.fn_bodies.keys().cloned().collect();
         for name in &fn_names {
-            let func = self.fn_bodies.get(name).unwrap().clone();
+            let func = self
+                .fn_bodies
+                .get(name)
+                .expect("name comes from fn_bodies.keys()")
+                .clone();
             let cost = self.cost_fn(&func);
             let per_iteration = self.find_loop_iteration_cost(&func);
             functions.push(FunctionCost {

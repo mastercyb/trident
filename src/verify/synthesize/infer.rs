@@ -176,7 +176,7 @@ pub(crate) fn cegis_refine(
         if source.is_none() {
             continue;
         }
-        let source = source.unwrap();
+        let source = source.expect("None case handled by continue above");
 
         // Try to verify the candidate
         let mut current_candidate = candidate.clone();

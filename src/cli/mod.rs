@@ -93,7 +93,9 @@ pub fn resolve_options(
 
     // Project may override the default "triton" target
     let effective_target = match (vm_target, project) {
-        ("triton", Some(proj)) if proj.target.is_some() => proj.target.as_deref().unwrap(),
+        ("triton", Some(proj)) if proj.target.is_some() => {
+            proj.target.as_deref().expect("guarded by is_some() check")
+        }
         _ => vm_target,
     };
 

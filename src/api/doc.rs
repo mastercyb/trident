@@ -69,7 +69,9 @@ pub(crate) fn generate_docs(
                 let mut entry = format!("### `{}`\n", sig);
                 if let Some(fc) = fn_cost {
                     let c = &fc.cost;
-                    let sn = costs.unwrap().short_names();
+                    let sn = costs
+                        .expect("module_costs always contains Some")
+                        .short_names();
                     entry.push_str(&format!(
                         "**Cost:** cc={}, hash={}, u32={} | dominant: {}\n",
                         c.get(0),
