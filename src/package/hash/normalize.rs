@@ -182,24 +182,26 @@ impl Normalizer {
 
     /// Hash all functions in a file.
     pub fn hash_file(file: &File) -> BTreeMap<String, ContentHash> {
-        let mut result = BTreeMap::new();
         let mut fn_hashes = BTreeMap::new();
 
-        // First pass: hash functions without dependency info
-        // (For a proper implementation, this would do topological ordering)
+        // First pass: hash functions, building dependency info incrementally
         for item in &file.items {
             if let Item::Fn(func) = &item.node {
-                let hash = Self::hash_fn(func, fn_hashes.clone());
+                let mut normalizer = Normalizer::new();
+                normalizer.fn_hashes.clone_from(&fn_hashes);
+                let bytes = normalizer.normalize_fn(func);
+                let hash = ContentHash(crate::poseidon2::hash_bytes(&bytes));
                 fn_hashes.insert(func.name.node.clone(), hash);
-                result.insert(func.name.node.clone(), hash);
             }
         }
 
-        // Second pass: re-hash with dependency info
+        // Second pass: re-hash with complete dependency info (single clone)
         let mut stable = BTreeMap::new();
+        let mut normalizer = Normalizer::new().with_fn_hashes(fn_hashes);
         for item in &file.items {
             if let Item::Fn(func) = &item.node {
-                let hash = Self::hash_fn(func, fn_hashes.clone());
+                let bytes = normalizer.normalize_fn(func);
+                let hash = ContentHash(crate::poseidon2::hash_bytes(&bytes));
                 stable.insert(func.name.node.clone(), hash);
             }
         }
