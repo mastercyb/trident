@@ -20,6 +20,9 @@ pub(crate) fn link(modules: Vec<ModuleTasm>) -> String {
     // Find program entry
     if let Some(prog) = modules.iter().find(|m| m.is_program) {
         entry_label = format!("{}main", mangle_module(&prog.module_name));
+    } else {
+        // No program module — emit a halt-only program.
+        return "    halt\n// error: no program module found".to_string();
     }
 
     // Mangle all modules
@@ -78,12 +81,23 @@ pub(crate) fn link(modules: Vec<ModuleTasm>) -> String {
         if all_labels.contains(target) {
             return target.to_string();
         }
-        // Try stripping successive prefixes (before first __)
+        // Try stripping successive prefixes (before first __).
+        // Only accept a suffix match if it is unambiguous (exactly one label
+        // ends with that suffix). Multiple matches indicate a naming conflict
+        // and the original target is returned as-is.
         let mut t = target;
         while let Some(pos) = t.find("__") {
             let suffix = &t[pos + 2..];
-            if !suffix.is_empty() && all_labels.contains(suffix) {
-                return suffix.to_string();
+            if !suffix.is_empty() {
+                if all_labels.contains(suffix) {
+                    return suffix.to_string();
+                }
+                // Check for suffix match: labels ending with __suffix
+                let candidates: Vec<&String> =
+                    all_labels.iter().filter(|l| l.ends_with(suffix)).collect();
+                if candidates.len() == 1 {
+                    return candidates[0].clone();
+                }
             }
             t = suffix;
         }
