@@ -90,7 +90,7 @@ impl SymValue {
                     (SymValue::Const(0), _) => b,
                     (_, SymValue::Const(0)) => a,
                     (SymValue::Const(x), SymValue::Const(y)) => {
-                        SymValue::Const(x.wrapping_add(*y) % GOLDILOCKS_P)
+                        SymValue::Const(((*x as u128 + *y as u128) % GOLDILOCKS_P as u128) as u64)
                     }
                     _ => SymValue::Add(Box::new(a), Box::new(b)),
                 }
@@ -113,9 +113,10 @@ impl SymValue {
                 let b = b.simplify();
                 match (&a, &b) {
                     (_, SymValue::Const(0)) => a,
-                    (SymValue::Const(x), SymValue::Const(y)) => {
-                        SymValue::Const(x.wrapping_sub(*y) % GOLDILOCKS_P)
-                    }
+                    (SymValue::Const(x), SymValue::Const(y)) => SymValue::Const(
+                        (((*x as u128 + GOLDILOCKS_P as u128) - *y as u128) % GOLDILOCKS_P as u128)
+                            as u64,
+                    ),
                     _ if a == b => SymValue::Const(0),
                     _ => SymValue::Sub(Box::new(a), Box::new(b)),
                 }
