@@ -1,4 +1,4 @@
-pub(crate) use std::collections::{BTreeMap, HashSet};
+pub(crate) use std::collections::{BTreeMap, BTreeSet};
 pub(crate) use std::path::Path;
 
 pub(crate) use crate::ast::{self, FileKind};
@@ -23,7 +23,7 @@ pub struct CompileOptions {
     /// Profile name for cfg flags (e.g. "debug", "release").
     pub profile: String,
     /// Active cfg flags for conditional compilation.
-    pub cfg_flags: HashSet<String>,
+    pub cfg_flags: BTreeSet<String>,
     /// Target VM configuration.
     pub target_config: TargetConfig,
     /// Additional module search directories (from locked dependencies).
@@ -34,7 +34,7 @@ impl Default for CompileOptions {
     fn default() -> Self {
         Self {
             profile: "debug".to_string(),
-            cfg_flags: HashSet::from(["debug".to_string()]),
+            cfg_flags: BTreeSet::from(["debug".to_string()]),
             target_config: TargetConfig::triton(),
             dep_dirs: Vec::new(),
         }
@@ -46,7 +46,7 @@ impl CompileOptions {
     pub fn for_profile(profile: &str) -> Self {
         Self {
             profile: profile.to_string(),
-            cfg_flags: HashSet::from([profile.to_string()]),
+            cfg_flags: BTreeSet::from([profile.to_string()]),
             target_config: TargetConfig::triton(),
             dep_dirs: Vec::new(),
         }

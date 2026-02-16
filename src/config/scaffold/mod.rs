@@ -262,7 +262,7 @@ pub fn extract_variables(spec: &str) -> Vec<String> {
         "true", "false", "old", "result", "let", "if", "else", "for", "fn", "return",
     ];
     let mut vars = Vec::new();
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = std::collections::BTreeSet::new();
     let mut chars = spec.char_indices().peekable();
 
     while let Some(&(i, c)) = chars.peek() {

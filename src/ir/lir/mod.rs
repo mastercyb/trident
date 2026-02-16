@@ -24,7 +24,7 @@ use std::fmt;
 
 /// A virtual register. Physical mapping is decided per-target during
 /// register allocation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Reg(pub u32);
 
 impl fmt::Display for Reg {
@@ -36,7 +36,7 @@ impl fmt::Display for Reg {
 // ─── Label ────────────────────────────────────────────────────────
 
 /// A control-flow label for flat branch/jump targets.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Label(pub String);
 
 impl Label {
@@ -388,7 +388,6 @@ impl fmt::Display for LIROp {
 }
 
 // ─── Tests ────────────────────────────────────────────────────────
-
 
 #[cfg(test)]
 mod tests;

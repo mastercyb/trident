@@ -14,8 +14,8 @@
 //! 2. **Witness existence**: For divine inputs, does a valid witness exist?
 //!    (check-sat on all constraints)
 
-use std::collections::HashSet;
 use crate::sym::{Constraint, ConstraintSystem, SymValue, GOLDILOCKS_P};
+use std::collections::BTreeSet;
 
 /// Generate SMT-LIB2 encoding of a constraint system.
 ///
@@ -59,7 +59,7 @@ pub enum SmtStatus {
 struct SmtEncoder {
     output: String,
     mode: QueryMode,
-    declared_vars: HashSet<String>,
+    declared_vars: BTreeSet<String>,
 }
 
 impl SmtEncoder {
@@ -67,7 +67,7 @@ impl SmtEncoder {
         Self {
             output: String::new(),
             mode,
-            declared_vars: HashSet::new(),
+            declared_vars: BTreeSet::new(),
         }
     }
 

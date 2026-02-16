@@ -11,7 +11,7 @@ pub(super) fn extract_dependencies(
     fn_hashes: &BTreeMap<String, ContentHash>,
 ) -> Vec<ContentHash> {
     let mut deps = Vec::new();
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = std::collections::BTreeSet::new();
 
     if let Some(ref body) = func.body {
         walk_block_for_calls(&body.node, fn_hashes, &func.name.node, &mut deps, &mut seen);
@@ -25,7 +25,7 @@ fn walk_block_for_calls(
     fn_hashes: &BTreeMap<String, ContentHash>,
     self_name: &str,
     deps: &mut Vec<ContentHash>,
-    seen: &mut std::collections::HashSet<ContentHash>,
+    seen: &mut std::collections::BTreeSet<ContentHash>,
 ) {
     for stmt in &block.stmts {
         walk_stmt_for_calls(&stmt.node, fn_hashes, self_name, deps, seen);
@@ -40,7 +40,7 @@ fn walk_stmt_for_calls(
     fn_hashes: &BTreeMap<String, ContentHash>,
     self_name: &str,
     deps: &mut Vec<ContentHash>,
-    seen: &mut std::collections::HashSet<ContentHash>,
+    seen: &mut std::collections::BTreeSet<ContentHash>,
 ) {
     match stmt {
         Stmt::Let { init, .. } => {
@@ -96,7 +96,7 @@ fn walk_expr_for_calls(
     fn_hashes: &BTreeMap<String, ContentHash>,
     self_name: &str,
     deps: &mut Vec<ContentHash>,
-    seen: &mut std::collections::HashSet<ContentHash>,
+    seen: &mut std::collections::BTreeSet<ContentHash>,
 ) {
     match expr {
         Expr::Call { path, args, .. } => {

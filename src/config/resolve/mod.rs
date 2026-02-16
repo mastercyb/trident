@@ -1,4 +1,4 @@
-pub(crate) use std::collections::HashSet;
+pub(crate) use std::collections::BTreeSet;
 pub(crate) use std::path::{Path, PathBuf};
 
 pub(crate) use crate::diagnostic::Diagnostic;

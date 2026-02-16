@@ -273,8 +273,8 @@ impl ModuleResolver {
 
     /// Topological sort of the module DAG. Returns Err if circular.
     pub(crate) fn topological_sort(&self) -> Result<Vec<ModuleInfo>, Vec<Diagnostic>> {
-        let mut visited: HashSet<String> = HashSet::new();
-        let mut in_progress: HashSet<String> = HashSet::new();
+        let mut visited: BTreeSet<String> = BTreeSet::new();
+        let mut in_progress: BTreeSet<String> = BTreeSet::new();
         let mut order: Vec<String> = Vec::new();
         let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
@@ -305,8 +305,8 @@ impl ModuleResolver {
     fn dfs(
         &self,
         name: &str,
-        visited: &mut HashSet<String>,
-        in_progress: &mut HashSet<String>,
+        visited: &mut BTreeSet<String>,
+        in_progress: &mut BTreeSet<String>,
         order: &mut Vec<String>,
         diagnostics: &mut Vec<Diagnostic>,
     ) {

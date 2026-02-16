@@ -1,6 +1,6 @@
 //! Static analysis: recursion detection, call graph collection, used-module tracking.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::*;
 
@@ -172,7 +172,7 @@ impl TypeChecker {
     }
 
     /// Collect module prefixes used in calls and variable access within a block.
-    pub(super) fn collect_used_modules_block(block: &Block, used: &mut HashSet<String>) {
+    pub(super) fn collect_used_modules_block(block: &Block, used: &mut BTreeSet<String>) {
         for stmt in &block.stmts {
             Self::collect_used_modules_stmt(&stmt.node, used);
         }
@@ -181,7 +181,7 @@ impl TypeChecker {
         }
     }
 
-    fn collect_used_modules_stmt(stmt: &Stmt, used: &mut HashSet<String>) {
+    fn collect_used_modules_stmt(stmt: &Stmt, used: &mut BTreeSet<String>) {
         match stmt {
             Stmt::Let { init, .. } => Self::collect_used_modules_expr(&init.node, used),
             Stmt::Assign { value, .. } => Self::collect_used_modules_expr(&value.node, used),
@@ -222,7 +222,7 @@ impl TypeChecker {
         }
     }
 
-    fn collect_used_modules_expr(expr: &Expr, used: &mut HashSet<String>) {
+    fn collect_used_modules_expr(expr: &Expr, used: &mut BTreeSet<String>) {
         match expr {
             Expr::Call { path, args, .. } => {
                 let dotted = path.node.as_dotted();

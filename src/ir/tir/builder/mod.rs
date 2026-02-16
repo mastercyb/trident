@@ -19,7 +19,7 @@ mod stmt;
 #[cfg(test)]
 mod tests;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::*;
 use crate::target::TargetConfig;
@@ -69,7 +69,7 @@ pub struct TIRBuilder {
     /// Index into call_resolutions for the next generic call.
     pub(crate) call_resolution_idx: usize,
     /// Active cfg flags for conditional compilation.
-    pub(crate) cfg_flags: HashSet<String>,
+    pub(crate) cfg_flags: BTreeSet<String>,
     /// Target VM configuration.
     pub(crate) target_config: TargetConfig,
 }
@@ -99,14 +99,14 @@ impl TIRBuilder {
             current_subs: BTreeMap::new(),
             call_resolutions: Vec::new(),
             call_resolution_idx: 0,
-            cfg_flags: HashSet::from(["debug".to_string()]),
+            cfg_flags: BTreeSet::from(["debug".to_string()]),
             target_config,
         }
     }
 
     // ── Builder-pattern configuration ─────────────────────────────
 
-    pub fn with_cfg_flags(mut self, flags: HashSet<String>) -> Self {
+    pub fn with_cfg_flags(mut self, flags: BTreeSet<String>) -> Self {
         self.cfg_flags = flags;
         self
     }

@@ -8,7 +8,7 @@ mod stmt;
 mod tests;
 pub mod types;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::*;
 use crate::diagnostic::Diagnostic;
@@ -89,7 +89,7 @@ pub(crate) struct TypeChecker {
     /// Accumulated diagnostics.
     pub(super) diagnostics: Vec<Diagnostic>,
     /// Variables proven to be in U32 range (via as_u32, split, or U32 type).
-    pub(super) u32_proven: HashSet<String>,
+    pub(super) u32_proven: BTreeSet<String>,
     /// Generic (size-parameterized) function definitions.
     pub(super) generic_fns: BTreeMap<String, GenericFnDef>,
     /// Unique monomorphized instances collected during type checking.
@@ -97,7 +97,7 @@ pub(crate) struct TypeChecker {
     /// Per-call-site resolutions in AST walk order.
     pub(super) call_resolutions: Vec<MonoInstance>,
     /// Active cfg flags for conditional compilation.
-    pub(super) cfg_flags: HashSet<String>,
+    pub(super) cfg_flags: BTreeSet<String>,
     /// Target VM configuration (digest width, hash rate, field limbs, etc.).
     pub(super) target_config: crate::target::TargetConfig,
     /// Whether we are currently inside a `#[pure]` function body.
@@ -123,11 +123,11 @@ impl TypeChecker {
             structs: BTreeMap::new(),
             events: BTreeMap::new(),
             diagnostics: Vec::new(),
-            u32_proven: HashSet::new(),
+            u32_proven: BTreeSet::new(),
             generic_fns: BTreeMap::new(),
             mono_instances: Vec::new(),
             call_resolutions: Vec::new(),
-            cfg_flags: HashSet::from(["debug".to_string()]),
+            cfg_flags: BTreeSet::from(["debug".to_string()]),
             target_config: config,
             in_pure_fn: false,
         };
@@ -136,7 +136,7 @@ impl TypeChecker {
     }
 
     /// Set active cfg flags for conditional compilation.
-    pub(crate) fn with_cfg_flags(mut self, flags: HashSet<String>) -> Self {
+    pub(crate) fn with_cfg_flags(mut self, flags: BTreeSet<String>) -> Self {
         self.cfg_flags = flags;
         self
     }
@@ -321,7 +321,7 @@ impl TypeChecker {
         }
 
         // Unused import detection: collect used module prefixes from all calls
-        let mut used_prefixes: HashSet<String> = HashSet::new();
+        let mut used_prefixes: BTreeSet<String> = BTreeSet::new();
         for item in &file.items {
             if !self.is_item_cfg_active(&item.node) {
                 continue;

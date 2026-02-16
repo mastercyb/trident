@@ -112,7 +112,7 @@ pub fn resolve_options(
     let cfg_flags = project
         .and_then(|proj| proj.targets.get(actual_profile))
         .map(|flags| flags.iter().cloned().collect())
-        .unwrap_or_else(|| std::collections::HashSet::from([actual_profile.to_string()]));
+        .unwrap_or_else(|| std::collections::BTreeSet::from([actual_profile.to_string()]));
 
     trident::CompileOptions {
         profile: actual_profile.to_string(),
@@ -178,7 +178,7 @@ pub fn prepare_artifact(
             table_short_names: Vec::new(),
             attestation_hash_rows: 0,
             padded_height: 0,
-            estimated_proving_secs: 0.0,
+            estimated_proving_ns: 0,
             loop_bound_waste: Vec::new(),
         }
     });

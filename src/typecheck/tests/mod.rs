@@ -25,7 +25,8 @@ pub(super) fn check_with_flags(
 ) -> Result<ModuleExports, Vec<Diagnostic>> {
     let (tokens, _, _) = Lexer::new(source, 0).tokenize();
     let file = Parser::new(tokens).parse_file().unwrap();
-    let flag_set: std::collections::HashSet<String> = flags.iter().map(|s| s.to_string()).collect();
+    let flag_set: std::collections::BTreeSet<String> =
+        flags.iter().map(|s| s.to_string()).collect();
     TypeChecker::new()
         .with_cfg_flags(flag_set)
         .check_file(&file)
