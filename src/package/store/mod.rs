@@ -92,7 +92,7 @@ mod persist;
 
 use deps::extract_dependencies;
 use format::{format_fn_source, format_type};
-use persist::{codebase_dir, serialize_definition, unix_timestamp};
+use persist::{atomic_write, codebase_dir, serialize_definition, unix_timestamp};
 
 #[cfg(test)]
 mod tests;
@@ -360,7 +360,7 @@ impl Codebase {
 
             let def_path = prefix_dir.join(format!("{}.def", hex));
             let content = serialize_definition(def);
-            std::fs::write(&def_path, &content)?;
+            atomic_write(&def_path, &content)?;
         }
 
         // Write names.txt
@@ -374,7 +374,7 @@ impl Codebase {
             names_content.push_str(&hash.to_hex());
             names_content.push('\n');
         }
-        std::fs::write(&names_path, &names_content)?;
+        atomic_write(&names_path, &names_content)?;
 
         // Write history.txt
         let history_path = self.root.join("history.txt");
@@ -394,7 +394,7 @@ impl Codebase {
             history_content.push_str(&entry.timestamp.to_string());
             history_content.push('\n');
         }
-        std::fs::write(&history_path, &history_content)?;
+        atomic_write(&history_path, &history_content)?;
 
         Ok(())
     }

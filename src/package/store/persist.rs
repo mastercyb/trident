@@ -1,9 +1,48 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use crate::hash::ContentHash;
 
 use super::{Codebase, Definition, NameEntry};
+
+/// Atomically write `contents` to `path` using write-to-temp-then-rename.
+///
+/// Writes to a temporary file in the same directory, flushes and syncs to
+/// disk, then renames the temp file to the target path. On POSIX the rename
+/// is atomic, so readers never see a half-written file.
+pub(super) fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
+    use std::fs;
+
+    let dir = path.parent().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "atomic_write: path has no parent directory",
+        )
+    })?;
+
+    // Build a unique temp filename in the same directory so the rename stays
+    // on the same filesystem (required for atomic rename on POSIX).
+    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("tmp");
+    let pid = std::process::id();
+    let tmp_name = format!(".{}.{}.tmp", file_name, pid);
+    let tmp_path = dir.join(&tmp_name);
+
+    // Write, flush, sync, then atomic rename.
+    let mut file = fs::File::create(&tmp_path)?;
+    file.write_all(contents.as_bytes())?;
+    file.flush()?;
+    file.sync_all()?;
+    drop(file);
+
+    // Rename is atomic on POSIX when source and destination are on the same
+    // filesystem. On failure, clean up the temp file.
+    if let Err(e) = fs::rename(&tmp_path, path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e);
+    }
+    Ok(())
+}
 
 impl Codebase {
     // ─── Persistence: Load ─────────────────────────────────────
