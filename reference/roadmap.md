@@ -1,8 +1,12 @@
 # Roadmap
 
-Trident uses kelvin versioning. Versions count down toward absolute
-zero. At 0K a layer is frozen forever — no further changes. Lower
-layers freeze before higher layers.
+Trident exists to write CORE — Conserved Observable Reduction
+Equilibrium, a self-verifying substrate for planetary collective
+intelligence. 16 reduction patterns, field-first arithmetic, BBG
+state, focus dynamics — all written in Trident, all provable.
+
+Kelvin versioning: versions count down toward 0K (frozen forever).
+Lower layers freeze first.
 
 Three targets before first release:
 
@@ -14,6 +18,7 @@ Three targets before first release:
 ```
 Layer           Current   First Release
 ───────────────────────────────────────
+CORE            256K         64K
 vm spec          32K         16K
 language         64K         32K
 TIR             128K         64K
@@ -31,6 +36,7 @@ Quantum         256K        128K
 ## 256K — primitives land
 
 ```
+CORE      16 patterns implemented in Trident (reference evaluator)
 AI        Tensor operations in TIR (matmul, conv, attention)
 Privacy   FHE primitives in std.crypto (TFHE, BGV, CKKS)
 Quantum   Quantum gate set in TIR (Hadamard, CNOT, Toffoli, measure)
@@ -39,6 +45,7 @@ Quantum   Quantum gate set in TIR (Hadamard, CNOT, Toffoli, measure)
 ## 128K — the machine assembles
 
 ```
+CORE      Poseidon + Merkle as CORE programs, BBG prototype
 TIR       Lowering works for stack, register, and tree targets
 compiler  Lexer + parser rewritten in .tri
 std.*     std.token, std.coin, std.card shipped
@@ -52,6 +59,7 @@ Quantum   Quantum circuit simulation backend
 ## 64K — proof of concept
 
 ```
+CORE      Transaction circuit, STARK verifier as CORE program
 language  Indexed assignment (arr[i] = val, s.field = val)
 TIR       5+ OS targets lowering, all three VM types passing tests
 compiler  Type checker rewritten in .tri
@@ -68,8 +76,9 @@ Quantum   Hybrid programs: classical control + quantum subroutines
 Compiler compiles itself. Atlas live. Revolution demos ship.
 
 ```
-vm spec   Intrinsic set stable (no new vm.* builtins)
-language  Protocols (compile-time structural typing), grammar frozen
+CORE      Self-verifying: CORE proves its own execution
+vm spec   Intrinsic set stable: no new vm.* builtins
+language  Protocols: compile-time structural typing, grammar frozen
 TIR       TIROp set stable (5+ OS, 1 VM per type prove op set complete)
 compiler  Pipeline fully in Trident — compiler compiles itself
 std.*     #[requires]/#[ensures] contracts on all public functions
@@ -82,6 +91,7 @@ Quantum   Quantum error correction in std.quantum
 ## 16K — the industries fall
 
 ```
+CORE      Recursive composition — proofs verify proofs
 vm spec   Triton backend emission proven correct
 language  Type system finalized — no new type rules
 TIR       Per-function benchmarks < 1.2x, optimization passes land
@@ -97,6 +107,7 @@ Quantum   Real hardware backends (IBM, Google, IonQ)
 ## 8K — proven everything
 
 ```
+CORE      Focus dynamics live — collective intelligence emerges
 vm spec   3+ backends passing conformance suite
 language  Every language feature has a formal soundness proof
 TIR       Stack effect contracts proven for all ops
@@ -112,6 +123,7 @@ Quantum   Quantum advantage: problems classical can't touch
 ## 4K — hardware era
 
 ```
+CORE      BBG formally verified, all state transitions proven
 vm spec   TargetConfig / StackBackend / CostModel traits frozen
 language  Protocol system proven sound (composability without dispatch)
 TIR       Every lowering path formally verified
@@ -127,6 +139,7 @@ Quantum   Post-quantum crypto native (lattice-based std.crypto)
 ## 2K — last mile
 
 ```
+CORE      16 patterns proven correct, conservation laws verified
 vm spec   Every intrinsic has a formal cost proof
 language  Formal semantics published
 TIR       TIR-to-target roundtrip proven equivalent
@@ -142,6 +155,7 @@ Quantum   Quantum-classical proofs: STARK verifies quantum computation
 ## 0K
 
 ```
+CORE      sealed          The substrate verifies itself.
 vm spec   sealed          Intelligence without trust.
 language  sealed          Privacy without permission.
 TIR       sealed          Computation without limits.
