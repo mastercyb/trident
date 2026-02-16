@@ -1854,1187 +1854,910 @@ __pi:
 // CHI step: nonlinear row mixing
 // new[x][y] = state[x][y] ^ (~state[(x+1)%5][y] & state[(x+2)%5][y])
 //
-// Process each row: copy to temp[70..79], compute chi, write back.
-// For one lane chi: new_lo = a_lo ^ (~b_lo & c_lo)
-//                   new_hi = a_hi ^ (~b_hi & c_hi)
-// ~b_lo = b_lo ^ 4294967295 (all-ones U32 mask)
+// Decomposed into helper functions matching the .tri source:
+//   __xor_lane, __and_lane, __not_lane -> __chi_lane -> __chi
 // ===================================================================
+
+// __xor_lane: XOR two lanes
+// Stack: [b.hi, b.lo, a.hi, a.lo] -> [r.hi, r.lo]
+__xor_lane:
+    swap 3
+    xor
+    swap 2
+    xor
+    return
+
+// __and_lane: AND two lanes
+// Stack: [b.hi, b.lo, a.hi, a.lo] -> [r.hi, r.lo]
+__and_lane:
+    swap 3
+    and
+    swap 2
+    and
+    return
+
+// __not_lane: bitwise NOT of a lane (XOR with all-ones mask)
+// Stack: [a.hi, a.lo] -> [~a.hi, ~a.lo]
+__not_lane:
+    push 4294967295
+    dup 0
+    swap 2
+    xor
+    swap 2
+    xor
+    swap 1
+    return
+
+// __chi_lane: compute one lane of chi
+// Stack: [a.hi, a.lo, b.hi, b.lo, c.hi, c.lo] -> [r.hi, r.lo]
+// r = a ^ (~b & c)
+//
+// Compute r.lo = a.lo ^ (~b.lo & c.lo), r.hi = a.hi ^ (~b.hi & c.hi)
+// Uses scratch RAM at 1073741800-1073741801 to stash result.
+__chi_lane:
+    // --- r.lo = a.lo ^ (~b.lo & c.lo) ---
+    // Stack: [a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    //         st0   st1   st2   st3   st4   st5
+    dup 3            // [b.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    push 4294967295
+    xor              // [~b.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    dup 6            // [c.lo, ~b.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    and              // [~b.lo&c.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    dup 2            // [a.lo, ~b.lo&c.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    xor              // [r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+
+    // --- r.hi = a.hi ^ (~b.hi & c.hi) ---
+    // Stack: [r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    //         st0   st1   st2   st3   st4   st5   st6
+    dup 3            // [b.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    push 4294967295
+    xor              // [~b.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    dup 6            // [c.hi, ~b.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    and              // [~b.hi&c.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    dup 2            // [a.hi, ~b.hi&c.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    xor              // [r.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+
+    // Stash result to scratch RAM, discard dead values, restore
+    push 1073741800
+    swap 2           // [r.lo, r.hi, 1073741800, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    write_mem 2      // writes r.hi->1073741800, r.lo->1073741801
+                     // [1073741802, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
+    pop 5            // [c.hi, c.lo]
+    pop 2            // []
+    push 1073741801
+    read_mem 2       // [r.lo, r.hi, 1073741799]
+    swap 2           // [1073741799, r.hi, r.lo]
+    pop 1            // [r.hi, r.lo]
+    return
+
+// __chi: apply chi step to all 25 lanes
+// Processes 5 rows. For each row:
+//   1. Bulk-copy the 5 lanes (10 values) to temp[70..79]
+//   2. For each lane x: chi_lane(s[x], s[(x+1)%5], s[(x+2)%5])
+//   3. Write result back to state
+//
+// State layout: row y has lanes at addrs 10*y .. 10*y+9
+//   Lane x in row y: lo = 10*y + 2*x, hi = 10*y + 2*x + 1
+// Temp layout: lane x -> lo = 70 + 2*x, hi = 70 + 2*x + 1
+//
+// Bulk copy pattern (5 values from SRC_TOP down to DST):
+//   push SRC_TOP; read_mem 5  -> [v4,v3,v2,v1,v0, residual]
+//   swap 5; pop 1; push DST; swap 5  -> [v4,v3,v2,v1,v0, DST]
+//   write_mem 5  -> [DST+5]
+//   pop 1
+//
+// Lane load: push addr; read_mem 1; pop 1 (3 ops per half, 6 per lane)
+// Lane write: swap 1; push LO; swap 1; write_mem 1; swap 1; write_mem 1; pop 1
 __chi:
-    call __chi_row_0
-    call __chi_row_1
-    call __chi_row_2
-    call __chi_row_3
-    call __chi_row_4
-    return
+    // ---------------------------------------------------------------
+    // Row 0: state[0..9] -> temp[70..79]
+    // ---------------------------------------------------------------
 
-// chi_compute_lane: compute chi for one lane position in a row
-// Reads b and c from temp, computes a ^ (~b & c), writes to state.
-// Stack args: [a_addr_lo, b_addr_lo, c_addr_lo, dest_lo]
-// But passing 4 args is awkward. Instead, inline per-lane.
-
-// __chi_one: compute one lane of chi
-// Stack: [a_lo_addr, a_hi_addr, b_lo_addr, b_hi_addr, c_lo_addr, c_hi_addr, dest_lo, dest_hi, ...]
-// Too many args. Use direct inlining per row instead.
-
-// Row 0: lanes s00(0), s10(2), s20(4), s30(6), s40(8)
-// Copy to temp: lo addrs 70,72,74,76,78; hi addrs 71,73,75,77,79
-__chi_row_0:
-    // Copy row 0 (5 lanes, 10 values) to temp[70..79]
-    push 0
-    read_mem 1
-    pop 1
-    push 70
-    write_mem 1
-    pop 1
-    push 1
-    read_mem 1
-    pop 1
-    push 71
-    write_mem 1
-    pop 1
-    push 2
-    read_mem 1
-    pop 1
-    push 72
-    write_mem 1
-    pop 1
-    push 3
-    read_mem 1
-    pop 1
-    push 73
-    write_mem 1
-    pop 1
+    // Bulk copy state[0..4] -> temp[70..74]
     push 4
-    read_mem 1
+    read_mem 5
+    swap 5
     pop 1
+    push 70
+    swap 5
+    write_mem 5
+    pop 1
+    // Bulk copy state[5..9] -> temp[75..79]
+    push 9
+    read_mem 5
+    swap 5
+    pop 1
+    push 75
+    swap 5
+    write_mem 5
+    pop 1
+
+    // Lane 0: chi_lane(a=temp[70/71], b=temp[72/73], c=temp[74/75])
+    // Push c first (deepest), then b, then a (on top)
     push 74
-    write_mem 1
-    pop 1
-    push 5
     read_mem 1
     pop 1
     push 75
-    write_mem 1
-    pop 1
-    push 6
     read_mem 1
     pop 1
-    push 76
-    write_mem 1
-    pop 1
-    push 7
-    read_mem 1
-    pop 1
-    push 77
-    write_mem 1
-    pop 1
-    push 8
-    read_mem 1
-    pop 1
-    push 78
-    write_mem 1
-    pop 1
-    push 9
-    read_mem 1
-    pop 1
-    push 79
-    write_mem 1
-    pop 1
-
-    // s00 = s00 ^ (~s10 & s20): temp[70] ^ (~temp[72] & temp[74])
-    // lo:
     push 72
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 74
+    push 73
     read_mem 1
     pop 1
-    and
     push 70
     read_mem 1
     pop 1
-    xor
+    push 71
+    read_mem 1
+    pop 1
+    call __chi_lane
+    // Write result [r.hi, r.lo] to state[0/1]
+    swap 1
     push 0
+    swap 1
     write_mem 1
-    pop 1
-    // hi:
-    push 73
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 75
-    read_mem 1
-    pop 1
-    and
-    push 71
-    read_mem 1
-    pop 1
-    xor
-    push 1
+    swap 1
     write_mem 1
     pop 1
 
-    // s10 = s10 ^ (~s20 & s30)
-    push 74
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
+    // Lane 1: chi_lane(a=temp[72/73], b=temp[74/75], c=temp[76/77])
     push 76
     read_mem 1
     pop 1
-    and
+    push 77
+    read_mem 1
+    pop 1
+    push 74
+    read_mem 1
+    pop 1
+    push 75
+    read_mem 1
+    pop 1
     push 72
     read_mem 1
     pop 1
-    xor
+    push 73
+    read_mem 1
+    pop 1
+    call __chi_lane
+    swap 1
     push 2
+    swap 1
     write_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 77
-    read_mem 1
-    pop 1
-    and
-    push 73
-    read_mem 1
-    pop 1
-    xor
-    push 3
+    swap 1
     write_mem 1
     pop 1
 
-    // s20 = s20 ^ (~s30 & s40)
-    push 76
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
+    // Lane 2: chi_lane(a=temp[74/75], b=temp[76/77], c=temp[78/79])
     push 78
     read_mem 1
     pop 1
-    and
+    push 79
+    read_mem 1
+    pop 1
+    push 76
+    read_mem 1
+    pop 1
+    push 77
+    read_mem 1
+    pop 1
     push 74
     read_mem 1
     pop 1
-    xor
-    push 4
-    write_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 79
-    read_mem 1
-    pop 1
-    and
     push 75
     read_mem 1
     pop 1
-    xor
-    push 5
+    call __chi_lane
+    swap 1
+    push 4
+    swap 1
+    write_mem 1
+    swap 1
     write_mem 1
     pop 1
 
-    // s30 = s30 ^ (~s40 & s00)
-    push 78
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
+    // Lane 3: chi_lane(a=temp[76/77], b=temp[78/79], c=temp[70/71])
     push 70
     read_mem 1
     pop 1
-    and
+    push 71
+    read_mem 1
+    pop 1
+    push 78
+    read_mem 1
+    pop 1
+    push 79
+    read_mem 1
+    pop 1
     push 76
     read_mem 1
     pop 1
-    xor
-    push 6
-    write_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 71
-    read_mem 1
-    pop 1
-    and
     push 77
     read_mem 1
     pop 1
-    xor
-    push 7
+    call __chi_lane
+    swap 1
+    push 6
+    swap 1
+    write_mem 1
+    swap 1
     write_mem 1
     pop 1
 
-    // s40 = s40 ^ (~s00 & s10)
-    push 70
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
+    // Lane 4: chi_lane(a=temp[78/79], b=temp[70/71], c=temp[72/73])
     push 72
     read_mem 1
     pop 1
-    and
+    push 73
+    read_mem 1
+    pop 1
+    push 70
+    read_mem 1
+    pop 1
+    push 71
+    read_mem 1
+    pop 1
     push 78
     read_mem 1
     pop 1
-    xor
-    push 8
-    write_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 73
-    read_mem 1
-    pop 1
-    and
     push 79
     read_mem 1
     pop 1
-    xor
-    push 9
+    call __chi_lane
+    swap 1
+    push 8
+    swap 1
+    write_mem 1
+    swap 1
     write_mem 1
     pop 1
-    return
 
-// Row 1: lanes s01(10), s11(12), s21(14), s31(16), s41(18)
-__chi_row_1:
-    // Copy to temp
-    push 10
-    read_mem 1
-    pop 1
-    push 70
-    write_mem 1
-    pop 1
-    push 11
-    read_mem 1
-    pop 1
-    push 71
-    write_mem 1
-    pop 1
-    push 12
-    read_mem 1
-    pop 1
-    push 72
-    write_mem 1
-    pop 1
-    push 13
-    read_mem 1
-    pop 1
-    push 73
-    write_mem 1
-    pop 1
+    // ---------------------------------------------------------------
+    // Row 1: state[10..19] -> temp[70..79]
+    // ---------------------------------------------------------------
+
     push 14
-    read_mem 1
+    read_mem 5
+    swap 5
     pop 1
-    push 74
-    write_mem 1
-    pop 1
-    push 15
-    read_mem 1
-    pop 1
-    push 75
-    write_mem 1
-    pop 1
-    push 16
-    read_mem 1
-    pop 1
-    push 76
-    write_mem 1
-    pop 1
-    push 17
-    read_mem 1
-    pop 1
-    push 77
-    write_mem 1
-    pop 1
-    push 18
-    read_mem 1
-    pop 1
-    push 78
-    write_mem 1
+    push 70
+    swap 5
+    write_mem 5
     pop 1
     push 19
-    read_mem 1
+    read_mem 5
+    swap 5
     pop 1
-    push 79
-    write_mem 1
+    push 75
+    swap 5
+    write_mem 5
     pop 1
 
-    // Compute chi for each lane in row 1
-    // s01 = s01 ^ (~s11 & s21)
-    push 72
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
+    // Lane 0: chi_lane(a=temp[70/71], b=temp[72/73], c=temp[74/75])
     push 74
     read_mem 1
     pop 1
-    and
+    push 75
+    read_mem 1
+    pop 1
+    push 72
+    read_mem 1
+    pop 1
+    push 73
+    read_mem 1
+    pop 1
     push 70
     read_mem 1
     pop 1
-    xor
+    push 71
+    read_mem 1
+    pop 1
+    call __chi_lane
+    swap 1
     push 10
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 1: chi_lane(a=temp[72/73], b=temp[74/75], c=temp[76/77])
+    push 76
+    read_mem 1
+    pop 1
+    push 77
+    read_mem 1
+    pop 1
+    push 74
+    read_mem 1
+    pop 1
+    push 75
+    read_mem 1
+    pop 1
+    push 72
+    read_mem 1
     pop 1
     push 73
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 75
-    read_mem 1
-    pop 1
-    and
-    push 71
-    read_mem 1
-    pop 1
-    xor
-    push 11
-    write_mem 1
-    pop 1
-
-    // s11 = s11 ^ (~s21 & s31)
-    push 74
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 76
-    read_mem 1
-    pop 1
-    and
-    push 72
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 12
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 2: chi_lane(a=temp[74/75], b=temp[76/77], c=temp[78/79])
+    push 78
+    read_mem 1
+    pop 1
+    push 79
+    read_mem 1
+    pop 1
+    push 76
+    read_mem 1
+    pop 1
+    push 77
+    read_mem 1
+    pop 1
+    push 74
+    read_mem 1
     pop 1
     push 75
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 77
-    read_mem 1
-    pop 1
-    and
-    push 73
-    read_mem 1
-    pop 1
-    xor
-    push 13
-    write_mem 1
-    pop 1
-
-    // s21 = s21 ^ (~s31 & s41)
-    push 76
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 78
-    read_mem 1
-    pop 1
-    and
-    push 74
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 14
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 3: chi_lane(a=temp[76/77], b=temp[78/79], c=temp[70/71])
+    push 70
+    read_mem 1
+    pop 1
+    push 71
+    read_mem 1
+    pop 1
+    push 78
+    read_mem 1
+    pop 1
+    push 79
+    read_mem 1
+    pop 1
+    push 76
+    read_mem 1
     pop 1
     push 77
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 79
-    read_mem 1
-    pop 1
-    and
-    push 75
-    read_mem 1
-    pop 1
-    xor
-    push 15
-    write_mem 1
-    pop 1
-
-    // s31 = s31 ^ (~s41 & s01)
-    push 78
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 70
-    read_mem 1
-    pop 1
-    and
-    push 76
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 16
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 4: chi_lane(a=temp[78/79], b=temp[70/71], c=temp[72/73])
+    push 72
+    read_mem 1
+    pop 1
+    push 73
+    read_mem 1
+    pop 1
+    push 70
+    read_mem 1
+    pop 1
+    push 71
+    read_mem 1
+    pop 1
+    push 78
+    read_mem 1
     pop 1
     push 79
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 71
-    read_mem 1
-    pop 1
-    and
-    push 77
-    read_mem 1
-    pop 1
-    xor
-    push 17
-    write_mem 1
-    pop 1
-
-    // s41 = s41 ^ (~s01 & s11)
-    push 70
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 72
-    read_mem 1
-    pop 1
-    and
-    push 78
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 18
+    swap 1
+    write_mem 1
+    swap 1
     write_mem 1
     pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 73
-    read_mem 1
-    pop 1
-    and
-    push 79
-    read_mem 1
-    pop 1
-    xor
-    push 19
-    write_mem 1
-    pop 1
-    return
 
-// Row 2: lanes s02(20), s12(22), s22(24), s32(26), s42(28)
-__chi_row_2:
-    push 20
-    read_mem 1
+    // ---------------------------------------------------------------
+    // Row 2: state[20..29] -> temp[70..79]
+    // ---------------------------------------------------------------
+
+    push 24
+    read_mem 5
+    swap 5
     pop 1
     push 70
-    write_mem 1
-    pop 1
-    push 21
-    read_mem 1
-    pop 1
-    push 71
-    write_mem 1
-    pop 1
-    push 22
-    read_mem 1
-    pop 1
-    push 72
-    write_mem 1
-    pop 1
-    push 23
-    read_mem 1
-    pop 1
-    push 73
-    write_mem 1
-    pop 1
-    push 24
-    read_mem 1
-    pop 1
-    push 74
-    write_mem 1
-    pop 1
-    push 25
-    read_mem 1
-    pop 1
-    push 75
-    write_mem 1
-    pop 1
-    push 26
-    read_mem 1
-    pop 1
-    push 76
-    write_mem 1
-    pop 1
-    push 27
-    read_mem 1
-    pop 1
-    push 77
-    write_mem 1
-    pop 1
-    push 28
-    read_mem 1
-    pop 1
-    push 78
-    write_mem 1
+    swap 5
+    write_mem 5
     pop 1
     push 29
-    read_mem 1
+    read_mem 5
+    swap 5
     pop 1
-    push 79
-    write_mem 1
+    push 75
+    swap 5
+    write_mem 5
     pop 1
 
-    push 72
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
+    // Lane 0: chi_lane(a=temp[70/71], b=temp[72/73], c=temp[74/75])
     push 74
     read_mem 1
     pop 1
-    and
+    push 75
+    read_mem 1
+    pop 1
+    push 72
+    read_mem 1
+    pop 1
+    push 73
+    read_mem 1
+    pop 1
     push 70
     read_mem 1
     pop 1
-    xor
+    push 71
+    read_mem 1
+    pop 1
+    call __chi_lane
+    swap 1
     push 20
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 1: chi_lane(a=temp[72/73], b=temp[74/75], c=temp[76/77])
+    push 76
+    read_mem 1
+    pop 1
+    push 77
+    read_mem 1
+    pop 1
+    push 74
+    read_mem 1
+    pop 1
+    push 75
+    read_mem 1
+    pop 1
+    push 72
+    read_mem 1
     pop 1
     push 73
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 75
-    read_mem 1
-    pop 1
-    and
-    push 71
-    read_mem 1
-    pop 1
-    xor
-    push 21
-    write_mem 1
-    pop 1
-
-    push 74
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 76
-    read_mem 1
-    pop 1
-    and
-    push 72
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 22
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 2: chi_lane(a=temp[74/75], b=temp[76/77], c=temp[78/79])
+    push 78
+    read_mem 1
+    pop 1
+    push 79
+    read_mem 1
+    pop 1
+    push 76
+    read_mem 1
+    pop 1
+    push 77
+    read_mem 1
+    pop 1
+    push 74
+    read_mem 1
     pop 1
     push 75
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 77
-    read_mem 1
-    pop 1
-    and
-    push 73
-    read_mem 1
-    pop 1
-    xor
-    push 23
-    write_mem 1
-    pop 1
-
-    push 76
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 78
-    read_mem 1
-    pop 1
-    and
-    push 74
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 24
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 3: chi_lane(a=temp[76/77], b=temp[78/79], c=temp[70/71])
+    push 70
+    read_mem 1
+    pop 1
+    push 71
+    read_mem 1
+    pop 1
+    push 78
+    read_mem 1
+    pop 1
+    push 79
+    read_mem 1
+    pop 1
+    push 76
+    read_mem 1
     pop 1
     push 77
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 79
-    read_mem 1
-    pop 1
-    and
-    push 75
-    read_mem 1
-    pop 1
-    xor
-    push 25
-    write_mem 1
-    pop 1
-
-    push 78
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 70
-    read_mem 1
-    pop 1
-    and
-    push 76
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 26
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 4: chi_lane(a=temp[78/79], b=temp[70/71], c=temp[72/73])
+    push 72
+    read_mem 1
+    pop 1
+    push 73
+    read_mem 1
+    pop 1
+    push 70
+    read_mem 1
+    pop 1
+    push 71
+    read_mem 1
+    pop 1
+    push 78
+    read_mem 1
     pop 1
     push 79
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 71
-    read_mem 1
-    pop 1
-    and
-    push 77
-    read_mem 1
-    pop 1
-    xor
-    push 27
-    write_mem 1
-    pop 1
-
-    push 70
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 72
-    read_mem 1
-    pop 1
-    and
-    push 78
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 28
+    swap 1
+    write_mem 1
+    swap 1
     write_mem 1
     pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 73
-    read_mem 1
-    pop 1
-    and
-    push 79
-    read_mem 1
-    pop 1
-    xor
-    push 29
-    write_mem 1
-    pop 1
-    return
 
-// Row 3: lanes s03(30), s13(32), s23(34), s33(36), s43(38)
-__chi_row_3:
-    push 30
-    read_mem 1
+    // ---------------------------------------------------------------
+    // Row 3: state[30..39] -> temp[70..79]
+    // ---------------------------------------------------------------
+
+    push 34
+    read_mem 5
+    swap 5
     pop 1
     push 70
-    write_mem 1
-    pop 1
-    push 31
-    read_mem 1
-    pop 1
-    push 71
-    write_mem 1
-    pop 1
-    push 32
-    read_mem 1
-    pop 1
-    push 72
-    write_mem 1
-    pop 1
-    push 33
-    read_mem 1
-    pop 1
-    push 73
-    write_mem 1
-    pop 1
-    push 34
-    read_mem 1
-    pop 1
-    push 74
-    write_mem 1
-    pop 1
-    push 35
-    read_mem 1
-    pop 1
-    push 75
-    write_mem 1
-    pop 1
-    push 36
-    read_mem 1
-    pop 1
-    push 76
-    write_mem 1
-    pop 1
-    push 37
-    read_mem 1
-    pop 1
-    push 77
-    write_mem 1
-    pop 1
-    push 38
-    read_mem 1
-    pop 1
-    push 78
-    write_mem 1
+    swap 5
+    write_mem 5
     pop 1
     push 39
-    read_mem 1
+    read_mem 5
+    swap 5
     pop 1
-    push 79
-    write_mem 1
+    push 75
+    swap 5
+    write_mem 5
     pop 1
 
-    push 72
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
+    // Lane 0: chi_lane(a=temp[70/71], b=temp[72/73], c=temp[74/75])
     push 74
     read_mem 1
     pop 1
-    and
+    push 75
+    read_mem 1
+    pop 1
+    push 72
+    read_mem 1
+    pop 1
+    push 73
+    read_mem 1
+    pop 1
     push 70
     read_mem 1
     pop 1
-    xor
+    push 71
+    read_mem 1
+    pop 1
+    call __chi_lane
+    swap 1
     push 30
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 1: chi_lane(a=temp[72/73], b=temp[74/75], c=temp[76/77])
+    push 76
+    read_mem 1
+    pop 1
+    push 77
+    read_mem 1
+    pop 1
+    push 74
+    read_mem 1
+    pop 1
+    push 75
+    read_mem 1
+    pop 1
+    push 72
+    read_mem 1
     pop 1
     push 73
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 75
-    read_mem 1
-    pop 1
-    and
-    push 71
-    read_mem 1
-    pop 1
-    xor
-    push 31
-    write_mem 1
-    pop 1
-
-    push 74
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 76
-    read_mem 1
-    pop 1
-    and
-    push 72
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 32
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 2: chi_lane(a=temp[74/75], b=temp[76/77], c=temp[78/79])
+    push 78
+    read_mem 1
+    pop 1
+    push 79
+    read_mem 1
+    pop 1
+    push 76
+    read_mem 1
+    pop 1
+    push 77
+    read_mem 1
+    pop 1
+    push 74
+    read_mem 1
     pop 1
     push 75
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 77
-    read_mem 1
-    pop 1
-    and
-    push 73
-    read_mem 1
-    pop 1
-    xor
-    push 33
-    write_mem 1
-    pop 1
-
-    push 76
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 78
-    read_mem 1
-    pop 1
-    and
-    push 74
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 34
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 3: chi_lane(a=temp[76/77], b=temp[78/79], c=temp[70/71])
+    push 70
+    read_mem 1
+    pop 1
+    push 71
+    read_mem 1
+    pop 1
+    push 78
+    read_mem 1
+    pop 1
+    push 79
+    read_mem 1
+    pop 1
+    push 76
+    read_mem 1
     pop 1
     push 77
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 79
-    read_mem 1
-    pop 1
-    and
-    push 75
-    read_mem 1
-    pop 1
-    xor
-    push 35
-    write_mem 1
-    pop 1
-
-    push 78
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 70
-    read_mem 1
-    pop 1
-    and
-    push 76
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 36
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 4: chi_lane(a=temp[78/79], b=temp[70/71], c=temp[72/73])
+    push 72
+    read_mem 1
+    pop 1
+    push 73
+    read_mem 1
+    pop 1
+    push 70
+    read_mem 1
+    pop 1
+    push 71
+    read_mem 1
+    pop 1
+    push 78
+    read_mem 1
     pop 1
     push 79
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 71
-    read_mem 1
-    pop 1
-    and
-    push 77
-    read_mem 1
-    pop 1
-    xor
-    push 37
-    write_mem 1
-    pop 1
-
-    push 70
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 72
-    read_mem 1
-    pop 1
-    and
-    push 78
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 38
+    swap 1
+    write_mem 1
+    swap 1
     write_mem 1
     pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 73
-    read_mem 1
-    pop 1
-    and
-    push 79
-    read_mem 1
-    pop 1
-    xor
-    push 39
-    write_mem 1
-    pop 1
-    return
 
-// Row 4: lanes s04(40), s14(42), s24(44), s34(46), s44(48)
-__chi_row_4:
-    push 40
-    read_mem 1
+    // ---------------------------------------------------------------
+    // Row 4: state[40..49] -> temp[70..79]
+    // ---------------------------------------------------------------
+
+    push 44
+    read_mem 5
+    swap 5
     pop 1
     push 70
-    write_mem 1
-    pop 1
-    push 41
-    read_mem 1
-    pop 1
-    push 71
-    write_mem 1
-    pop 1
-    push 42
-    read_mem 1
-    pop 1
-    push 72
-    write_mem 1
-    pop 1
-    push 43
-    read_mem 1
-    pop 1
-    push 73
-    write_mem 1
-    pop 1
-    push 44
-    read_mem 1
-    pop 1
-    push 74
-    write_mem 1
-    pop 1
-    push 45
-    read_mem 1
-    pop 1
-    push 75
-    write_mem 1
-    pop 1
-    push 46
-    read_mem 1
-    pop 1
-    push 76
-    write_mem 1
-    pop 1
-    push 47
-    read_mem 1
-    pop 1
-    push 77
-    write_mem 1
-    pop 1
-    push 48
-    read_mem 1
-    pop 1
-    push 78
-    write_mem 1
+    swap 5
+    write_mem 5
     pop 1
     push 49
-    read_mem 1
+    read_mem 5
+    swap 5
     pop 1
-    push 79
-    write_mem 1
+    push 75
+    swap 5
+    write_mem 5
     pop 1
 
-    push 72
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
+    // Lane 0: chi_lane(a=temp[70/71], b=temp[72/73], c=temp[74/75])
     push 74
     read_mem 1
     pop 1
-    and
+    push 75
+    read_mem 1
+    pop 1
+    push 72
+    read_mem 1
+    pop 1
+    push 73
+    read_mem 1
+    pop 1
     push 70
     read_mem 1
     pop 1
-    xor
+    push 71
+    read_mem 1
+    pop 1
+    call __chi_lane
+    swap 1
     push 40
+    swap 1
     write_mem 1
+    swap 1
+    write_mem 1
+    pop 1
+
+    // Lane 1: chi_lane(a=temp[72/73], b=temp[74/75], c=temp[76/77])
+    push 76
+    read_mem 1
+    pop 1
+    push 77
+    read_mem 1
+    pop 1
+    push 74
+    read_mem 1
+    pop 1
+    push 75
+    read_mem 1
+    pop 1
+    push 72
+    read_mem 1
     pop 1
     push 73
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 75
-    read_mem 1
-    pop 1
-    and
-    push 71
-    read_mem 1
-    pop 1
-    xor
-    push 41
-    write_mem 1
-    pop 1
-
-    push 74
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 76
-    read_mem 1
-    pop 1
-    and
-    push 72
-    read_mem 1
-    pop 1
-    xor
+    call __chi_lane
+    swap 1
     push 42
+    swap 1
     write_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 77
-    read_mem 1
-    pop 1
-    and
-    push 73
-    read_mem 1
-    pop 1
-    xor
-    push 43
+    swap 1
     write_mem 1
     pop 1
 
-    push 76
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
+    // Lane 2: chi_lane(a=temp[74/75], b=temp[76/77], c=temp[78/79])
     push 78
     read_mem 1
     pop 1
-    and
+    push 79
+    read_mem 1
+    pop 1
+    push 76
+    read_mem 1
+    pop 1
+    push 77
+    read_mem 1
+    pop 1
     push 74
     read_mem 1
     pop 1
-    xor
-    push 44
-    write_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 79
-    read_mem 1
-    pop 1
-    and
     push 75
     read_mem 1
     pop 1
-    xor
-    push 45
+    call __chi_lane
+    swap 1
+    push 44
+    swap 1
+    write_mem 1
+    swap 1
     write_mem 1
     pop 1
 
-    push 78
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
+    // Lane 3: chi_lane(a=temp[76/77], b=temp[78/79], c=temp[70/71])
     push 70
     read_mem 1
     pop 1
-    and
+    push 71
+    read_mem 1
+    pop 1
+    push 78
+    read_mem 1
+    pop 1
+    push 79
+    read_mem 1
+    pop 1
     push 76
     read_mem 1
     pop 1
-    xor
-    push 46
-    write_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
-    push 71
-    read_mem 1
-    pop 1
-    and
     push 77
     read_mem 1
     pop 1
-    xor
-    push 47
+    call __chi_lane
+    swap 1
+    push 46
+    swap 1
+    write_mem 1
+    swap 1
     write_mem 1
     pop 1
 
-    push 70
-    read_mem 1
-    pop 1
-    push 4294967295
-    xor
+    // Lane 4: chi_lane(a=temp[78/79], b=temp[70/71], c=temp[72/73])
     push 72
     read_mem 1
     pop 1
-    and
-    push 78
+    push 73
     read_mem 1
     pop 1
-    xor
-    push 48
-    write_mem 1
+    push 70
+    read_mem 1
     pop 1
     push 71
     read_mem 1
     pop 1
-    push 4294967295
-    xor
-    push 73
+    push 78
     read_mem 1
     pop 1
-    and
     push 79
     read_mem 1
     pop 1
-    xor
-    push 49
+    call __chi_lane
+    swap 1
+    push 48
+    swap 1
+    write_mem 1
+    swap 1
     write_mem 1
     pop 1
+
     return
 
 // ===================================================================
