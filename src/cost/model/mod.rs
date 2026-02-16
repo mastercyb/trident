@@ -227,16 +227,10 @@ pub(crate) fn cost_builtin(target: &str, name: &str) -> TableCost {
 
 /// Select the cost model for a given target name.
 ///
-/// Falls back to Triton for unknown targets with an eprintln warning.
+/// Falls back to Triton for unknown targets (currently the only model).
 pub(crate) fn create_cost_model(target_name: &str) -> &'static dyn CostModel {
     match target_name {
         "triton" => &TritonCostModel,
-        other => {
-            eprintln!(
-                "warning: no cost model for target '{}', falling back to triton",
-                other
-            );
-            &TritonCostModel
-        }
+        _ => &TritonCostModel,
     }
 }

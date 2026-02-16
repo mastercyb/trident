@@ -37,7 +37,7 @@ pub fn publish_codebase(
         match client.publish(&pub_def) {
             Ok(result) => results.push(result),
             Err(e) => {
-                eprintln!("  warning: failed to publish '{}': {}", name, e);
+                return Err(format!("failed to publish '{}': {}", name, e));
             }
         }
     }
@@ -57,8 +57,7 @@ pub fn pull_into_codebase(
         client.pull_by_name(name_or_hash)?
     };
 
-    let hash =
-        ContentHash::from_hex(&pull.hash)
+    let hash = ContentHash::from_hex(&pull.hash)
         .ok_or_else(|| "invalid hash in pull response".to_string())?;
 
     if codebase.lookup_hash(&hash).is_some() {
