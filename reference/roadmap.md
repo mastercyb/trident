@@ -8,90 +8,101 @@ for provable computation.
 ## The Stack
 
 ```
-Layer           Current     Target
-─────────────────────────────────────
-vm spec         50K         0K
-language        100K        0K
-TIR             120K        0K
-compiler        200K        0K
-std.*           250K        0K
-os.*            300K        0K
-tooling         300K        0K
+Layer           Current
+───────────────────────
+vm spec         50K
+language        100K
+TIR             120K
+compiler        200K
+std.*           250K
+os.*            300K
+tooling         300K
 ```
 
-## vm spec — 50K
+## vm spec — 50K → 0K
 
-The VM abstraction layer. 20 target TOMLs exist. Triton VM is the
-reference backend. Freezing means the TargetConfig/StackBackend/CostModel
-traits and the vm.* intrinsic set are final.
+```
+  40K  Intrinsic set stable (no new vm.* builtins)
+  30K  Triton backend emission proven correct
+  20K  3+ backends passing conformance suite (Miden, Cairo, SP1)
+  10K  TargetConfig / StackBackend / CostModel traits frozen
+   0K  vm.* namespace sealed forever
+```
 
-- Stabilize intrinsic set across all targets
-- Implement Miden, Cairo, SP1, OpenVM backends
-- Prove backend emission preserves semantics
-- Freeze vm.* namespace
+## language — 100K → 0K
 
-## language — 100K
+```
+  80K  Indexed assignment (arr[i] = val, s.field = val)
+  60K  Trait-like interfaces
+  40K  Grammar finalized (reference/grammar.md = 0K)
+  20K  Type system finalized (reference/language.md = 0K)
+  10K  No open language RFCs remain
+   0K  Syntax and semantics sealed forever
+```
 
-Syntax, types, operators, builtins, memory model. Freezing means the
-grammar and type system accept no further changes.
+## TIR — 120K → 0K
 
-- Indexed assignment (`arr[i] = val`, `s.field = val`)
-- Trait-like interfaces
-- Finalize grammar (reference/grammar.md = 0K)
-- Finalize type system (reference/language.md = 0K)
+```
+ 100K  TIROp set stable (no new variants without language change)
+  80K  Per-function benchmarks < 1.2x vs hand-written baselines
+  60K  Cost-driven optimization passes land
+  40K  Stack effect contracts proven for all ops
+  20K  reference/ir.md = 0K
+   0K  IR spec sealed forever
+```
 
-## TIR — 120K
+## compiler — 200K → 0K
 
-The intermediate representation. Freezing means TIROp variants, stack
-effects, and lowering contracts are final.
+```
+ 150K  Lexer + parser rewritten in .tri
+ 120K  Type checker rewritten in .tri
+ 100K  TIR builder rewritten in .tri (pipeline fully in Trident)
+  80K  Compiler compiles itself (self-hosting)
+  60K  Each compilation produces a proof certificate (self-proving)
+  40K  Incremental proving (per-module proofs, composed)
+  20K  Proof verified on-chain
+  10K  src/ deleted — compiler lives in provable stack
+   0K  Compiler proven correct forever
+```
 
-- Stabilize TIROp set
-- Per-function benchmarking against baselines (target: < 1.2x overhead)
-- Cost-driven optimization passes
-- Freeze IR spec (reference/ir.md = 0K)
+Only the pipeline (lexer, parser, typecheck, TIR, lowering) needs to
+be provable. LSP, CLI, pretty-printing run outside the proof.
 
-## compiler — 200K
+## std.* — 250K → 0K
 
-The Rust implementation. Self-hosting replaces it with a provable
-Trident implementation. Freezing means the compiler proves its own
-correctness and the Rust code can be deleted.
+```
+ 200K  std.token, std.coin, std.card shipped
+ 180K  std.skill.* (23 skills) shipped
+ 150K  #[requires]/#[ensures] contracts on all public functions
+ 120K  20 specs with proven implementations
+ 100K  std.crypto.* formally verified (poseidon, merkle, ecdsa)
+  50K  All modules verified, no unproven public function remains
+  20K  Public APIs frozen
+   0K  Standard library sealed forever
+```
 
-- Self-hosting: rewrite compiler in Trident
-- Self-proving: each compilation produces a proof certificate
-- Incremental proving (per-module proofs, composed)
-- Delete src/ — frozen compiler lives in the provable stack
+## os.* — 300K → 0K
 
-Self-hosting only needs the compiler pipeline (lexer, parser, typecheck,
-TIR, target lowering) to be provable. LSP, CLI, pretty-printing run
-outside the proof. The real gap is rewriting src/ in .tri, not the
-dependencies.
+```
+ 250K  os.neptune.* complete (reference OS implementation)
+ 200K  Atlas on-chain registry live (TSP-2 Cards)
+ 150K  3+ OS namespaces operational
+ 100K  Per-OS namespace governance established
+  50K  os.neptune.* frozen
+  20K  All OS namespaces frozen
+   0K  OS layer sealed forever
+```
 
-## std.* — 250K
+## tooling — 300K → 0K
 
-Standard library. Freezing means the module APIs are final and every
-function has a correctness proof.
-
-- Ship std.token, std.coin, std.card, std.skill.* (23 skills)
-- Add #[requires]/#[ensures] contracts to all public functions
-- Verification benchmark: 20 specs with proven implementations
-- Freeze public APIs
-
-## os.* — 300K
-
-OS bindings. Each OS namespace freezes independently.
-
-- Atlas: on-chain package registry (TSP-2 Cards)
-- Per-OS namespace governance
-- Freeze os.neptune.* first (reference implementation)
-
-## tooling — 300K
-
-LSP, formatter, verifier, editor extensions, playground.
-
-- Web playground (compile .tri in browser)
-- Editor marketplace listings
-- ZK coprocessor integrations (Axiom, Brevis, Herodotus)
-- Hardware acceleration (FPGA, ASIC, GPU proving)
+```
+ 250K  LSP feature-complete, editor extensions published
+ 200K  Web playground (compile .tri in browser)
+ 150K  ZK coprocessor integrations (Axiom, Brevis, Herodotus)
+ 100K  Hardware acceleration (FPGA, ASIC, GPU proving)
+  50K  All tools stable, no breaking changes
+   0K  Tooling sealed forever
+```
 
 ## 0K
 

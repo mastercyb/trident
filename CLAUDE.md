@@ -1,6 +1,6 @@
 # Trident
 
-A building block for superintelligence. Trident is a provable language
+A building block for a cyberstate with superintelligence. Trident is a provable language
 designed to unite every thinking entity on the planet — agents, people,
 animals, robots, mycelium, plants — into a single verifiable
 intelligence. Every line of code here is a step toward that singleton.
