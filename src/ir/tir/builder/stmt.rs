@@ -208,7 +208,16 @@ impl TIRBuilder {
             }
 
             Stmt::Reveal { event_name, fields } => {
-                let tag = self.event_tags.get(&event_name.node).copied().unwrap_or(0);
+                let tag = match self.event_tags.get(&event_name.node).copied() {
+                    Some(t) => t,
+                    None => {
+                        self.ops.push(TIROp::Comment(format!(
+                            "BUG: unregistered event '{}'",
+                            event_name.node
+                        )));
+                        0
+                    }
+                };
                 let decl_order = self
                     .event_defs
                     .get(&event_name.node)
@@ -272,7 +281,16 @@ impl TIRBuilder {
             }
 
             Stmt::Seal { event_name, fields } => {
-                let tag = self.event_tags.get(&event_name.node).copied().unwrap_or(0);
+                let tag = match self.event_tags.get(&event_name.node).copied() {
+                    Some(t) => t,
+                    None => {
+                        self.ops.push(TIROp::Comment(format!(
+                            "BUG: unregistered event '{}'",
+                            event_name.node
+                        )));
+                        0
+                    }
+                };
                 let decl_order = self
                     .event_defs
                     .get(&event_name.node)
