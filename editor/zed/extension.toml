@@ -8,7 +8,7 @@ authors = ["mastercyb"]
 [grammars.trident]
 repository = "https://github.com/mastercyb/trident"
 path = "tree-sitter"
-rev = "807d23f2c17a643b89234f5ce0a0fdce586134f5"
+rev = "77c2e400dbe5033f86bc6bfe6a2dc6154bc6dbbe"
 
 [language_servers.trident-lsp]
 name = "Trident LSP"
