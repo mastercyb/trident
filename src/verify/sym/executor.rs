@@ -1,5 +1,8 @@
 use super::*;
 
+/// Maximum iterations for constant-range for-loop unrolling in symbolic execution.
+const MAX_CONST_LOOP_UNROLL: u64 = 10_000;
+
 // ─── Symbolic Executor ─────────────────────────────────────────────
 
 /// Symbolic executor that walks the AST and builds a constraint system.
@@ -217,7 +220,7 @@ impl SymExecutor {
 
                 // If both are constants, unroll exactly
                 if let (Some(s), Some(e)) = (start_val.as_const(), end_val.as_const()) {
-                    for i in s..e {
+                    for i in s..e.min(s + MAX_CONST_LOOP_UNROLL) {
                         self.env.insert(var.node.clone(), SymValue::Const(i));
                         self.execute_block(&body.node);
                     }
