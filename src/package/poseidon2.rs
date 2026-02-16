@@ -139,6 +139,12 @@ fn generate_all_constants() -> Vec<GoldilocksField> {
     constants
 }
 
+/// Cached round constants, computed once on first access.
+fn cached_round_constants() -> &'static [GoldilocksField] {
+    static CONSTANTS: std::sync::OnceLock<Vec<GoldilocksField>> = std::sync::OnceLock::new();
+    CONSTANTS.get_or_init(generate_all_constants)
+}
+
 // ---------------------------------------------------------------------------
 // Poseidon2 state & permutation
 // ---------------------------------------------------------------------------
@@ -195,7 +201,7 @@ impl Poseidon2State {
 
     /// Full Poseidon2 permutation (in-place).
     pub fn permutation(&mut self) {
-        let constants = generate_all_constants();
+        let constants = cached_round_constants();
         let mut ci = 0;
 
         // First R_F/2 full rounds
