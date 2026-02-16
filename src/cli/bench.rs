@@ -11,9 +11,9 @@ pub struct BenchArgs {
 }
 
 pub fn cmd_bench(args: BenchArgs) {
-    let BenchArgs { dir } = args;
+    let dir = resolve_bench_dir(&args.dir);
     if !dir.is_dir() {
-        eprintln!("error: '{}' is not a directory", dir.display());
+        eprintln!("error: '{}' is not a directory", args.dir.display());
         process::exit(1);
     }
 
@@ -113,4 +113,29 @@ pub fn cmd_bench(args: BenchArgs) {
         );
     }
     eprintln!();
+}
+
+/// Resolve the bench directory by searching ancestor directories.
+/// If the given path exists, use it directly. Otherwise walk up from CWD
+/// looking for a directory with that name (e.g. "benches").
+fn resolve_bench_dir(dir: &std::path::Path) -> PathBuf {
+    if dir.is_dir() {
+        return dir.to_path_buf();
+    }
+    if dir.is_relative() {
+        if let Ok(cwd) = std::env::current_dir() {
+            let mut ancestor = cwd.as_path();
+            loop {
+                let candidate = ancestor.join(dir);
+                if candidate.is_dir() {
+                    return candidate;
+                }
+                match ancestor.parent() {
+                    Some(parent) => ancestor = parent,
+                    None => break,
+                }
+            }
+        }
+    }
+    dir.to_path_buf()
 }
