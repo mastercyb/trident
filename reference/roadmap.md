@@ -37,7 +37,7 @@ tooling         256K
   32K  Trait-like interfaces
   16K  Grammar finalized — no new syntax forms
    8K  Type system finalized — no new type rules
-   4K  No open language RFCs remain
+   4K  Every language feature has a formal soundness proof
    2K  Formal semantics published
    0K  Syntax and semantics sealed forever
 ```
