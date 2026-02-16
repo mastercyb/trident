@@ -1,3 +1,5 @@
+mod asm;
+
 use std::collections::BTreeMap;
 
 use tower_lsp::lsp_types::*;
@@ -63,7 +65,13 @@ pub(super) fn semantic_tokens_from_cache(doc: &DocumentState) -> Vec<SemanticTok
     let builtin_names: std::collections::HashSet<String> =
         builtin_completions().into_iter().map(|(n, _)| n).collect();
 
-    let raw = classify_all(&doc.tokens, &doc.comments, &doc.name_kinds, &builtin_names);
+    let raw = classify_all(
+        &doc.source,
+        &doc.tokens,
+        &doc.comments,
+        &doc.name_kinds,
+        &builtin_names,
+    );
     encode_deltas(&doc.source, &doc.line_starts, &raw)
 }
 
@@ -80,13 +88,14 @@ fn semantic_tokens(source: &str, _file_path: &std::path::Path) -> Vec<SemanticTo
     let builtin_names: std::collections::HashSet<String> =
         builtin_completions().into_iter().map(|(n, _)| n).collect();
 
-    let raw = classify_all(&tokens, &comments, &name_kinds, &builtin_names);
+    let raw = classify_all(source, &tokens, &comments, &name_kinds, &builtin_names);
     let line_starts = super::document::compute_line_starts(source);
     encode_deltas(source, &line_starts, &raw)
 }
 
 /// Classify all tokens and comments into (span, token_type, modifiers).
 fn classify_all(
+    source: &str,
     tokens: &[Spanned<Lexeme>],
     comments: &[Comment],
     name_kinds: &BTreeMap<String, (NameKind, u32)>,
@@ -95,6 +104,17 @@ fn classify_all(
     let mut raw = Vec::new();
 
     for tok in tokens {
+        if let Lexeme::AsmBlock {
+            body,
+            effect,
+            target,
+        } = &tok.node
+        {
+            raw.extend(asm::expand_asm_tokens(
+                source, tok.span, body, *effect, target,
+            ));
+            continue;
+        }
         if let Some((tt, mods)) = classify_lexeme(&tok.node, name_kinds, builtins) {
             raw.push((tok.span, tt, mods));
         }

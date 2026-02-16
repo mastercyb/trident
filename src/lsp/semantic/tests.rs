@@ -132,3 +132,46 @@ fn delta_token_insertion() {
     assert_eq!(edits[0].delete_count, 1);
     assert_eq!(edits[0].data.as_ref().map(|d| d.len()), Some(2));
 }
+
+#[test]
+fn asm_block_produces_multiple_tokens() {
+    let source = "program test\nfn main() {\n    asm { push 1\nadd }\n}\n";
+    let tokens = semantic_tokens(source, &PathBuf::from("test.tri"));
+    // Should have more than one token for the asm region:
+    // `asm` keyword + `push` instruction + `1` number + `add` instruction
+    let asm_region_tokens: Vec<_> = tokens
+        .iter()
+        .filter(|t| t.token_type == TT_KEYWORD && t.token_modifiers_bitset & (1 << 3) != 0)
+        .collect();
+    assert!(
+        asm_region_tokens.len() >= 2,
+        "asm block should produce multiple instruction tokens, got {}",
+        asm_region_tokens.len()
+    );
+}
+
+#[test]
+fn asm_target_highlighted_as_namespace() {
+    let source = "program test\nfn main() {\n    asm(triton) { push 42 }\n}\n";
+    let tokens = semantic_tokens(source, &PathBuf::from("test.tri"));
+    let ns = tokens.iter().find(|t| t.token_type == 9); // TT_NAMESPACE
+    assert!(
+        ns.is_some(),
+        "target tag should be highlighted as namespace"
+    );
+}
+
+#[test]
+fn asm_numbers_highlighted() {
+    let source = "program test\nfn main() {\n    asm { push 42 }\n}\n";
+    let tokens = semantic_tokens(source, &PathBuf::from("test.tri"));
+    // Find a number token that's the `42` inside the asm block
+    let nums: Vec<_> = tokens
+        .iter()
+        .filter(|t| t.token_type == TT_NUMBER)
+        .collect();
+    assert!(
+        !nums.is_empty(),
+        "asm block should contain number tokens for operands"
+    );
+}
