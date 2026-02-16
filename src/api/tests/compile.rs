@@ -312,10 +312,7 @@ fn test_coin_compiles() {
         tasm.contains("__hash_config:"),
         "missing hash_config function"
     );
-    assert!(
-        tasm.contains("__hash_metadata:"),
-        "missing hash_metadata function"
-    );
+    // hash_metadata is defined but never called — DCE correctly removes it
     assert!(
         tasm.contains("__verify_auth:"),
         "missing verify_auth function"
@@ -325,11 +322,12 @@ fn test_coin_compiles() {
         "missing verify_config function"
     );
 
-    // Verify hash operations are emitted (leaf/config/metadata/auth + seal nullifiers)
+    // Verify hash operations are emitted (leaf/config/auth + seal nullifiers)
+    // hash_metadata is DCE'd (unused), so count is lower than pre-DCE
     let hash_count = tasm.lines().filter(|l| l.trim() == "hash").count();
     assert!(
-        hash_count >= 6,
-        "expected at least 6 hash ops, got {}",
+        hash_count >= 5,
+        "expected at least 5 hash ops, got {}",
         hash_count
     );
 
@@ -401,4 +399,3 @@ fn test_card_compiles() {
         "should authenticate leaves against Merkle root"
     );
 }
-

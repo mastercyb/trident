@@ -10,27 +10,116 @@ pub(crate) struct ModuleTasm {
 }
 
 /// Link multiple module TASM outputs into a single program.
+/// Performs dead code elimination: only includes functions reachable
+/// from the program entry point.
 pub(crate) fn link(modules: Vec<ModuleTasm>) -> String {
-    let mut output = Vec::new();
+    // First, mangle all modules and collect the full TASM.
+    let mut all_lines = Vec::new();
+    let mut entry_label = String::new();
 
-    // Find the program module (entry point)
-    let program = modules.iter().find(|m| m.is_program);
-
-    if let Some(prog) = program {
-        // Emit the program's entry point
-        let entry_label = format!("{}main", mangle_module(&prog.module_name));
-        output.push(format!("    call {}", entry_label));
-        output.push("    halt".to_string());
-        output.push(String::new());
+    // Find program entry
+    if let Some(prog) = modules.iter().find(|m| m.is_program) {
+        entry_label = format!("{}main", mangle_module(&prog.module_name));
     }
 
-    // Emit each module's TASM with mangled labels
+    // Mangle all modules
     for module in &modules {
         let prefix = mangle_module(&module.module_name);
         let mangled = mangle_labels(&module.tasm, &prefix, module.is_program);
-        output.push(format!("// === module: {} ===", module.module_name));
-        output.push(mangled);
-        output.push(String::new());
+        for line in mangled.lines() {
+            all_lines.push(line.to_string());
+        }
+    }
+
+    // Build a map: label -> (start_line, end_line) and label -> [called labels]
+    let mut functions: Vec<(String, usize, usize)> = Vec::new();
+    let mut i = 0;
+    while i < all_lines.len() {
+        let trimmed = all_lines[i].trim();
+        if trimmed.ends_with(':') && !trimmed.is_empty() {
+            let label = trimmed.trim_end_matches(':').to_string();
+            let start = i;
+            i += 1;
+            // Scan until next label or end
+            while i < all_lines.len() {
+                let t = all_lines[i].trim();
+                if t.ends_with(':') && !t.is_empty() && !t.starts_with("//") {
+                    break;
+                }
+                i += 1;
+            }
+            functions.push((label, start, i));
+        } else {
+            i += 1;
+        }
+    }
+
+    // Find call targets for each function
+    use std::collections::{BTreeMap, BTreeSet, VecDeque};
+    let mut call_graph: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (label, start, end) in &functions {
+        let mut calls = Vec::new();
+        for line in &all_lines[*start..*end] {
+            let t = line.trim();
+            if let Some(target) = t.strip_prefix("call ") {
+                calls.push(target.to_string());
+            } else if t == "recurse" {
+                calls.push(label.clone());
+            }
+        }
+        call_graph.insert(label.clone(), calls);
+    }
+
+    // Build a suffix index for fuzzy label matching.
+    // Cross-module calls may carry the caller's prefix (e.g. card__plumb__fn)
+    // while the label is defined as plumb__fn. Build suffix → label map.
+    let all_labels: BTreeSet<String> = functions.iter().map(|(l, _, _)| l.clone()).collect();
+    let resolve_target = |target: &str| -> String {
+        if all_labels.contains(target) {
+            return target.to_string();
+        }
+        // Try stripping successive prefixes (before first __)
+        let mut t = target;
+        while let Some(pos) = t.find("__") {
+            let suffix = &t[pos + 2..];
+            if !suffix.is_empty() && all_labels.contains(suffix) {
+                return suffix.to_string();
+            }
+            t = suffix;
+        }
+        target.to_string()
+    };
+
+    // BFS from entry label to find all reachable functions
+    let mut reachable: BTreeSet<String> = BTreeSet::new();
+    let mut queue: VecDeque<String> = VecDeque::new();
+    queue.push_back(entry_label.clone());
+    while let Some(label) = queue.pop_front() {
+        if reachable.contains(&label) {
+            continue;
+        }
+        reachable.insert(label.clone());
+        if let Some(calls) = call_graph.get(&label) {
+            for target in calls {
+                let resolved = resolve_target(target);
+                if !reachable.contains(&resolved) {
+                    queue.push_back(resolved);
+                }
+            }
+        }
+    }
+
+    // Emit only reachable functions
+    let mut output = Vec::new();
+    output.push(format!("    call {}", entry_label));
+    output.push("    halt".to_string());
+
+    for (label, start, end) in &functions {
+        if reachable.contains(label) {
+            for line in &all_lines[*start..*end] {
+                output.push(line.clone());
+            }
+        }
     }
 
     output.join("\n")
@@ -111,12 +200,13 @@ mod tests {
             ModuleTasm {
                 module_name: "merkle".to_string(),
                 is_program: false,
-                tasm: "__verify:\n    read_io 1\n    return\n".to_string(),
+                tasm: "__verify:\n    read_io 1\n    return\n__unused:\n    push 0\n    return\n"
+                    .to_string(),
             },
             ModuleTasm {
                 module_name: "main_prog".to_string(),
                 is_program: true,
-                tasm: "    call __main\n    halt\n\n__main:\n    call __verify\n    return\n"
+                tasm: "    call __main\n    halt\n\n__main:\n    call merkle__verify\n    return\n"
                     .to_string(),
             },
         ];
@@ -124,11 +214,10 @@ mod tests {
         // Entry point should use the program module's main
         assert!(linked.contains("call main_prog__main"));
         assert!(linked.contains("halt"));
-        // merkle's verify should be mangled
+        // merkle's verify is called, so it should be included
         assert!(linked.contains("merkle__verify:"));
-        // main's call to __verify needs to be resolved to the correct module
-        // Currently it mangles with the main_prog prefix — this is a known limitation
-        // that cross-module calls need explicit module prefixes
+        // merkle's unused function should be eliminated by DCE
+        assert!(!linked.contains("merkle__unused:"));
         assert!(linked.contains("main_prog__main:"));
     }
 }
