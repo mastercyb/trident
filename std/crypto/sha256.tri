@@ -27,8 +27,6 @@ module std.crypto.sha256
 //   - Bitwise NOT is x ^ 0xFFFFFFFF.
 use vm.core.convert
 
-use vm.core.field
-
 // ---------------------------------------------------------------------------
 // SHA-256 state: 8 U32 working variables
 // ---------------------------------------------------------------------------

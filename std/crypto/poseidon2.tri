@@ -14,8 +14,6 @@ module std.crypto.poseidon2
 // the Trident toolchain. Matching parameters to src/poseidon2.rs ensures
 // that hashes computed in Trident programs can be verified against
 // compiler-generated content hashes on-chain.
-use vm.core.field
-
 // ---------------------------------------------------------------------------
 // Poseidon2 state: 8 field elements
 // ---------------------------------------------------------------------------

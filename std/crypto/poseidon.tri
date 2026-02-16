@@ -21,8 +21,6 @@ module std.crypto.poseidon
 // The stubs below use simple arithmetic combinations to show the
 // API shape. They are NOT cryptographically secure and must be
 // replaced with a proper Poseidon implementation for production use.
-use vm.core.field
-
 // ---------------------------------------------------------------------------
 // Internal helpers: S-box and round simulation
 // ---------------------------------------------------------------------------
