@@ -184,8 +184,18 @@ impl RegistryClient {
         let (host, port, scheme_host) = parse_url(&self.base_url)?;
         let addr = format!("{}:{}", host, port);
 
-        let stream =
-            TcpStream::connect(&addr).map_err(|e| format!("cannot connect to {}: {}", addr, e))?;
+        let sock_addr: std::net::SocketAddr = addr
+            .parse()
+            .or_else(|_| {
+                use std::net::ToSocketAddrs;
+                addr.to_socket_addrs()
+                    .map_err(|e| format!("resolve {}: {}", addr, e))?
+                    .next()
+                    .ok_or_else(|| format!("no addresses for {}", addr))
+            })
+            .map_err(|e| format!("cannot resolve {}: {}", addr, e))?;
+        let stream = TcpStream::connect_timeout(&sock_addr, std::time::Duration::from_secs(10))
+            .map_err(|e| format!("cannot connect to {}: {}", addr, e))?;
         stream
             .set_read_timeout(Some(std::time::Duration::from_secs(30)))
             .map_err(|e| format!("set timeout: {}", e))?;
@@ -206,8 +216,18 @@ impl RegistryClient {
         let (host, port, scheme_host) = parse_url(&self.base_url)?;
         let addr = format!("{}:{}", host, port);
 
-        let stream =
-            TcpStream::connect(&addr).map_err(|e| format!("cannot connect to {}: {}", addr, e))?;
+        let sock_addr: std::net::SocketAddr = addr
+            .parse()
+            .or_else(|_| {
+                use std::net::ToSocketAddrs;
+                addr.to_socket_addrs()
+                    .map_err(|e| format!("resolve {}: {}", addr, e))?
+                    .next()
+                    .ok_or_else(|| format!("no addresses for {}", addr))
+            })
+            .map_err(|e| format!("cannot resolve {}: {}", addr, e))?;
+        let stream = TcpStream::connect_timeout(&sock_addr, std::time::Duration::from_secs(10))
+            .map_err(|e| format!("cannot connect to {}: {}", addr, e))?;
         stream
             .set_read_timeout(Some(std::time::Duration::from_secs(30)))
             .map_err(|e| format!("set timeout: {}", e))?;
