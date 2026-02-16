@@ -7,6 +7,7 @@
 pub mod builder;
 pub(crate) mod linker;
 pub mod lower;
+pub(crate) mod optimize;
 pub mod stack;
 
 use std::fmt;

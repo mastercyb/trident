@@ -10,6 +10,7 @@ pub(crate) use crate::target::TargetConfig;
 pub(crate) use crate::tir::builder::TIRBuilder;
 pub(crate) use crate::tir::linker::{link, ModuleTasm};
 pub(crate) use crate::tir::lower::create_stack_lowering;
+pub(crate) use crate::tir::optimize::optimize as optimize_tir;
 pub(crate) use crate::typecheck::{ModuleExports, TypeChecker};
 pub(crate) use crate::{format, lexer, parser, project, solve, sym};
 
@@ -82,12 +83,13 @@ pub fn compile_with_options(
         }
     };
 
-    // Build IR and lower to target assembly
+    // Build IR, optimize, and lower to target assembly
     let ir = TIRBuilder::new(options.target_config.clone())
         .with_cfg_flags(options.cfg_flags.clone())
         .with_mono_instances(exports.mono_instances)
         .with_call_resolutions(exports.call_resolutions)
         .build_file(&file);
+    let ir = optimize_tir(ir);
     let lowering = create_stack_lowering(&options.target_config.name);
     let tasm = lowering.lower(&ir).join("\n");
     Ok(tasm)
@@ -133,6 +135,7 @@ pub fn compile_project_with_options(
             .with_mono_instances(mono)
             .with_call_resolutions(call_res)
             .build_file(&pm.file);
+        let ir = optimize_tir(ir);
         let lowering = create_stack_lowering(&options.target_config.name);
         let tasm = lowering.lower(&ir).join("\n");
         tasm_modules.push(ModuleTasm {
