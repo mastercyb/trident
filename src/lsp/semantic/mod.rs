@@ -104,15 +104,8 @@ fn classify_all(
     let mut raw = Vec::new();
 
     for tok in tokens {
-        if let Lexeme::AsmBlock {
-            body,
-            effect,
-            target,
-        } = &tok.node
-        {
-            raw.extend(asm::expand_asm_tokens(
-                source, tok.span, body, *effect, target,
-            ));
+        if let Lexeme::AsmBlock { .. } = &tok.node {
+            raw.extend(asm::expand_asm_tokens(source, tok.span));
             continue;
         }
         if let Some((tt, mods)) = classify_lexeme(&tok.node, name_kinds, builtins) {

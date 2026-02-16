@@ -140,24 +140,24 @@ fn find_resync(
 }
 
 fn shift_token(tok: &Spanned<Lexeme>, delta: i64) -> Spanned<Lexeme> {
+    let new_start = tok.span.start as i64 + delta;
+    let new_end = tok.span.end as i64 + delta;
+    debug_assert!(new_start >= 0, "shift_token: start went negative");
+    debug_assert!(new_end >= 0, "shift_token: end went negative");
     Spanned::new(
         tok.node.clone(),
-        Span::new(
-            tok.span.file_id,
-            (tok.span.start as i64 + delta) as u32,
-            (tok.span.end as i64 + delta) as u32,
-        ),
+        Span::new(tok.span.file_id, new_start as u32, new_end as u32),
     )
 }
 
 fn shift_comment(comment: &Comment, delta: i64) -> Comment {
+    let new_start = comment.span.start as i64 + delta;
+    let new_end = comment.span.end as i64 + delta;
+    debug_assert!(new_start >= 0, "shift_comment: start went negative");
+    debug_assert!(new_end >= 0, "shift_comment: end went negative");
     Comment {
         text: comment.text.clone(),
-        span: Span::new(
-            comment.span.file_id,
-            (comment.span.start as i64 + delta) as u32,
-            (comment.span.end as i64 + delta) as u32,
-        ),
+        span: Span::new(comment.span.file_id, new_start as u32, new_end as u32),
         trailing: comment.trailing,
     }
 }
@@ -211,6 +211,7 @@ pub(super) fn classify_edit_scope(
                             | Lexeme::Pub
                             | Lexeme::Sec
                             | Lexeme::Const
+                            | Lexeme::Mut
                             | Lexeme::Hash
                             | Lexeme::Ident(_)
                             | Lexeme::LParen

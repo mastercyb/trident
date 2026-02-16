@@ -72,13 +72,7 @@ const TRITON_INSTRUCTIONS: &[&str] = &[
 ///
 /// Returns `(span, token_type, modifiers)` tuples that replace the single
 /// AsmBlock token in the semantic token stream.
-pub(super) fn expand_asm_tokens(
-    source: &str,
-    block_span: Span,
-    _body: &str,
-    _effect: i32,
-    _target: &Option<String>,
-) -> Vec<(Span, u32, u32)> {
+pub(super) fn expand_asm_tokens(source: &str, block_span: Span) -> Vec<(Span, u32, u32)> {
     let mut tokens = Vec::new();
     let src = source.as_bytes();
     let start = block_span.start as usize;

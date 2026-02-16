@@ -220,15 +220,16 @@ impl LanguageServer for TridentLsp {
         params: DocumentSymbolParams,
     ) -> Result<Option<DocumentSymbolResponse>> {
         let uri = &params.text_document.uri;
-        let source = match self.documents.lock().unwrap().get(uri) {
-            Some(doc) => doc.source.clone(),
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(uri) {
+            Some(d) => d,
             None => return Ok(None),
         };
-        let file = match crate::parse_source_silent(&source, uri.path()) {
-            Ok(f) => f,
-            Err(_) => return Ok(None),
+        let file = match &doc.cached_ast {
+            Some(f) => f.clone(),
+            None => return Ok(None),
         };
-        let symbols = self.document_symbols(&source, &file);
+        let symbols = self.document_symbols(&doc.source, &file);
         Ok(Some(DocumentSymbolResponse::Nested(symbols)))
     }
 
@@ -349,20 +350,20 @@ impl LanguageServer for TridentLsp {
 
     async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
         let uri = &params.text_document.uri;
-        let (source, comments) = {
-            let docs = self.documents.lock().unwrap();
-            match docs.get(uri) {
-                Some(d) => (d.source.clone(), d.comments.clone()),
-                None => return Ok(None),
-            }
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
         };
-
-        let (tokens, _, _) = crate::syntax::lexer::Lexer::new(&source, 0).tokenize();
-        let file = match crate::syntax::parser::Parser::new(tokens).parse_file() {
-            Ok(f) => f,
-            Err(_) => return Ok(None),
+        let file = match &doc.cached_ast {
+            Some(f) => f.clone(),
+            None => return Ok(None),
         };
-        Ok(Some(folding::folding_ranges(&source, &file, &comments)))
+        Ok(Some(folding::folding_ranges(
+            &doc.source,
+            &file,
+            &doc.comments,
+        )))
     }
 
     async fn selection_range(
@@ -370,16 +371,17 @@ impl LanguageServer for TridentLsp {
         params: SelectionRangeParams,
     ) -> Result<Option<Vec<SelectionRange>>> {
         let uri = &params.text_document.uri;
-        let source = match self.documents.lock().unwrap().get(uri) {
-            Some(doc) => doc.source.clone(),
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(uri) {
+            Some(d) => d,
             None => return Ok(None),
         };
-        let file = match crate::parse_source_silent(&source, uri.path()) {
-            Ok(f) => f,
-            Err(_) => return Ok(None),
+        let file = match &doc.cached_ast {
+            Some(f) => f.clone(),
+            None => return Ok(None),
         };
         Ok(Some(selection::selection_ranges(
-            &source,
+            &doc.source,
             &file,
             &params.positions,
         )))
