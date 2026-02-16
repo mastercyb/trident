@@ -397,24 +397,29 @@ Recommended agent partitions for full-repo work:
 - Rebuild after commit. Run `cargo install --path . --force` after
   every commit so the installed `trident` binary stays current.
 
-## Agent Audit Workspace
+## Agent Cortex
 
-Long-running parallel agents (audits, reviews, large refactors) MUST
-persist their findings to `.audit/` so results survive context overflow.
+`.cortex/` is shared memory for agents. Any agent can read and write
+files there — insights, audit results, intermediate findings, patterns,
+open questions, anything that helps the project.
 
-Workflow:
+**Budget: 1000 lines total** across all files in `.cortex/`.
 
-1. **Before launching agents**, create `.audit/` if it doesn't exist.
-2. **Each agent writes its report** to `.audit/<scope>.md`
-   (e.g., `.audit/syntax-lexer.md`, `.audit/syntax-parser.md`).
-   The report must include: file reviewed, findings (bugs, dead code,
-   safety issues, inconsistencies), and suggested fixes.
-3. **After all agents finish**, the main session reads `.audit/*.md`,
-   summarizes findings, and applies fixes with atomic commits.
-4. **Clean up** — delete `.audit/` contents after fixes are committed.
+Rules for every cortex update:
 
-The `.audit/` directory is gitignored — it's a scratch workspace only.
-This prevents losing hours of agent work to context window limits.
+1. Read what's already there before writing.
+2. Add what you have — no format restrictions, no category requirements.
+3. If the budget is exceeded, compress, merge, or delete the weakest
+   entries. Every update must increase information density.
+4. Stale entries (resolved issues, completed work) get removed or
+   compressed into lessons learned.
+
+No rigid structure. Agents self-organize — create files, merge them,
+rename them, whatever makes the content more useful. The budget is the
+only constraint. Natural selection does the rest.
+
+`.cortex/` is gitignored for now (experimental). If the experiment
+works, it gets committed into the project.
 
 ## Chain of Verification
 

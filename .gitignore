@@ -22,5 +22,5 @@ editor/zed/grammars/
 # OS
 .DS_Store
 
-# Agent audit workspace (ephemeral, not committed)
-/.audit/
+# Agent shared memory (experimental, not committed yet)
+/.cortex/
