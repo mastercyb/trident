@@ -16,7 +16,7 @@ Layer           Current   First Release
 ───────────────────────────────────────
 vm spec          32K         16K
 language         64K         32K
-TIR              64K         32K
+TIR             128K         64K
 compiler        128K         32K
 std.*           128K         64K
 os.*            128K         64K
@@ -39,6 +39,7 @@ Quantum   Quantum gate set in TIR (Hadamard, CNOT, Toffoli, measure)
 ## 128K — the machine assembles
 
 ```
+TIR       Lowering works for stack, register, and tree targets
 compiler  Lexer + parser rewritten in .tri
 std.*     std.token, std.coin, std.card shipped
 os.*      os.neptune.* complete, Atlas on-chain registry live
@@ -51,7 +52,7 @@ Quantum   Quantum circuit simulation backend
 
 ```
 language  Indexed assignment (arr[i] = val, s.field = val)
-TIR       TIROp set stable (no new variants without language change)
+TIR       5+ OS targets lowering, all three VM types passing tests
 compiler  Type checker rewritten in .tri
 std.*     std.skill.* (23 skills) shipped
 os.*      3+ OS namespaces operational
@@ -68,7 +69,7 @@ Compiler compiles itself. Atlas live. Revolution demos ship.
 ```
 vm spec   Intrinsic set stable (no new vm.* builtins)
 language  Trait-like interfaces
-TIR       Per-function benchmarks < 1.2x vs hand-written baselines
+TIR       TIROp set stable (5+ OS, 1 VM per type prove op set complete)
 compiler  Pipeline fully in Trident — compiler compiles itself
 std.*     #[requires]/#[ensures] contracts on all public functions
 os.*      Per-OS namespace governance established
@@ -82,7 +83,7 @@ Quantum   Quantum error correction in std.quantum
 ```
 vm spec   Triton backend emission proven correct
 language  Grammar finalized — no new syntax forms
-TIR       Cost-driven optimization passes land
+TIR       Per-function benchmarks < 1.2x, optimization passes land
 compiler  Each compilation produces a proof certificate (self-proving)
 std.*     std.crypto.* formally verified (poseidon, merkle, ecdsa)
 os.*      os.neptune.* frozen
