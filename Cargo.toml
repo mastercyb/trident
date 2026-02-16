@@ -9,7 +9,7 @@ homepage = "https://github.com/mastercyb/trident"
 readme = "README.md"
 keywords = ["zk", "provable", "compiler", "blockchain", "zero-knowledge"]
 categories = ["compilers", "cryptography"]
-exclude = ["docs/", "examples/", "tree-sitter/", "tests/snapshots/"]
+exclude = ["docs/", "examples/", "tests/snapshots/"]
 
 [lib]
 name = "trident"

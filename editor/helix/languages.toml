@@ -5,7 +5,7 @@
 #      (or merge into your existing one)
 #   2. Link the queries:
 #      mkdir -p ~/.config/helix/runtime/queries/trident
-#      ln -s <path-to>/editor/tree-sitter-trident/queries/highlights.scm \
+#      ln -s <path-to>/editor/queries/highlights.scm \
 #             ~/.config/helix/runtime/queries/trident/highlights.scm
 #   3. Ensure `trident-lsp` is on your PATH
 

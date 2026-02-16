@@ -1,1 +1,1 @@
-../../../tree-sitter/queries/textobjects.scm
+../../queries/textobjects.scm

@@ -1,1 +1,1 @@
-../../../tree-sitter/queries/indents.scm
+../../queries/indents.scm

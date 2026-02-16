@@ -358,11 +358,8 @@ Do not modify without explicit request:
 - `vm/*/target.toml` and `os/*/target.toml` (configuration, not code)
 - `LICENSE.md`
 
-Never read or modify:
-
-- `tree-sitter/src/` — auto-generated C/JSON (if present). Edit
-  `src/syntax/grammar/trident.rs` instead, then run
-  `trident tree-sitter --generate`.
+Query files live in `editor/queries/` (single source of truth,
+symlinked from `editor/zed/` and `editor/helix/`).
 
 ## Parallel Agents
 

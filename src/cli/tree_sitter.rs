@@ -4,7 +4,7 @@ use clap::Args;
 
 #[derive(Args)]
 pub struct TreeSitterArgs {
-    /// Output directory (default: tree-sitter/src/)
+    /// Output directory (default: current directory)
     #[arg(short, long)]
     pub output: Option<PathBuf>,
 
@@ -17,9 +17,7 @@ pub fn cmd_tree_sitter(args: TreeSitterArgs) {
     let grammar = trident::syntax::grammar::trident_grammar();
     let json = grammar.to_json();
 
-    let out_dir = args
-        .output
-        .unwrap_or_else(|| PathBuf::from("tree-sitter/src"));
+    let out_dir = args.output.unwrap_or_else(|| PathBuf::from("."));
     let out_path = out_dir.join("grammar.json");
 
     if let Err(e) = std::fs::create_dir_all(&out_dir) {
