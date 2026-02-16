@@ -4,7 +4,10 @@
 //! go-to-definition, hover, completion, and signature help.
 
 mod builtins;
+mod folding;
 mod intelligence;
+mod selection;
+mod semantic;
 pub mod util;
 
 use std::collections::HashMap;
@@ -46,6 +49,18 @@ impl LanguageServer for TridentLsp {
                     trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
                     ..Default::default()
                 }),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend: semantic::token_legend(),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            range: None,
+                            work_done_progress_options: Default::default(),
+                        },
+                    ),
+                ),
+                folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+                selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -219,6 +234,57 @@ impl LanguageServer for TridentLsp {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
         self.do_signature_help(uri, pos).await
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = &params.text_document.uri;
+        let source = match self.documents.lock().unwrap().get(uri) {
+            Some(s) => s.clone(),
+            None => return Ok(None),
+        };
+        let file_path = PathBuf::from(uri.path());
+        let tokens = semantic::semantic_tokens(&source, &file_path);
+        Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+            result_id: None,
+            data: tokens,
+        })))
+    }
+
+    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
+        let uri = &params.text_document.uri;
+        let source = match self.documents.lock().unwrap().get(uri) {
+            Some(s) => s.clone(),
+            None => return Ok(None),
+        };
+        let (tokens, comments, _) = crate::syntax::lexer::Lexer::new(&source, 0).tokenize();
+        let file = match crate::syntax::parser::Parser::new(tokens).parse_file() {
+            Ok(f) => f,
+            Err(_) => return Ok(None),
+        };
+        Ok(Some(folding::folding_ranges(&source, &file, &comments)))
+    }
+
+    async fn selection_range(
+        &self,
+        params: SelectionRangeParams,
+    ) -> Result<Option<Vec<SelectionRange>>> {
+        let uri = &params.text_document.uri;
+        let source = match self.documents.lock().unwrap().get(uri) {
+            Some(s) => s.clone(),
+            None => return Ok(None),
+        };
+        let file = match crate::parse_source_silent(&source, uri.path()) {
+            Ok(f) => f,
+            Err(_) => return Ok(None),
+        };
+        Ok(Some(selection::selection_ranges(
+            &source,
+            &file,
+            &params.positions,
+        )))
     }
 
     async fn shutdown(&self) -> Result<()> {
