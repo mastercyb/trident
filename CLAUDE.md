@@ -80,8 +80,8 @@ reorganized. Do NOT update for line count changes or content-only edits.
 ```
 syntax/            ~5.5k LOC   Lexer, parser, formatter, grammar, spans
   span.rs             ~60       Source span tracking (Span, Spanned<T>)
-  lexer/             ~800       Tokenizer
-    mod.rs           ~440         Keywords, operators, literals
+  lexer/             ~820       Tokenizer
+    mod.rs           ~460         Keywords, operators, literals, incremental API
     tests.rs         ~360         Lexer tests
   lexeme.rs          ~170       Token types and display
   parser/          ~2.1k       Recursive descent parser
@@ -256,9 +256,11 @@ verify/            ~5.6k LOC   Formal verification
     mod.rs           ~460         SMT encoding
     tests.rs          ~75         SMT tests
 
-lsp/               ~2.4k LOC   Language Server Protocol
-  mod.rs             ~460       LSP server (tower-lsp, capabilities, handlers)
-  semantic.rs        ~380       Semantic tokens (syntax highlighting via LSP)
+lsp/               ~2.7k LOC   Language Server Protocol
+  mod.rs             ~440       LSP server (tower-lsp, capabilities, handlers)
+  document.rs        ~100       Per-document state (tokens, comments, line_starts cache)
+  incremental.rs     ~160       Incremental lexing (re-lex dirty region, splice)
+  semantic.rs        ~380       Semantic tokens + delta computation
   folding.rs         ~165       Folding ranges (code folding)
   selection.rs       ~170       Selection ranges (expand/shrink selection)
   intelligence.rs    ~340       Go-to-definition, find-references

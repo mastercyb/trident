@@ -1,16 +1,19 @@
 //! Trident Language Server Protocol implementation.
 //!
 //! Provides IDE features: diagnostics, formatting, document symbols,
-//! go-to-definition, hover, completion, and signature help.
+//! go-to-definition, hover, completion, signature help, semantic tokens
+//! (with incremental deltas), folding ranges, and selection ranges.
 
 mod builtins;
+mod document;
 mod folding;
+mod incremental;
 mod intelligence;
 mod selection;
 mod semantic;
 pub mod util;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -22,11 +25,15 @@ use crate::ast::Item;
 use crate::resolve::resolve_modules;
 use crate::typecheck::{ModuleExports, TypeChecker};
 
-use util::{format_fn_signature, span_to_range, to_lsp_diagnostic, word_at_position};
+use document::{compute_line_starts, DocumentState};
+use util::{
+    format_fn_signature, position_to_byte_offset, span_to_range, to_lsp_diagnostic,
+    word_at_position,
+};
 
 pub struct TridentLsp {
     client: Client,
-    documents: Mutex<HashMap<Url, String>>,
+    documents: Mutex<BTreeMap<Url, DocumentState>>,
 }
 
 #[tower_lsp::async_trait]
@@ -35,7 +42,7 @@ impl LanguageServer for TridentLsp {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
+                    TextDocumentSyncKind::INCREMENTAL,
                 )),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
@@ -53,7 +60,7 @@ impl LanguageServer for TridentLsp {
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
                         SemanticTokensOptions {
                             legend: semantic::token_legend(),
-                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            full: Some(SemanticTokensFullOptions::Delta { delta: Some(true) }),
                             range: None,
                             work_done_progress_options: Default::default(),
                         },
@@ -75,23 +82,77 @@ impl LanguageServer for TridentLsp {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri.clone();
-        let source = params.text_document.text.clone();
-        self.documents
-            .lock()
-            .unwrap()
-            .insert(uri.clone(), source.clone());
-        self.publish_diagnostics(uri, &source).await;
+        let source = params.text_document.text;
+        let mut doc = DocumentState::new(source);
+
+        // Initial name_kinds from parse
+        if let Ok(file) = crate::parse_source_silent(&doc.source, "") {
+            doc.name_kinds = semantic::build_name_kinds(&file);
+        }
+
+        let diag_source = doc.source.clone();
+        self.documents.lock().unwrap().insert(uri.clone(), doc);
+        self.publish_diagnostics(uri, &diag_source).await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
-        if let Some(change) = params.content_changes.into_iter().last() {
-            self.documents
-                .lock()
-                .unwrap()
-                .insert(uri.clone(), change.text.clone());
-            self.publish_diagnostics(uri, &change.text).await;
-        }
+
+        let diag_source = {
+            let mut docs = self.documents.lock().unwrap();
+            let doc = match docs.get_mut(&uri) {
+                Some(d) => d,
+                None => return,
+            };
+
+            for change in params.content_changes {
+                if let Some(range) = change.range {
+                    let edit_start = position_to_byte_offset(&doc.source, range.start).unwrap_or(0);
+                    let edit_old_end =
+                        position_to_byte_offset(&doc.source, range.end).unwrap_or(doc.source.len());
+
+                    let mut new_source = String::with_capacity(
+                        doc.source.len() - (edit_old_end - edit_start) + change.text.len(),
+                    );
+                    new_source.push_str(&doc.source[..edit_start]);
+                    new_source.push_str(&change.text);
+                    new_source.push_str(&doc.source[edit_old_end..]);
+
+                    let edit_new_end = edit_start + change.text.len();
+
+                    let result = incremental::incremental_lex(
+                        &new_source,
+                        &doc.tokens,
+                        &doc.comments,
+                        edit_start,
+                        edit_old_end,
+                        edit_new_end,
+                    );
+
+                    doc.source = new_source;
+                    doc.tokens = result.tokens;
+                    doc.comments = result.comments;
+                    doc.line_starts = compute_line_starts(&doc.source);
+                } else {
+                    // Full replacement (fallback)
+                    doc.source = change.text;
+                    let (tokens, comments, _) =
+                        crate::syntax::lexer::Lexer::new(&doc.source, 0).tokenize();
+                    doc.tokens = tokens;
+                    doc.comments = comments;
+                    doc.line_starts = compute_line_starts(&doc.source);
+                }
+            }
+
+            // Re-parse for name_kinds (cheap for contract-sized files)
+            if let Ok(file) = crate::parse_source_silent(&doc.source, "") {
+                doc.name_kinds = semantic::build_name_kinds(&file);
+            }
+
+            doc.source.clone()
+        }; // lock dropped here
+
+        self.publish_diagnostics(uri, &diag_source).await;
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
@@ -104,7 +165,7 @@ impl LanguageServer for TridentLsp {
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let uri = &params.text_document.uri;
         let source = match self.documents.lock().unwrap().get(uri) {
-            Some(s) => s.clone(),
+            Some(doc) => doc.source.clone(),
             None => return Ok(None),
         };
 
@@ -134,7 +195,7 @@ impl LanguageServer for TridentLsp {
     ) -> Result<Option<DocumentSymbolResponse>> {
         let uri = &params.text_document.uri;
         let source = match self.documents.lock().unwrap().get(uri) {
-            Some(s) => s.clone(),
+            Some(doc) => doc.source.clone(),
             None => return Ok(None),
         };
 
@@ -187,7 +248,7 @@ impl LanguageServer for TridentLsp {
         let pos = params.text_document_position_params.position;
 
         let source = match self.documents.lock().unwrap().get(uri) {
-            Some(s) => s.clone(),
+            Some(doc) => doc.source.clone(),
             None => return Ok(None),
         };
 
@@ -241,25 +302,70 @@ impl LanguageServer for TridentLsp {
         params: SemanticTokensParams,
     ) -> Result<Option<SemanticTokensResult>> {
         let uri = &params.text_document.uri;
-        let source = match self.documents.lock().unwrap().get(uri) {
-            Some(s) => s.clone(),
+        let mut docs = self.documents.lock().unwrap();
+        let doc = match docs.get_mut(uri) {
+            Some(d) => d,
             None => return Ok(None),
         };
-        let file_path = PathBuf::from(uri.path());
-        let tokens = semantic::semantic_tokens(&source, &file_path);
+
+        let tokens = semantic::semantic_tokens_from_cache(doc);
+        doc.last_semantic_tokens = tokens.clone();
+        doc.result_version += 1;
+
         Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
-            result_id: None,
+            result_id: Some(doc.result_id()),
             data: tokens,
         })))
     }
 
-    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
+    async fn semantic_tokens_full_delta(
+        &self,
+        params: SemanticTokensDeltaParams,
+    ) -> Result<Option<SemanticTokensFullDeltaResult>> {
         let uri = &params.text_document.uri;
-        let source = match self.documents.lock().unwrap().get(uri) {
-            Some(s) => s.clone(),
+        let mut docs = self.documents.lock().unwrap();
+        let doc = match docs.get_mut(uri) {
+            Some(d) => d,
             None => return Ok(None),
         };
-        let (tokens, comments, _) = crate::syntax::lexer::Lexer::new(&source, 0).tokenize();
+
+        // If client's previous_result_id doesn't match, send full tokens
+        if params.previous_result_id != doc.result_id() {
+            let tokens = semantic::semantic_tokens_from_cache(doc);
+            doc.last_semantic_tokens = tokens.clone();
+            doc.result_version += 1;
+            return Ok(Some(SemanticTokensFullDeltaResult::Tokens(
+                SemanticTokens {
+                    result_id: Some(doc.result_id()),
+                    data: tokens,
+                },
+            )));
+        }
+
+        let new_tokens = semantic::semantic_tokens_from_cache(doc);
+        let edits = semantic::compute_semantic_delta(&doc.last_semantic_tokens, &new_tokens);
+        doc.last_semantic_tokens = new_tokens;
+        doc.result_version += 1;
+
+        Ok(Some(SemanticTokensFullDeltaResult::TokensDelta(
+            SemanticTokensDelta {
+                result_id: Some(doc.result_id()),
+                edits,
+            },
+        )))
+    }
+
+    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
+        let uri = &params.text_document.uri;
+        let (source, comments) = {
+            let docs = self.documents.lock().unwrap();
+            match docs.get(uri) {
+                Some(d) => (d.source.clone(), d.comments.clone()),
+                None => return Ok(None),
+            }
+        };
+
+        let (tokens, _, _) = crate::syntax::lexer::Lexer::new(&source, 0).tokenize();
         let file = match crate::syntax::parser::Parser::new(tokens).parse_file() {
             Ok(f) => f,
             Err(_) => return Ok(None),
@@ -273,7 +379,7 @@ impl LanguageServer for TridentLsp {
     ) -> Result<Option<Vec<SelectionRange>>> {
         let uri = &params.text_document.uri;
         let source = match self.documents.lock().unwrap().get(uri) {
-            Some(s) => s.clone(),
+            Some(doc) => doc.source.clone(),
             None => return Ok(None),
         };
         let file = match crate::parse_source_silent(&source, uri.path()) {
@@ -457,7 +563,7 @@ pub async fn run_server() {
 
     let (service, socket) = LspService::new(|client| TridentLsp {
         client,
-        documents: Mutex::new(HashMap::new()),
+        documents: Mutex::new(BTreeMap::new()),
     });
     Server::new(stdin, stdout, socket).serve(service).await;
 }

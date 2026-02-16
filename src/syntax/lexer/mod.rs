@@ -32,6 +32,35 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    /// Create a lexer that starts at the given byte offset.
+    /// Used for incremental re-lexing of dirty regions.
+    pub(crate) fn new_from_offset(source: &'src str, file_id: u16, offset: usize) -> Self {
+        Self {
+            source: source.as_bytes(),
+            file_id,
+            pos: offset,
+            diagnostics: Vec::new(),
+            comments: Vec::new(),
+            token_on_line: false,
+        }
+    }
+
+    /// Lex a single token and advance. Exposed for incremental lexing.
+    pub(crate) fn next_spanned(&mut self) -> Spanned<Lexeme> {
+        self.next_token()
+    }
+
+    /// Drain accumulated comments from the lexer.
+    pub(crate) fn take_comments(&mut self) -> Vec<Comment> {
+        std::mem::take(&mut self.comments)
+    }
+
+    /// Drain accumulated diagnostics from the lexer.
+    #[allow(dead_code)] // reserved for incremental diagnostic support
+    pub(crate) fn take_diagnostics(&mut self) -> Vec<Diagnostic> {
+        std::mem::take(&mut self.diagnostics)
+    }
+
     pub(crate) fn tokenize(mut self) -> (Vec<Spanned<Lexeme>>, Vec<Comment>, Vec<Diagnostic>) {
         let mut tokens = Vec::new();
         loop {
@@ -424,7 +453,6 @@ fn is_ident_start(ch: u8) -> bool {
 fn is_ident_continue(ch: u8) -> bool {
     ch.is_ascii_alphanumeric() || ch == b'_'
 }
-
 
 #[cfg(test)]
 mod tests;
