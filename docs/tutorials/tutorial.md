@@ -10,7 +10,7 @@ This tutorial covers everything you need to write a valid Trident program -- fil
 
 Build the compiler from source:
 
-```bash
+```nu
 cd trident
 cargo build --release
 ```
@@ -37,7 +37,7 @@ This program reads two public field elements, adds them, and writes the result. 
 
 Build it:
 
-```bash
+```nu
 trident build hello.tri --target triton -o hello.tasm
 ```
 
@@ -45,7 +45,7 @@ This compiles Trident source to [TASM](https://triton-vm.org/spec/) (Triton Asse
 
 Check it (type-check without emitting TASM):
 
-```bash
+```nu
 trident check hello.tri
 ```
 
@@ -704,7 +704,7 @@ fn test_add() {
 
 Run tests:
 
-```bash
+```nu
 trident test main.tri
 ```
 
@@ -716,7 +716,7 @@ Test functions are excluded from production builds. See the [Error Catalog](../.
 
 Every operation in [Triton VM](https://triton-vm.org/) has a measurable proving cost. Use the build flags to analyze:
 
-```bash
+```nu
 # Full cost report
 trident build main.tri --target triton --costs
 
@@ -732,7 +732,7 @@ trident build main.tri --target triton --annotate
 
 Track costs across builds:
 
-```bash
+```nu
 # Save baseline
 trident build main.tri --target triton --save-costs baseline.json
 
@@ -765,7 +765,7 @@ fn main() {
 
 Build with a target to activate the conditional code:
 
-```bash
+```nu
 trident build main.tri --target debug     # includes debug_log
 trident build main.tri --target release   # excludes debug_log
 trident build main.tri                    # no target: cfg(debug) items excluded

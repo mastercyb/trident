@@ -21,7 +21,7 @@ Trident provides two commands for the deployment pipeline:
 The `deploy` command is the last mile. It compiles your program, packages
 the artifact, and deploys it to a registry server:
 
-```bash
+```nu
 # Compile + package + deploy to default registry (localhost:8090)
 trident deploy lock.tri --target neptune
 
@@ -44,7 +44,7 @@ The `package` command produces a `.deploy/` directory without deploying it
 anywhere. Use this when you want to inspect the artifact, archive it, or
 deploy it later:
 
-```bash
+```nu
 # Compile + hash + produce artifact
 trident package lock.tri --target neptune
 
@@ -115,7 +115,7 @@ program to Atlas mints a Card — the package name becomes the
 
 ### Publishing Workflow
 
-```bash
+```nu
 # Deploy to Neptune's Atlas
 trident deploy my_skill.tri --target neptune
 
@@ -132,7 +132,7 @@ trident deploy my_skill.tri --target neptune
 
 Publishing a new version updates the Card's metadata:
 
-```bash
+```nu
 # Update existing package with new version
 trident deploy my_skill.tri --target neptune --update
 # Executes TSP-2 Update operation (Op 2) on the existing Card
@@ -240,7 +240,7 @@ fn main() {
 6. The network verifies the proof against the program hash and kernel hash.
 
 Or step by step:
-```bash
+```nu
 trident package lock.tri --target neptune   # produce artifact
 trident deploy lock.deploy/                 # deploy pre-packaged artifact
 ```
@@ -296,7 +296,7 @@ fn efficient_hash(a: Field, b: Field) -> Field {
 
 ### The `--target` Flag
 
-```bash
+```nu
 # Current (only supported target)
 trident build program.tri --target triton -o program.tasm
 ```
@@ -324,7 +324,7 @@ Complete the build pipeline: `trident check`, `trident test`, `trident build --c
 
 ### 2. Package the Artifact
 
-```bash
+```nu
 trident package main.tri --target neptune --verify
 ```
 
@@ -334,7 +334,7 @@ that verifiers check proofs against.
 
 ### 3. Deploy
 
-```bash
+```nu
 # Deploy from source (packages automatically)
 trident deploy main.tri --target neptune --registry http://prod:8090
 

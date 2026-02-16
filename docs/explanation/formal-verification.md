@@ -195,7 +195,7 @@ modular reduction. Two query modes are supported:
 
 ### CLI Usage
 
-```bash
+```nu
 # Standard verification: symbolic execution + algebraic solver + BMC
 trident verify main.tri
 
@@ -336,7 +336,7 @@ conclusive:
 
 ### CLI Usage
 
-```bash
+```nu
 # Check equivalence of two functions in the same file
 trident equiv program.tri fn_original fn_optimized
 
@@ -408,7 +408,7 @@ enabling automated generate-verify loops.
 
 ### CLI Usage
 
-```bash
+```nu
 # Generate scaffold to stdout
 trident generate spec.tri
 

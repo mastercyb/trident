@@ -4,7 +4,7 @@
 
 ---
 
-```bash
+```nu
 # Build
 trident build <file>                    # Compile to target assembly
 trident build <file> --target neptune   # OS target → derives TRITON

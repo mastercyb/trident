@@ -266,7 +266,7 @@ programming.
 Cost is known at compile time because all loops have bounded iteration
 counts and there is no dynamic dispatch. See [How STARK Proofs Work](../explanation/stark-proofs.md) Section 4 for why there are exactly six tables, and the [Optimization Guide](../guides/optimization.md) for cost reduction strategies.
 
-```bash
+```nu
 # See the cost breakdown
 trident build token.tri --costs
 
@@ -292,7 +292,7 @@ uint256 gasUsed = gasStart - gasleft();
 // You don't know until you run it
 ```
 
-```bash
+```nu
 # Trident — cost known before execution
 $ trident build token.tri --costs
 # Processor:  3,847 rows (padded: 4,096)
@@ -685,7 +685,7 @@ All iteration must have a compile-time upper bound (`for i in 0..n bounded 100`)
 Every Trident function has a deterministic proving cost. The compiler gives you
 complete visibility:
 
-```bash
+```nu
 trident build main.tri --costs       # full table breakdown
 trident build main.tri --hotspots    # top 5 most expensive functions
 trident build main.tri --annotate    # per-line cost annotations
@@ -710,7 +710,7 @@ All cryptographic security comes from hash functions (Tip5) and FRI commitments 
 
 ### 1. Install Trident
 
-```bash
+```nu
 git clone https://github.com/nicktriton/trident
 cd trident
 cargo build --release
@@ -719,7 +719,7 @@ cargo build --release
 
 ### 2. Create a Project and Read the Hello World
 
-```bash
+```nu
 trident init my_first_zk
 cd my_first_zk
 cat main.tri
@@ -728,7 +728,7 @@ cat main.tri
 The default `main.tri` reads two public inputs, adds them, and writes the
 result. Build it:
 
-```bash
+```nu
 trident build main.tri -o hello.tasm
 trident build main.tri --costs
 ```
@@ -742,7 +742,7 @@ with pay, lock, update, mint, and burn operations. See
 
 ### 4. Build and Check Costs
 
-```bash
+```nu
 trident build os/neptune/standards/coin.tri --costs
 trident build os/neptune/standards/coin.tri --hotspots
 ```

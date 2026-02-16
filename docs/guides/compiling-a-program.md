@@ -38,7 +38,7 @@ This design is deliberate. In provable computation, predictability matters more 
 
 Compile a single file:
 
-```bash
+```nu
 trident build main.tri
 ```
 
@@ -50,7 +50,7 @@ Compiled -> main.tasm
 
 The default output file replaces the `.tri` extension with `.tasm`. To specify a different path:
 
-```bash
+```nu
 trident build main.tri -o output/program.tasm
 ```
 
@@ -58,7 +58,7 @@ trident build main.tri -o output/program.tasm
 
 If your project has a `trident.toml`, you can point `trident build` at the project directory instead of a specific file:
 
-```bash
+```nu
 trident build .
 ```
 
@@ -70,7 +70,7 @@ Compiled -> my_project.tasm
 
 You can also pass any `.tri` file inside a project directory. If the compiler finds a `trident.toml` in the file's directory or any ancestor, it builds the full project:
 
-```bash
+```nu
 trident build src/main.tri    # finds trident.toml, builds whole project
 ```
 
@@ -104,7 +104,7 @@ my_app__main:
 
 To validate a program without producing any output file, use `trident check`:
 
-```bash
+```nu
 trident check main.tri
 ```
 
@@ -116,14 +116,14 @@ OK: main.tri
 
 On failure, the compiler prints diagnostics and exits with a non-zero status code. This makes `check` useful in CI pipelines and editor integrations:
 
-```bash
+```nu
 # CI: fail the build if any type errors exist
 trident check .
 ```
 
 The `check` command resolves modules the same way `build` does -- it type-checks all dependencies in topological order. You can also request a cost report without emitting TASM:
 
-```bash
+```nu
 trident check main.tri --costs
 ```
 
@@ -179,7 +179,7 @@ Proving cost depends on six Triton VM execution tables. See [Optimization Guide]
 
 The compiler provides four cost analysis flags:
 
-```bash
+```nu
 trident build main.tri --costs      # table heights
 trident build main.tri --hotspots   # top cost contributors  
 trident build main.tri --hints      # optimization suggestions
@@ -248,7 +248,7 @@ flags = ["release"]
 
 Profile-specific flags enable conditional compilation with `cfg` attributes. Use `--profile` to select which flag set is active:
 
-```bash
+```nu
 trident build . --profile release
 ```
 
@@ -256,7 +256,7 @@ trident build . --profile release
 
 Trident's compiler is parameterized by a `TargetConfig` that defines every target-specific constant: stack depth, digest width, hash rate, field prime, cost tables, and output extension. The first target is Triton VM.
 
-```bash
+```nu
 trident build main.tri --target triton    # explicit (same as default)
 ```
 
@@ -307,7 +307,7 @@ The architecture field (`stack` or `register`) determines how the emitter genera
 
 `trident fmt` reformats source files to the canonical Trident style. It parses the file, preserves comments, and re-emits the AST with consistent indentation and spacing:
 
-```bash
+```nu
 trident fmt main.tri          # format in place
 trident fmt src/              # format all .tri files recursively
 ```
@@ -321,7 +321,7 @@ Already formatted: helpers.tri
 
 Use `--check` mode in CI to verify formatting without modifying files. It exits with status 1 if any file would change:
 
-```bash
+```nu
 trident fmt --check .
 ```
 
@@ -351,7 +351,7 @@ fn test_add() {
 
 Run tests with:
 
-```bash
+```nu
 trident test main.tri
 ```
 
@@ -366,7 +366,7 @@ test result: ok. 1 passed; 0 failed
 
 The test runner compiles each test function and reports pass/fail along with cost metrics. For project builds, it discovers `#[test]` functions across all modules:
 
-```bash
+```nu
 trident test .
 ```
 

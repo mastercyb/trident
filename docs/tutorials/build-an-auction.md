@@ -235,7 +235,7 @@ On transparent chains, commit-reveal leaks information: commitment counts, gas p
 
 ## ⚡ Build It
 
-```bash
+```nu
 trident build auction_commit.tri --target triton -o auction_commit.tasm
 trident build auction_reveal.tri --target triton -o auction_reveal.tasm
 trident build auction_settle.tri --target triton -o auction_settle.tasm
@@ -243,7 +243,7 @@ trident build auction_settle.tri --target triton -o auction_settle.tasm
 
 Check the costs:
 
-```bash
+```nu
 trident build auction_reveal.tri --target triton --costs
 ```
 

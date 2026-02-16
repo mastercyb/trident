@@ -45,7 +45,7 @@ corresponding `.tri` module. No synthetic benchmark programs exist here
 
 ## Running
 
-```bash
+```nu
 trident bench              # from project root
 trident bench benches/     # explicit directory
 ```

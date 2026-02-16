@@ -411,7 +411,7 @@ fn main() {
 
 ## ⚡ Build It
 
-```bash
+```nu
 trident build name.tri --target triton -o name.tasm
 trident build name.tri --costs
 trident build name.tri --hotspots

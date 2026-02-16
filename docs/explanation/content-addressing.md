@@ -173,7 +173,7 @@ The codebase is stored at `~/.trident/codebase/` by default. Override with the
 
 Parse a `.tri` file and store all its function definitions in the codebase:
 
-```bash
+```nu
 trident store add myfile.tri
 ```
 
@@ -192,7 +192,7 @@ and the name pointer is updated.
 
 ### 3.3 Listing Definitions
 
-```bash
+```nu
 trident store list
 ```
 
@@ -208,7 +208,7 @@ Shows all named definitions, sorted alphabetically:
 
 View a definition by name or by hash prefix:
 
-```bash
+```nu
 trident store view verify_merkle
 trident store view #a7f3b2
 ```
@@ -231,7 +231,7 @@ pub fn verify_merkle(root: Digest, leaf: Digest, index: U32, depth: U32) {
 Renaming is instant and non-breaking because it only updates the name pointer.
 The hash (and therefore all cached compilation and verification results) is unchanged:
 
-```bash
+```nu
 trident store rename old_name new_name
 ```
 
@@ -239,7 +239,7 @@ trident store rename old_name new_name
 
 Show what a definition depends on and what depends on it:
 
-```bash
+```nu
 trident store deps transfer_token
 ```
 
@@ -258,7 +258,7 @@ Dependents:
 
 Show all hashes a name has pointed to over time:
 
-```bash
+```nu
 trident store history verify_merkle
 ```
 
@@ -267,7 +267,7 @@ codebase (append-only semantics) -- they are never deleted.
 
 ### 3.8 Codebase Statistics
 
-```bash
+```nu
 trident store stats
 ```
 
@@ -282,7 +282,7 @@ storing them in the codebase.
 
 ### 4.1 Basic Usage
 
-```bash
+```nu
 trident hash myfile.tri
 ```
 
@@ -302,7 +302,7 @@ Use `trident hash --full` to display full 256-bit hashes instead of 7-character 
 Point `trident hash` at a project directory (with `trident.toml`) to hash the entry
 file:
 
-```bash
+```nu
 trident hash .
 ```
 
@@ -312,7 +312,7 @@ Two functions with different variable names but identical computation produce th
 hash. This is a quick way to check if a refactored function is alpha-equivalent to the
 original:
 
-```bash
+```nu
 # In file_a.tri: fn add(a: Field, b: Field) -> Field { a + b }
 # In file_b.tri: fn add(x: Field, y: Field) -> Field { x + y }
 

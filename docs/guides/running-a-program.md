@@ -11,7 +11,7 @@ This guide covers how compiled Trident programs execute, how to feed them input,
 
 The `trident build` command translates a `.tri` source file into TASM (Triton Assembly):
 
-```bash
+```nu
 trident build main.tri              # produces main.tasm
 trident build main.tri -o out.tasm  # custom output path
 ```
@@ -110,7 +110,7 @@ The [`tasm-lang`](https://crates.io/crates/tasm-lang) ecosystem provides higher-
 
 Trident supports `#[test]` annotations on functions. The `trident test` command compiles and verifies these:
 
-```bash
+```nu
 trident test main.tri
 ```
 
@@ -157,7 +157,7 @@ The primary debugging tools are static analysis and cost analysis.
 
 ### Type Checking
 
-```bash
+```nu
 trident check main.tri
 ```
 
@@ -165,7 +165,7 @@ Catches type errors, undefined variables, arity mismatches, and unreachable code
 
 ### Cost and Optimization Analysis
 
-```bash
+```nu
 trident build main.tri --costs       # table heights
 trident build main.tri --hotspots    # top cost contributors
 trident build main.tri --annotate    # per-line cost annotations

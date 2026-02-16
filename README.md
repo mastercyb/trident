@@ -34,7 +34,7 @@ fn main() {
 }
 ```
 
-```bash
+```nu
 trident build hello.tri           # compile to TASM (Triton VM)
 ```
 
@@ -191,7 +191,7 @@ for designed token capabilities.
 
 ## Quick Start
 
-```bash
+```nu
 cargo build --release            # build from source
 trident build main.tri           # compile to TASM
 trident check main.tri           # type-check without emitting

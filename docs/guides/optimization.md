@@ -21,7 +21,7 @@ Strategies for reducing the proving cost of Trident programs.
 
 ### Reading a Cost Report
 
-```bash
+```nu
 trident build main.tri --costs
 ```
 
@@ -31,7 +31,7 @@ Output shows each function's cost across all tables. The dominant table is the o
 
 Save a baseline and compare after changes:
 
-```bash
+```nu
 trident build main.tri --save-costs before.json
 # ... make changes ...
 trident build main.tri --compare before.json
@@ -168,7 +168,7 @@ The compiler provides optimization hints with `--hints`:
 
 Use `--annotate` to see which lines contribute most:
 
-```bash
+```nu
 trident build main.tri --annotate
 ```
 
@@ -178,7 +178,7 @@ Each line shows its cost contribution in compact form: `cc` (clock cycles), `has
 
 Use `--hotspots` to see the top 5 most expensive functions:
 
-```bash
+```nu
 trident build main.tri --hotspots
 ```
 

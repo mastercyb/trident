@@ -106,7 +106,7 @@ The compiler provides actionable suggestions:
 
 ## Cost CLI
 
-```bash
+```nu
 trident build --costs                   # Cost report
 trident build --hotspots                # Top cost contributors
 trident build --hints                   # Optimization hints

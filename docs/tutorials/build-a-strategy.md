@@ -316,7 +316,7 @@ because the data the attack requires is never published.
 
 ## ⚡ Build It
 
-```bash
+```nu
 trident build strategy.tri --target triton -o strategy.tasm
 trident build strategy.tri --costs
 trident build strategy.tri --hotspots

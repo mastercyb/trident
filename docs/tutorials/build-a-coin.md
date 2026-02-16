@@ -404,7 +404,7 @@ Update (op 2) -- Changes the token's configuration. Setting `admin_auth = 0` per
 
 ## ⚡ Build and Test
 
-```bash
+```nu
 trident build coin.tri --target triton -o coin.tasm
 trident build coin.tri --costs
 trident build coin.tri --hotspots

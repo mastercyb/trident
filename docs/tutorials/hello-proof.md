@@ -75,19 +75,19 @@ of a valid proof is the output -- it means the prover knew the secret.
 
 Compile to Triton Assembly:
 
-```bash
+```nu
 trident build secret.tri --target triton -o secret.tasm
 ```
 
 Type-check without emitting assembly:
 
-```bash
+```nu
 trident check secret.tri
 ```
 
 See the proving cost:
 
-```bash
+```nu
 trident build secret.tri --costs
 ```
 

@@ -749,7 +749,7 @@ This is why hashing is the most expensive operation in Triton VM -- not in
 clock cycles (it costs 1 cycle), but in its coprocessor table impact. The
 `--costs` and related flags make this visible:
 
-```bash
+```nu
 trident build token.tri --costs      # Full table breakdown
 trident build token.tri --hotspots   # Top 5 most expensive functions
 trident build token.tri --hints      # Optimization suggestions
