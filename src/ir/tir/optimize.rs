@@ -326,25 +326,24 @@ fn collapse_epilogue_cleanup(ops: Vec<TIROp>) -> Vec<TIROp> {
 
                 // Count consecutive swap(D); pop(1) pairs.
                 let mut count = 1u32;
+                let mut is_constant_depth = true;
                 let mut j = i + 2;
                 while j + 1 < ops.len() {
                     if let (TIROp::Swap(dd), TIROp::Pop(1)) = (&ops[j], &ops[j + 1]) {
-                        if first_d == 1 {
-                            // Constant-depth chain: all pairs must be swap(1).
-                            if *dd == 1 {
-                                count += 1;
-                                j += 2;
-                            } else {
-                                break;
-                            }
+                        if *dd == first_d {
+                            // Same depth — constant-depth chain continues.
+                            count += 1;
+                            j += 2;
+                        } else if first_d == 1 {
+                            // Constant-depth with D=1 is strict.
+                            break;
+                        } else if *dd + count == first_d || *dd < first_d {
+                            // Decreasing-depth chain.
+                            is_constant_depth = false;
+                            count += 1;
+                            j += 2;
                         } else {
-                            // Decreasing-depth chain: accept nearby depths.
-                            if *dd + count == first_d || *dd < first_d {
-                                count += 1;
-                                j += 2;
-                            } else {
-                                break;
-                            }
+                            break;
                         }
                     } else {
                         break;
@@ -366,6 +365,27 @@ fn collapse_epilogue_cleanup(ops: Vec<TIROp>) -> Vec<TIROp> {
                                 pop_left -= batch;
                             }
                             remaining -= chunk;
+                        }
+                    } else if is_constant_depth {
+                        // Constant-depth with D > 1: removing `count`
+                        // dead elements from below a D-wide return value.
+                        // When D + count - 1 <= 15, bring all dead elements
+                        // to the top with decreasing swaps, then batch pop.
+                        let total_depth = first_d + count - 1;
+                        if total_depth <= 15 {
+                            for offset in 0..count {
+                                out.push(TIROp::Swap(total_depth - offset));
+                            }
+                        } else {
+                            for _ in 0..count {
+                                out.push(TIROp::Swap(first_d));
+                            }
+                        }
+                        let mut remaining = count;
+                        while remaining > 0 {
+                            let batch = remaining.min(5);
+                            out.push(TIROp::Pop(batch));
+                            remaining -= batch;
                         }
                     } else {
                         // Decreasing-depth chain.
@@ -609,6 +629,45 @@ mod tests {
         assert!(matches!(result[6], TIROp::Pop(4)));
         assert!(matches!(result[7], TIROp::Return));
         assert_eq!(result.len(), 8);
+    }
+
+    #[test]
+    fn collapse_constant_depth_swap_k_pop1_chain() {
+        // 5× swap 3; pop 1 (width-3 return, 5 dead locals) →
+        // swap 7; swap 6; swap 5; swap 4; swap 3; pop 5 (batch pop)
+        let mut ops = Vec::new();
+        for _ in 0..5 {
+            ops.push(TIROp::Swap(3));
+            ops.push(TIROp::Pop(1));
+        }
+        ops.push(TIROp::Return);
+        let result = optimize(ops);
+        // D=3, count=5, total_depth = 3+5-1 = 7 (≤15)
+        assert!(matches!(result[0], TIROp::Swap(7)));
+        assert!(matches!(result[1], TIROp::Swap(6)));
+        assert!(matches!(result[2], TIROp::Swap(5)));
+        assert!(matches!(result[3], TIROp::Swap(4)));
+        assert!(matches!(result[4], TIROp::Swap(3)));
+        assert!(matches!(result[5], TIROp::Pop(5)));
+        assert!(matches!(result[6], TIROp::Return));
+        assert_eq!(result.len(), 7); // was 11
+    }
+
+    #[test]
+    fn collapse_constant_depth_swap_k_large_chain() {
+        // 4× swap 5; pop 1 — total_depth = 5+4-1 = 8 (≤15)
+        let mut ops = Vec::new();
+        for _ in 0..4 {
+            ops.push(TIROp::Swap(5));
+            ops.push(TIROp::Pop(1));
+        }
+        let result = optimize(ops);
+        assert!(matches!(result[0], TIROp::Swap(8)));
+        assert!(matches!(result[1], TIROp::Swap(7)));
+        assert!(matches!(result[2], TIROp::Swap(6)));
+        assert!(matches!(result[3], TIROp::Swap(5)));
+        assert!(matches!(result[4], TIROp::Pop(4)));
+        assert_eq!(result.len(), 5); // was 8
     }
 
     #[test]
