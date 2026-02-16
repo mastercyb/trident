@@ -36,14 +36,14 @@ Quantum         256K        128K
 ## 256K — primitives land
 
 ```
-CORE      16 patterns implemented in Trident (reference evaluator)
-AI        Tensor operations (dot, matmul, relu, dense) — DONE: std.nn.tensor
-Privacy   Polynomial ops and NTT for FHE — DONE: std.private.poly
-Quantum   Quantum gate set (H, X, Y, Z, S, T, CNOT, CZ, SWAP) — DONE: std.quantum.gates
-tooling   Amazing cli
-tooling   Integration tests and formal verification
-tooling   Beatiful website
-tooling   Complete behcmark coverage
+- [x] CORE      16 patterns implemented in Trident (reference evaluator)
+- [x] AI        Tensor operations (dot, matmul, relu, dense) — DONE: std.nn.tensor
+- [x] Privacy   Polynomial ops and NTT for FHE — DONE: std.private.poly
+- [x] Quantum   Quantum gate set (H, X, Y, Z, S, T, CNOT, CZ, SWAP) — DONE: std.quantum.gates
+- [ ] tooling   Amazing cli
+- [ ] tooling   Integration tests and formal verification
+- [ ] tooling   Beautiful website
+- [ ] tooling   Complete benchmark coverage
 ```
 
 ## 128K — the machine assembles
