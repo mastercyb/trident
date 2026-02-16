@@ -6,6 +6,35 @@ use crate::diagnostic::Diagnostic;
 use crate::manifest::Manifest;
 use crate::span::Span;
 
+/// Maximum allowed length for a project name.
+const MAX_PROJECT_NAME_LEN: usize = 128;
+
+/// Validate a project name from trident.toml.
+///
+/// Rejects names that contain path separators (`/`, `\`), parent-directory
+/// traversals (`..`), control characters, or that exceed 128 bytes.
+pub fn validate_project_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("project name must not be empty".to_string());
+    }
+    if name.len() > MAX_PROJECT_NAME_LEN {
+        return Err(format!(
+            "project name exceeds {} characters",
+            MAX_PROJECT_NAME_LEN
+        ));
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err("project name must not contain path separators ('/' or '\\')".to_string());
+    }
+    if name.contains("..") {
+        return Err("project name must not contain '..'".to_string());
+    }
+    if name.chars().any(|c| c.is_control()) {
+        return Err("project name must not contain control characters".to_string());
+    }
+    Ok(())
+}
+
 /// Minimal project configuration from trident.toml.
 #[derive(Clone, Debug)]
 pub struct Project {
@@ -78,6 +107,13 @@ impl Project {
         if name.is_empty() {
             return Err(Diagnostic::error(
                 "missing 'name' in trident.toml".to_string(),
+                Span::dummy(),
+            ));
+        }
+
+        if let Err(reason) = validate_project_name(&name) {
+            return Err(Diagnostic::error(
+                format!("invalid project name '{}': {}", name, reason),
                 Span::dummy(),
             ));
         }
@@ -182,5 +218,53 @@ flags = ["release"]
         );
         assert_eq!(parse_string_array(r#"["single"]"#), vec!["single"]);
         assert!(parse_string_array("not_an_array").is_empty());
+    }
+
+    #[test]
+    fn validate_project_name_rejects_path_separators() {
+        assert!(validate_project_name("foo/bar").is_err());
+        assert!(validate_project_name("foo\\bar").is_err());
+    }
+
+    #[test]
+    fn validate_project_name_rejects_dot_dot() {
+        assert!(validate_project_name("..sneaky").is_err());
+        assert!(validate_project_name("a..b").is_err());
+    }
+
+    #[test]
+    fn validate_project_name_rejects_control_chars() {
+        assert!(validate_project_name("bad\x00name").is_err());
+        assert!(validate_project_name("bad\nname").is_err());
+    }
+
+    #[test]
+    fn validate_project_name_rejects_overlong() {
+        let long = "a".repeat(129);
+        assert!(validate_project_name(&long).is_err());
+    }
+
+    #[test]
+    fn validate_project_name_accepts_valid() {
+        assert!(validate_project_name("my_project").is_ok());
+        assert!(validate_project_name("hello-world").is_ok());
+        assert!(validate_project_name("a").is_ok());
+        let exactly_128 = "x".repeat(128);
+        assert!(validate_project_name(&exactly_128).is_ok());
+    }
+
+    #[test]
+    fn load_rejects_invalid_project_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let toml_path = dir.path().join("trident.toml");
+        fs::write(
+            &toml_path,
+            r#"[project]
+name = "bad/name"
+version = "0.1.0"
+"#,
+        )
+        .unwrap();
+        assert!(Project::load(&toml_path).is_err());
     }
 }
