@@ -256,14 +256,17 @@ verify/            ~5.6k LOC   Formal verification
     mod.rs           ~460         SMT encoding
     tests.rs          ~75         SMT tests
 
-lsp/               ~2.7k LOC   Language Server Protocol
-  mod.rs             ~440       LSP server (tower-lsp, capabilities, handlers)
+lsp/               ~3.4k LOC   Language Server Protocol
+  mod.rs             ~500       LSP server (tower-lsp, capabilities, handlers)
+  project.rs         ~190       Project helpers (symbol index, exports, costs, workspace symbols)
+  references.rs      ~240       Find references, rename, document highlight
+  hints.rs           ~180       Inlay hints (function/loop cost estimates)
   document.rs        ~100       Per-document state (tokens, comments, line_starts cache)
   incremental.rs     ~160       Incremental lexing (re-lex dirty region, splice)
   semantic.rs        ~380       Semantic tokens + delta computation
   folding.rs         ~165       Folding ranges (code folding)
   selection.rs       ~170       Selection ranges (expand/shrink selection)
-  intelligence.rs    ~340       Go-to-definition, find-references
+  intelligence.rs    ~340       Hover, completion, signature help
   builtins.rs        ~320       Builtin docs for hover
   util/              ~570       LSP utilities
     mod.rs           ~230         Position mapping, etc.

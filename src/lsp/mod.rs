@@ -2,19 +2,24 @@
 //!
 //! Provides IDE features: diagnostics, formatting, document symbols,
 //! go-to-definition, hover, completion, signature help, semantic tokens
-//! (with incremental deltas), folding ranges, and selection ranges.
+//! (with incremental deltas), folding ranges, selection ranges,
+//! find references, rename, document highlight, workspace symbol,
+//! and inlay hints.
 
 mod builtins;
 mod document;
 mod folding;
+mod hints;
 mod incremental;
 mod intelligence;
+mod project;
+mod references;
 mod selection;
 mod semantic;
 pub mod util;
 
-use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use tower_lsp::jsonrpc::Result;
@@ -22,8 +27,6 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use crate::ast::Item;
-use crate::resolve::resolve_modules;
-use crate::typecheck::{ModuleExports, TypeChecker};
 
 use document::{compute_line_starts, DocumentState};
 use util::{
@@ -66,6 +69,11 @@ impl LanguageServer for TridentLsp {
                         },
                     ),
                 ),
+                references_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Left(true)),
+                document_highlight_provider: Some(OneOf::Left(true)),
+                workspace_symbol_provider: Some(OneOf::Left(true)),
+                inlay_hint_provider: Some(OneOf::Left(true)),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
                 ..Default::default()
@@ -393,6 +401,67 @@ impl LanguageServer for TridentLsp {
         )))
     }
 
+    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let pos = params.text_document_position.position;
+        let refs = self.do_references(uri, pos);
+        Ok(if refs.is_empty() { None } else { Some(refs) })
+    }
+
+    async fn prepare_rename(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>> {
+        Ok(self.do_prepare_rename(&params.text_document.uri, params.position))
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let pos = params.text_document_position.position;
+        Ok(self.do_rename(uri, pos, &params.new_name))
+    }
+
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams,
+    ) -> Result<Option<Vec<DocumentHighlight>>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        let highlights = self.do_document_highlight(uri, pos);
+        Ok(if highlights.is_empty() {
+            None
+        } else {
+            Some(highlights)
+        })
+    }
+
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>> {
+        let docs = self.documents.lock().unwrap();
+        let symbols = self.workspace_symbols(&params.query, &docs);
+        Ok(if symbols.is_empty() {
+            None
+        } else {
+            Some(symbols)
+        })
+    }
+
+    async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
+        let uri = &params.text_document.uri;
+        let source = match self.documents.lock().unwrap().get(uri) {
+            Some(doc) => doc.source.clone(),
+            None => return Ok(None),
+        };
+        let result = hints::inlay_hints(&source, params.range);
+        Ok(if result.is_empty() {
+            None
+        } else {
+            Some(result)
+        })
+    }
+
     async fn shutdown(&self) -> Result<()> {
         Ok(())
     }
@@ -414,145 +483,6 @@ impl TridentLsp {
         self.client
             .publish_diagnostics(uri, diagnostics, None)
             .await;
-    }
-
-    /// Build a symbol index mapping names to (uri, range) for go-to-definition.
-    fn build_symbol_index(&self, file_path: &Path) -> HashMap<String, (Url, Range)> {
-        let mut index = HashMap::new();
-
-        let dir = file_path.parent().unwrap_or(Path::new("."));
-        let entry = match crate::project::Project::find(dir) {
-            Some(toml_path) => match crate::project::Project::load(&toml_path) {
-                Ok(p) => p.entry,
-                Err(_) => file_path.to_path_buf(),
-            },
-            None => file_path.to_path_buf(),
-        };
-
-        let modules = match resolve_modules(&entry) {
-            Ok(m) => m,
-            Err(_) => return index,
-        };
-
-        for module in &modules {
-            let parsed = match crate::parse_source_silent(
-                &module.source,
-                &module.file_path.to_string_lossy(),
-            ) {
-                Ok(f) => f,
-                Err(_) => continue,
-            };
-
-            let mod_uri = Url::from_file_path(&module.file_path).unwrap_or_else(|_| {
-                Url::parse(&format!("file://{}", module.file_path.display())).unwrap()
-            });
-            let mod_short = module.name.rsplit('.').next().unwrap_or(&module.name);
-
-            for item in &parsed.items {
-                let (name, name_span) = match &item.node {
-                    Item::Fn(f) => (f.name.node.clone(), f.name.span),
-                    Item::Struct(s) => (s.name.node.clone(), s.name.span),
-                    Item::Const(c) => (c.name.node.clone(), c.name.span),
-                    Item::Event(e) => (e.name.node.clone(), e.name.span),
-                };
-
-                let range = span_to_range(&module.source, name_span);
-                let qualified = format!("{}.{}", mod_short, name);
-                let full_qualified = format!("{}.{}", module.name, name);
-
-                index.insert(name.clone(), (mod_uri.clone(), range));
-                index.insert(qualified, (mod_uri.clone(), range));
-                if full_qualified != format!("{}.{}", mod_short, name) {
-                    index.insert(full_qualified, (mod_uri.clone(), range));
-                }
-            }
-        }
-
-        index
-    }
-
-    /// Collect type-checked exports from all project modules.
-    pub(super) fn collect_project_exports(&self, file_path: &Path) -> Vec<ModuleExports> {
-        let dir = file_path.parent().unwrap_or(Path::new("."));
-        let entry = match crate::project::Project::find(dir) {
-            Some(toml_path) => match crate::project::Project::load(&toml_path) {
-                Ok(p) => p.entry,
-                Err(_) => file_path.to_path_buf(),
-            },
-            None => file_path.to_path_buf(),
-        };
-
-        let modules = match resolve_modules(&entry) {
-            Ok(m) => m,
-            Err(_) => return Vec::new(),
-        };
-
-        let mut all_exports = Vec::new();
-        for module in &modules {
-            let parsed = match crate::parse_source_silent(
-                &module.source,
-                &module.file_path.to_string_lossy(),
-            ) {
-                Ok(f) => f,
-                Err(_) => continue,
-            };
-
-            let mut tc = TypeChecker::new();
-            for exports in &all_exports {
-                tc.import_module(exports);
-            }
-
-            match tc.check_file(&parsed) {
-                Ok(exports) => all_exports.push(exports),
-                Err(_) => continue,
-            }
-        }
-
-        all_exports
-    }
-
-    /// Compute cost for a specific user-defined function by name.
-    pub(super) fn compute_function_cost(
-        &self,
-        file_path: &Path,
-        fn_name: &str,
-    ) -> Option<crate::cost::TableCost> {
-        let dir = file_path.parent().unwrap_or(Path::new("."));
-        let entry = match crate::project::Project::find(dir) {
-            Some(toml_path) => match crate::project::Project::load(&toml_path) {
-                Ok(p) => p.entry,
-                Err(_) => file_path.to_path_buf(),
-            },
-            None => file_path.to_path_buf(),
-        };
-
-        let modules = resolve_modules(&entry).ok()?;
-
-        for module in &modules {
-            let parsed =
-                crate::parse_source_silent(&module.source, &module.file_path.to_string_lossy())
-                    .ok()?;
-
-            let has_fn = parsed.items.iter().any(|item| {
-                if let Item::Fn(f) = &item.node {
-                    f.name.node == fn_name
-                } else {
-                    false
-                }
-            });
-
-            if has_fn {
-                let mut analyzer = crate::cost::CostAnalyzer::default();
-                let program_cost = analyzer.analyze_file(&parsed);
-                for fc in &program_cost.functions {
-                    if fc.name == fn_name {
-                        return Some(fc.cost.clone());
-                    }
-                }
-            }
-        }
-
-        None
     }
 }
 

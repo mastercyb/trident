@@ -1,0 +1,1 @@
+../../../tree-sitter/queries/injections.scm
