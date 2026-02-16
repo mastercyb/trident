@@ -12,14 +12,20 @@ impl zed::Extension for TridentExtension {
         _language_server_id: &zed::LanguageServerId,
         worktree: &zed::Worktree,
     ) -> Result<zed::Command> {
-        let path = worktree
-            .which("trident")
+        let env = worktree.shell_env();
+        let path = worktree.which("trident").or_else(|| {
+            env.iter()
+                .find(|(k, _)| k == "HOME")
+                .map(|(_, home)| format!("{}/.cargo/bin/trident", home))
+        });
+
+        let path = path
             .ok_or_else(|| "trident not found in PATH. Run: cargo install --path <trident-repo>")?;
 
         Ok(zed::Command {
             command: path,
             args: vec!["lsp".into()],
-            env: worktree.shell_env(),
+            env,
         })
     }
 }
