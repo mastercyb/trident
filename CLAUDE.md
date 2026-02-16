@@ -256,8 +256,11 @@ verify/            ~5.6k LOC   Formal verification
     mod.rs           ~460         SMT encoding
     tests.rs          ~75         SMT tests
 
-lsp/               ~1.6k LOC   Language Server Protocol
-  mod.rs             ~400       LSP server (tower-lsp, hover, diagnostics)
+lsp/               ~2.4k LOC   Language Server Protocol
+  mod.rs             ~460       LSP server (tower-lsp, capabilities, handlers)
+  semantic.rs        ~380       Semantic tokens (syntax highlighting via LSP)
+  folding.rs         ~165       Folding ranges (code folding)
+  selection.rs       ~170       Selection ranges (expand/shrink selection)
   intelligence.rs    ~340       Go-to-definition, find-references
   builtins.rs        ~320       Builtin docs for hover
   util/              ~570       LSP utilities
