@@ -51,7 +51,10 @@ impl Ty {
             Ty::Field | Ty::Bool | Ty::U32 => 1,
             Ty::XField(w) => *w,
             Ty::Digest(w) => *w,
-            Ty::Array(inner, n) => inner.width() * (*n as u32),
+            Ty::Array(inner, n) => {
+                let len = u32::try_from(*n).unwrap_or(u32::MAX);
+                inner.width().saturating_mul(len)
+            }
             Ty::Tuple(elems) => elems.iter().map(|t| t.width()).sum(),
             Ty::Struct(s) => s.width(),
             Ty::Unit => 0,
