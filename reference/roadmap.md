@@ -170,9 +170,69 @@ When quantum hardware arrives, the programs are already written.
    0K  Computation without limits
 ```
 
+---
+
+# The Convergence
+
+Read vertically by component for engineering. Read horizontally
+by temperature to see how the pieces fuse.
+
+## 256K — primitives land
+
+Tensor ops, FHE schemes, and quantum gates enter the IR. The three
+revolutions have raw building blocks but no integration.
+
+## 128K — the machine assembles
+
+Compiler pipeline rewritten in .tri. std.* ships core modules.
+os.neptune.* complete. Model inference compiles to provable Trident.
+FHE circuits compile. Quantum simulation works. Each revolution can
+demo but not ship.
+
+## 64K — proof of concept
+
+Language features complete. TIR stable. Atlas live on-chain. Proven
+AI inference (GPT-class). Encrypted smart contracts. Hybrid
+classical-quantum programs. Web playground. Each revolution has a
+working product.
+
+## 32K — self-hosting
+
+Compiler compiles itself in Trident. Contracts on all public
+functions. 3+ OS namespaces. Proven training. FHE + ZK composed.
+Quantum error correction. The foundation proves itself.
+
+## 16K — the industries fall
+
+Self-hosting compiler. Verified crypto. GPU-accelerated proving.
+On-chain model registry kills HuggingFace. Multi-party FHE kills
+cloud computing. Real quantum hardware backends. No incumbent is safe.
+
+## 8K — proven everything
+
+Self-proving compiler. Every module verified. FPGA proving. Federated
+learning with proofs. FHE at <10x overhead. Quantum advantage on
+real problems. The gap between Trident and everything else is
+unbridgeable.
+
+## 4K — hardware era
+
+Incremental proving. Frozen APIs. Tool chain self-hosts. Autonomous
+agents prove every decision. FHE on FPGA/ASIC. Post-quantum crypto
+native. Software is done — hardware takes over.
+
+## 2K — last mile
+
+Proof on-chain, src/ deleted. Composition proofs. Cross-OS portability.
+ASIC proving. Any model at any scale. Any program encrypted by default.
+STARK verifies quantum computation. Everything proven, everywhere.
+
 ## 0K
 
 Frozen foundation. Proven compiler. Verified intelligence.
-Sovereign computation. Post-classical capability. Trident becomes
-permanent infrastructure — a fixed point in the space of provable
-computation. Write once, prove anywhere.
+Sovereign computation. Post-classical capability.
+
+Intelligence without trust. Privacy without permission.
+Computation without limits.
+
+Write once, prove anywhere.
