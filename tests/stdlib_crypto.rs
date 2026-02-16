@@ -1,4 +1,4 @@
-use crate::*;
+use trident::compile_project;
 
 /// Helper: write a temp program file in the repo root (so module resolution
 /// finds `std/`, `vm/`, `os/`) and compile it.
