@@ -1,22 +1,34 @@
 # Roadmap
 
 Trident uses kelvin versioning. Versions count down toward absolute
-zero. At 0K the layer is frozen forever — no further changes. Lower
-layers freeze before higher layers. The endgame is a frozen foundation
-for provable computation.
+zero. At 0K a layer is frozen forever — no further changes. Lower
+layers freeze before higher layers.
+
+## Now → First Release
+
+Three targets before first release:
+
+1. Self-hosting — compiler compiles itself in Trident
+2. Atlas — on-chain package registry live
+3. Revolution demos — small proven inference, FHE circuit
+   compilation, quantum circuit simulation
+
+First release ships when all three land. The compiler that compiles
+itself, the registry that connects developers, and proof that the
+three frontiers are reachable.
 
 ## The Stack
 
 ```
-Layer           Current
-───────────────────────
-vm spec          32K
-language         64K
-TIR              64K
-compiler        128K
-std.*           128K
-os.*            128K
-tooling          64K
+Layer           Current   First Release
+───────────────────────────────────────
+vm spec          32K         16K
+language         64K         32K
+TIR              64K         32K
+compiler        128K         32K
+std.*           128K         64K
+os.*            128K         64K
+tooling          64K         32K
 ```
 
 ## vm spec — 32K → 0K
@@ -112,15 +124,13 @@ be provable. LSP, CLI, pretty-printing run outside the proof.
 
 # The Three Revolutions
 
-The foundation exists to enable these. Each revolution is a frontier
-that Trident is uniquely positioned to own — because no other language
-can prove computation across all three.
+The foundation exists to enable these. No other language can prove
+computation across all three.
 
 ## AI — verifiable intelligence
 
-Disrupts: cloud AI (AWS/Google/Azure), model marketplaces (HuggingFace),
-MLOps (Databricks), AI safety (alignment industry). Every inference
-provable. Every model weight auditable. No trust required.
+Disrupts: cloud AI, model marketplaces, MLOps, alignment industry.
+Every inference provable. Every model weight auditable.
 
 ```
  256K  Tensor operations in TIR (matmul, conv, attention)
@@ -136,9 +146,8 @@ provable. Every model weight auditable. No trust required.
 
 ## Privacy — sovereign computation
 
-Disrupts: cloud computing (all of it), banking secrecy, healthcare
-data, surveillance capitalism, AdTech. Compute on encrypted data.
-No one sees inputs. Everyone verifies the result.
+Disrupts: cloud computing, banking, healthcare, surveillance, AdTech.
+Compute on encrypted data. No one sees inputs.
 
 ```
  256K  FHE primitives in std.crypto (TFHE, BGV, CKKS)
@@ -154,9 +163,8 @@ No one sees inputs. Everyone verifies the result.
 
 ## Quantum — post-classical computation
 
-Disrupts: classical computing (all of it), cryptography (RSA/ECC
-dead), drug discovery, materials science, optimization, finance.
-When quantum hardware arrives, the programs are already written.
+Disrupts: classical computing, cryptography, drug discovery,
+materials science, optimization, finance.
 
 ```
  256K  Quantum gate set in TIR (Hadamard, CNOT, Toffoli, measure)
@@ -186,46 +194,48 @@ revolutions have raw building blocks but no integration.
 
 Compiler pipeline rewritten in .tri. std.* ships core modules.
 os.neptune.* complete. Atlas live on-chain. Small model inference
-compiles to provable Trident. FHE circuits compile. Quantum
-simulation works. Each revolution can demo but not ship.
+compiles. FHE circuits compile. Quantum simulation works. Each
+revolution can demo but not ship.
 
 ## 64K — proof of concept
 
-Language features complete. TIR stable. On-chain model registry.
-Encrypted smart contracts. Hybrid classical-quantum programs. Web
-playground. Each revolution has a working product.
+Language complete. TIR stable. Skills shipped. 3+ OS namespaces.
+On-chain model registry. Encrypted smart contracts. Hybrid
+classical-quantum programs. Web playground. Each revolution has
+a working product.
 
-## 32K — self-hosting (first release)
+## 32K — first release
 
-Compiler compiles itself in Trident. Contracts on all public
-functions. 3+ OS namespaces. Proven training. FHE + ZK composed.
-Quantum error correction. The foundation proves itself. This is
-the first public release — the compiler that compiles itself.
+Compiler compiles itself. Contracts on all public functions.
+Proven training. FHE + ZK composed. Quantum error correction.
+ZK coprocessor integrations. The self-hosting compiler ships
+with Atlas and three revolution demos.
 
 ## 16K — the industries fall
 
-Verified crypto. GPU-accelerated proving. GPT-class proven inference
-kills cloud AI. Multi-party FHE kills cloud computing. Real quantum
-hardware backends. No incumbent is safe.
+Self-proving compiler. Verified crypto. GPU-accelerated proving.
+GPT-class proven inference kills cloud AI. Multi-party FHE kills
+cloud computing. Real quantum hardware backends. No incumbent
+is safe.
 
 ## 8K — proven everything
 
-Self-proving compiler. Every module verified. FPGA proving. Federated
-learning with proofs. FHE at <10x overhead. Quantum advantage on
-real problems. The gap between Trident and everything else is
-unbridgeable.
+Incremental proving. Every module verified. FPGA proving.
+Federated learning with proofs. FHE at <10x overhead. Quantum
+advantage on real problems. The gap between Trident and
+everything else is unbridgeable.
 
 ## 4K — hardware era
 
-Incremental proving. Frozen APIs. Tool chain self-hosts. Autonomous
-agents prove every decision. FHE on FPGA/ASIC. Post-quantum crypto
-native. Software is done — hardware takes over.
+Proof on-chain, src/ deleted. Frozen APIs. Tool chain self-hosts.
+Autonomous agents prove every decision. FHE on FPGA/ASIC.
+Post-quantum crypto native. Software is done — hardware takes over.
 
 ## 2K — last mile
 
-Proof on-chain, src/ deleted. Composition proofs. Cross-OS portability.
-ASIC proving. Any model at any scale. Any program encrypted by default.
-STARK verifies quantum computation. Everything proven, everywhere.
+Compiler proves its own correctness. Composition proofs. Cross-OS
+portability. ASIC proving. Any model at any scale. Any program
+encrypted by default. STARK verifies quantum computation.
 
 ## 0K
 
