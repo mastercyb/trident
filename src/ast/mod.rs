@@ -138,8 +138,8 @@ impl ArraySize {
     pub fn as_literal(&self) -> Option<u64> {
         match self {
             ArraySize::Literal(n) => Some(*n),
-            ArraySize::Add(a, b) => Some(a.as_literal()? + b.as_literal()?),
-            ArraySize::Mul(a, b) => Some(a.as_literal()? * b.as_literal()?),
+            ArraySize::Add(a, b) => Some(a.as_literal()?.saturating_add(b.as_literal()?)),
+            ArraySize::Mul(a, b) => Some(a.as_literal()?.saturating_mul(b.as_literal()?)),
             ArraySize::Param(_) => None,
         }
     }
@@ -149,8 +149,8 @@ impl ArraySize {
         match self {
             ArraySize::Literal(n) => *n,
             ArraySize::Param(name) => subs.get(name).copied().unwrap_or(0),
-            ArraySize::Add(a, b) => a.eval(subs) + b.eval(subs),
-            ArraySize::Mul(a, b) => a.eval(subs) * b.eval(subs),
+            ArraySize::Add(a, b) => a.eval(subs).saturating_add(b.eval(subs)),
+            ArraySize::Mul(a, b) => a.eval(subs).saturating_mul(b.eval(subs)),
         }
     }
 }
