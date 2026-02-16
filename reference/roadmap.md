@@ -100,11 +100,11 @@ be provable. LSP, CLI, pretty-printing run outside the proof.
 
 ```
   64K  Web playground (compile .tri in browser)
-  32K  ZK coprocessor integrations (Axiom, Brevis, Herodotus)
-  16K  Hardware acceleration (FPGA, ASIC, GPU proving)
-   8K  All tools stable, no breaking changes
+  32K  GPU-accelerated proving
+  16K  ZK coprocessor integrations (Axiom, Brevis, Herodotus)
+   8K  FPGA proving backend
    4K  Tool chain self-hosts (trident builds trident tooling)
-   2K  Every tool output reproducible and verifiable
+   2K  ASIC proving backend
    0K  Tooling sealed forever
 ```
 
