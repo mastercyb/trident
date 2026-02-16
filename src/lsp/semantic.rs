@@ -20,6 +20,7 @@ const TT_PROPERTY: u32 = 5;
 const TT_NUMBER: u32 = 6;
 const TT_COMMENT: u32 = 7;
 const TT_OPERATOR: u32 = 8;
+#[allow(dead_code)] // reserved for use-path highlighting
 const TT_NAMESPACE: u32 = 9;
 const TT_EVENT: u32 = 10;
 const TT_MACRO: u32 = 11;
