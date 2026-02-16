@@ -1,74 +1,100 @@
-# Trident Development Plan
+# Roadmap
 
-Status as of February 2026. Checked items are shipped. Unchecked items
-are the remaining roadmap.
+Trident uses kelvin versioning. Versions count down toward absolute
+zero. At 0K the layer is frozen forever — no further changes. Lower
+layers freeze before higher layers. The endgame is a frozen foundation
+for provable computation.
 
----
+## The Stack
 
-## Milestone 1: Neptune Production Readiness
+```
+Layer           Current     Target
+─────────────────────────────────────
+vm spec         50K         0K
+language        100K        0K
+TIR             120K        0K
+compiler        200K        0K
+std.*           250K        0K
+os.*            300K        0K
+tooling         300K        0K
+```
 
-- [x] Complete — Neptune TX validation rewrite, benchmark suite, gadget library (SHA-256, Keccak), recursive STARK verifier, language spec v0.5
+## vm spec — 50K
 
-## Milestone 2: Formal Verification (Embedded)
+The VM abstraction layer. 20 target TOMLs exist. Triton VM is the
+reference backend. Freezing means the TargetConfig/StackBackend/CostModel
+traits and the vm.* intrinsic set are final.
 
-- [x] Phase 1 Complete — Symbolic execution, algebraic solver (Schwartz-Zippel), bounded model checker, `trident verify`, redundant assertion elimination, counterexample generation
-- [x] Phase 2 Complete — `#[requires]`/`#[ensures]`/`#[invariant]` annotations, Z3/CVC5 SMT backend, Goldilocks field theory, witness checking, Hoare logic, verification certificates
-- [x] Phase 4 Complete — Template-based invariant synthesis (CEGIS), specification inference
+- Stabilize intrinsic set across all targets
+- Implement Miden, Cairo, SP1, OpenVM backends
+- Prove backend emission preserves semantics
+- Freeze vm.* namespace
 
-### Phase 3: LLM Integration Framework
-- [x] Machine-readable verification output, `trident generate`, structured counterexamples, LLM-optimized reference
-- [ ] Benchmark: 20 contract specs with known-correct implementations
+## language — 100K
 
-## Milestone 3: Content-Addressed Codebase
+Syntax, types, operators, builtins, memory model. Freezing means the
+grammar and type system accept no further changes.
 
-- [x] Complete — AST normalization, content hashing, store (add/list/view/rename/stats/history/deps), compilation caching, global registry (HTTP API, publish/pull, search, certificate sharing), semantic equivalence checking
-- [ ] Atlas on-chain registry (target: 0.2) — TSP-2 Card collection per OS: each package is a Card (`asset_id = hash(name)`, `metadata_hash = content_hash(artifact)`), publishing = mint, version update = metadata update, three-tier resolution (local → cache → on-chain)
+- Indexed assignment (`arr[i] = val`, `s.field = val`)
+- Trait-like interfaces
+- Finalize grammar (reference/grammar.md = 0K)
+- Finalize type system (reference/language.md = 0K)
 
-## Milestone 4: Multi-Target Backends
+## TIR — 120K
 
-Architecture is in place (TargetConfig, StackBackend trait, CostModel
-trait, target-tagged asm blocks, 5 target TOML configs). Only Triton VM
-backend is fully implemented; others are stubs.
+The intermediate representation. Freezing means TIROp variants, stack
+effects, and lowering contracts are final.
 
-- [x] Target abstraction (TargetConfig, StackBackend, CostModel, target-tagged asm, cross-target testing)
-- [ ] Miden backend (full implementation, not stub)
-- [ ] OpenVM backend (full implementation)
-- [ ] SP1 backend (full implementation)
-- [ ] Cairo backend (full implementation)
-- [ ] Verified compiler: prove backend emission preserves semantics (Coq/Lean)
+- Stabilize TIROp set
+- Per-function benchmarking against baselines (target: < 1.2x overhead)
+- Cost-driven optimization passes
+- Freeze IR spec (reference/ir.md = 0K)
 
-## Milestone 5: Ecosystem
+## compiler — 200K
 
-- [x] Package manager, crypto library (11 modules), token standards (TSP-1/TSP-2), bridge validators (BTC/ETH light clients)
-- [ ] Landing page + web playground (compile .tri to TASM in browser)
-- [ ] Browser extension integration library
-- [ ] ZK coprocessor programs (Axiom, Brevis, Herodotus integration)
-- [ ] Editor extension download page + marketplace listings
-- [ ] Reimplement store as Atlas (TSP-2 Card collection) with per-OS namespace governance
-- [ ] Ship `std.token`, `std.coin`, `std.card`, `std.skill.*` (23 skills) as standard library modules
+The Rust implementation. Self-hosting replaces it with a provable
+Trident implementation. Freezing means the compiler proves its own
+correctness and the Rust code can be deleted.
 
-## Language Evolution
+- Self-hosting: rewrite compiler in Trident
+- Self-proving: each compilation produces a proof certificate
+- Incremental proving (per-module proofs, composed)
+- Delete src/ — frozen compiler lives in the provable stack
 
-- [x] Pattern matching on structs, const generic expressions, `#[pure]` annotation, proof composition primitives
-- [ ] Indexed assignment (`arr[i] = val`, `s.field = val` via Place::FieldAccess/Index)
-- [ ] Trait-like interfaces for backend extensions (generic over hash function)
+Self-hosting only needs the compiler pipeline (lexer, parser, typecheck,
+TIR, target lowering) to be provable. LSP, CLI, pretty-printing run
+outside the proof. The real gap is rewriting src/ in .tri, not the
+dependencies.
 
-## Research Directions
+## std.* — 250K
 
-Long-term, exploratory, not committed.
+Standard library. Freezing means the module APIs are final and every
+function has a correctness proof.
 
-- [ ] Optimal backend selection (given cost/memory constraints, pick best target)
-- [ ] Cost-driven compilation (transform to minimize proving cost per target)
-- [ ] Incremental proving (prove modules independently, compose proofs)
-- [ ] Verifiable AI/ML inference (fixed-architecture neural networks in Trident)
-- [ ] Provable data pipelines (ETL, aggregation, supply chain verification)
-- [ ] Hardware acceleration backends (FPGA, ASIC, GPU proving)
-- [ ] Self-proving compiler — Trident compiles itself to a provable target,
-      then proves its own compilation correctness. Every `trident build`
-      produces a proof certificate alongside the assembly. Atlas
-      already stores content-addressed hashes; add proof certificates
-      alongside and you get trustless package distribution — you don't
-      trust the compiler binary, you verify the proof. The endgame:
-      source → TIR → assembly where each arrow is a proven transformation,
-      chained into a single certificate that says "this assembly correctly
-      implements this source program."
+- Ship std.token, std.coin, std.card, std.skill.* (23 skills)
+- Add #[requires]/#[ensures] contracts to all public functions
+- Verification benchmark: 20 specs with proven implementations
+- Freeze public APIs
+
+## os.* — 300K
+
+OS bindings. Each OS namespace freezes independently.
+
+- Atlas: on-chain package registry (TSP-2 Cards)
+- Per-OS namespace governance
+- Freeze os.neptune.* first (reference implementation)
+
+## tooling — 300K
+
+LSP, formatter, verifier, editor extensions, playground.
+
+- Web playground (compile .tri in browser)
+- Editor marketplace listings
+- ZK coprocessor integrations (Axiom, Brevis, Herodotus)
+- Hardware acceleration (FPGA, ASIC, GPU proving)
+
+## 0K
+
+Frozen foundation. Every layer proven correct. No further changes
+needed or possible. Trident becomes permanent infrastructure —
+a fixed point in the space of provable computation.
