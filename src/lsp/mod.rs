@@ -18,6 +18,7 @@ mod project;
 mod references;
 mod selection;
 mod semantic;
+mod textobjects;
 pub mod util;
 
 use std::collections::BTreeMap;
