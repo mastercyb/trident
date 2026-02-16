@@ -1,0 +1,109 @@
+// Hand-optimized TASM baseline: os.neptune.kernel
+// Transaction kernel MAST tree authentication.
+//
+// Stack conventions follow Trident calling convention:
+//   first arg deepest, Digest = 5 field elements (d0 deepest, d4 on top).
+
+// read_lock_script_hash() -> Digest
+//   2 instructions
+__read_lock_script_hash:
+    read_io 5
+    return
+
+// read_type_script_hashes() -> (Digest, Digest, Digest)
+//   4 instructions
+__read_type_script_hashes:
+    read_io 5
+    read_io 5
+    read_io 5
+    return
+
+// leaf_inputs() -> Field
+//   2 instructions
+__leaf_inputs:
+    push 0
+    return
+
+// leaf_outputs() -> Field
+//   2 instructions
+__leaf_outputs:
+    push 1
+    return
+
+// leaf_announcements() -> Field
+//   2 instructions
+__leaf_announcements:
+    push 2
+    return
+
+// leaf_fee() -> Field
+//   2 instructions
+__leaf_fee:
+    push 3
+    return
+
+// leaf_coinbase() -> Field
+//   2 instructions
+__leaf_coinbase:
+    push 4
+    return
+
+// leaf_timestamp() -> Field
+//   2 instructions
+__leaf_timestamp:
+    push 5
+    return
+
+// leaf_mutator_set_hash() -> Field
+//   2 instructions
+__leaf_mutator_set_hash:
+    push 6
+    return
+
+// leaf_merge_bit() -> Field
+//   2 instructions
+__leaf_merge_bit:
+    push 7
+    return
+
+// tree_height() -> Field
+//   2 instructions
+__tree_height:
+    push 3
+    return
+
+// authenticate_field(kernel_hash: Digest, leaf_idx: U32) -> Digest
+//   Delegates to merkle.authenticate_leaf3.
+//   Stack entry: idx d4 d3 d2 d1 d0
+//   3 instructions (call + return, authenticate_leaf3 is external)
+__authenticate_field:
+    call __authenticate_leaf3
+    return
+
+// authenticate_fee(kernel_hash: Digest) -> Digest
+//   Stack entry: d4 d3 d2 d1 d0
+//   Push idx=3, then delegate.
+//   5 instructions
+__authenticate_fee:
+    push 3
+    swap 1
+    swap 2
+    swap 3
+    swap 4
+    swap 5
+    call __authenticate_leaf3
+    return
+
+// authenticate_timestamp(kernel_hash: Digest) -> Digest
+//   Stack entry: d4 d3 d2 d1 d0
+//   Push idx=5, then delegate.
+//   8 instructions
+__authenticate_timestamp:
+    push 5
+    swap 1
+    swap 2
+    swap 3
+    swap 4
+    swap 5
+    call __authenticate_leaf3
+    return

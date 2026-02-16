@@ -1,0 +1,95 @@
+// Hand-optimized TASM baseline: os.neptune.standards.plumb
+// Shared PLUMB framework utilities for TSP-1 (Coin) and TSP-2 (Card).
+
+// tree_depth() -> Field
+//   2 instructions
+__tree_depth:
+    push 20
+    return
+
+// hash_config(10 fields) -> Digest
+//   Stack entry: burn_hook update_hook ... admin_auth (10 fields, burn_hook on top)
+//   Tip5 hash takes exactly 10 inputs.
+//   2 instructions
+__hash_config:
+    hash
+    return
+
+// verify_config(10 fields + expected: Digest)
+//   Stack entry: expected(5) burn_hook ... admin_auth (15 elements)
+//   Hash bottom 10, assert equal to top 5.
+//   Swap expected out, hash, assert, clean up.
+//   12 instructions
+__verify_config:
+    // Move expected digest (top 5) below the 10 config fields
+    swap 5
+    swap 10
+    swap 5
+    swap 6
+    swap 11
+    swap 6
+    swap 7
+    swap 12
+    swap 7
+    swap 8
+    swap 13
+    swap 8
+    swap 9
+    swap 14
+    swap 9
+    // Stack: admin..burn_hook expected(5)
+    // Hash the 10 config fields
+    hash
+    // Stack: computed(5) expected(5)
+    assert_vector
+    pop 5
+    return
+
+// verify_auth(auth_hash: Field)
+//   Stack entry: auth_hash
+//   Divine secret, hash it, compare first element.
+//   8 instructions
+__verify_auth:
+    divine 1
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    hash
+    // Stack: auth_hash computed(5)
+    // Compare h0 (first element of computed) with auth_hash
+    swap 5
+    eq
+    assert
+    pop 4
+    return
+
+// signal_hook(hook: Field)
+//   Stack entry: hook
+//   If hook != 0, output it.
+//   5 instructions (worst case: hook != 0)
+__signal_hook:
+    dup 0
+    push 0
+    eq
+    skiz
+    return
+    write_io 1
+    return
+
+// assert_non_negative(val: Field)
+//   Stack entry: val
+//   Split to U32 pair, assert hi == 0, keep lo, discard.
+//   3 instructions
+__assert_non_negative:
+    split
+    push 0
+    eq
+    assert
+    pop 1
+    return

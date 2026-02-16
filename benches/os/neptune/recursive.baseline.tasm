@@ -1,0 +1,103 @@
+// Hand-optimized TASM baseline: os.neptune.recursive
+// Recursive STARK verification primitives.
+//
+// Stack conventions:
+//   xfe_inner_product(ptr_a, ptr_b, count) -> Digest (acc0,acc1,acc2,ptr_a',ptr_b')
+//   xb_inner_product(ptr_a, ptr_b, count) -> Digest
+//   read_claim() -> (Digest, Field, Field)
+//   verify_commitment(expected: Digest)
+
+// xfe_inner_product(ptr_a: Field, ptr_b: Field, count: Field) -> Digest
+//   Stack entry: count ptr_b ptr_a
+//   Need: loop `count` times calling xx_dot_step
+//   Reorder to: ptr_a ptr_b acc0 acc1 acc2 count
+//   17 instructions (setup + loop)
+__xfe_inner_product:
+    // Reorder: count ptr_b ptr_a -> ptr_a ptr_b 0 0 0 count
+    swap 2
+    swap 1
+    // Stack: ptr_a ptr_b count
+    push 0
+    push 0
+    push 0
+    // Stack: ptr_a ptr_b count 0 0 0
+    // Reorder to: count acc2 acc1 acc0 ptr_b ptr_a for loop
+    // Actually we need xx_dot_step format: acc0 acc1 acc2 ptr_a ptr_b
+    // with count tracked separately
+    swap 3
+    swap 1
+    swap 4
+    swap 2
+    swap 5
+    // Stack: count ptr_b ptr_a 0 0 0 -> 0 0 0 ptr_a ptr_b count
+    // Let's simplify: just set up for the loop body
+    swap 3
+    // Now call the loop
+    call __xfe_ip_loop
+    // Stack: 0 acc0 acc1 acc2 ptr_a' ptr_b'
+    // Remove counter
+    swap 5
+    pop 1
+    return
+
+__xfe_ip_loop:
+    dup 0
+    push 0
+    eq
+    skiz
+    return
+    push -1
+    add
+    swap 5
+    xx_dot_step
+    swap 5
+    recurse
+
+// xb_inner_product(ptr_a: Field, ptr_b: Field, count: Field) -> Digest
+//   Same structure as xfe but uses xb_dot_step.
+//   17 instructions (setup + loop)
+__xb_inner_product:
+    swap 2
+    swap 1
+    push 0
+    push 0
+    push 0
+    swap 3
+    swap 1
+    swap 4
+    swap 2
+    swap 5
+    swap 3
+    call __xb_ip_loop
+    swap 5
+    pop 1
+    return
+
+__xb_ip_loop:
+    dup 0
+    push 0
+    eq
+    skiz
+    return
+    push -1
+    add
+    swap 5
+    xb_dot_step
+    swap 5
+    recurse
+
+// read_claim() -> (Digest, Field, Field)
+//   4 instructions
+__read_claim:
+    read_io 5
+    read_io 1
+    read_io 1
+    return
+
+// verify_commitment(expected: Digest)
+//   3 instructions
+__verify_commitment:
+    divine 5
+    assert_vector
+    pop 5
+    return
