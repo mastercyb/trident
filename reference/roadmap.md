@@ -108,10 +108,71 @@ be provable. LSP, CLI, pretty-printing run outside the proof.
    0K  Tooling sealed forever
 ```
 
-LSP and editor extensions already shipped (past 128K).
+---
+
+# The Three Revolutions
+
+The foundation exists to enable these. Each revolution is a frontier
+that Trident is uniquely positioned to own — because no other language
+can prove computation across all three.
+
+## zkML — verifiable intelligence
+
+Every AI inference provable. Every model weight auditable. Every
+training run reproducible. The entire ML pipeline — from gradient
+descent to production inference — inside a STARK proof.
+
+```
+ 256K  Tensor operations in TIR (matmul, conv, attention)
+ 128K  Model inference compiles to provable Trident
+  64K  Proven inference: run GPT-class model, get proof of output
+  32K  Proven training: gradient computation inside proof
+  16K  On-chain model registry with verified accuracy claims
+   8K  Federated learning with proven aggregation
+   4K  Any model, any size — proving scales linearly
+   2K  AI agents that prove every decision they make
+   0K  Intelligence without trust
+```
+
+## FHE — sovereign computation
+
+Compute on encrypted data. No one sees inputs, no one sees
+intermediate state, everyone can verify the result. Privacy
+as a mathematical guarantee, not a policy promise.
+
+```
+ 256K  FHE primitives in std.crypto (TFHE, BGV, CKKS)
+ 128K  Trident programs compile to FHE circuits
+  64K  Encrypted smart contracts — execute without revealing state
+  32K  FHE + ZK composition: prove correctness of encrypted computation
+  16K  Multi-party FHE: N parties compute jointly, none sees others' data
+   8K  Practical performance: <10x overhead vs plaintext
+   4K  Hardware-accelerated FHE (FPGA/ASIC backends)
+   2K  Any Trident program runs encrypted by default
+   0K  Privacy without permission
+```
+
+## Quantum — post-classical computation
+
+Quantum circuits as Trident programs. Classical-quantum interop
+with proven correctness on both sides. When quantum hardware
+arrives, Trident is ready — the programs are already written.
+
+```
+ 256K  Quantum gate set in TIR (Hadamard, CNOT, Toffoli, measure)
+ 128K  Quantum circuit simulation backend
+  64K  Hybrid programs: classical control flow + quantum subroutines
+  32K  Quantum error correction circuits in std.quantum
+  16K  Real hardware backend (IBM, Google, IonQ)
+   8K  Quantum advantage: problems solved faster than classical
+   4K  Post-quantum crypto native (lattice-based in std.crypto)
+   2K  Quantum-classical proofs: STARK verifies quantum computation
+   0K  Computation without limits
+```
 
 ## 0K
 
-Frozen foundation. Every layer proven correct. No further changes
-needed or possible. Trident becomes permanent infrastructure —
-a fixed point in the space of provable computation.
+Frozen foundation. Proven compiler. Verified intelligence.
+Sovereign computation. Post-classical capability. Trident becomes
+permanent infrastructure — a fixed point in the space of provable
+computation. Write once, prove anywhere.
