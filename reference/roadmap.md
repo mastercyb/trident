@@ -43,6 +43,7 @@ TIR       Lowering works for stack, register, and tree targets
 compiler  Lexer + parser rewritten in .tri
 std.*     std.token, std.coin, std.card shipped
 os.*      os.neptune.* complete, Atlas on-chain registry live
+tooling   beatiful website
 AI        Small model inference compiles to provable Trident
 Privacy   Trident programs compile to FHE circuits
 Quantum   Quantum circuit simulation backend
@@ -54,9 +55,9 @@ Quantum   Quantum circuit simulation backend
 language  Indexed assignment (arr[i] = val, s.field = val)
 TIR       5+ OS targets lowering, all three VM types passing tests
 compiler  Type checker rewritten in .tri
-std.*     std.skill.* (23 skills) shipped
+std.*     23 std.skill.* shipped
 os.*      3+ OS namespaces operational
-tooling   Web playground (compile .tri in browser)
+tooling   Web playground: compile .tri in browser
 AI        On-chain model registry — verified accuracy, no trust
 Privacy   Encrypted smart contracts — execute without revealing state
 Quantum   Hybrid programs: classical control + quantum subroutines
@@ -68,7 +69,7 @@ Compiler compiles itself. Atlas live. Revolution demos ship.
 
 ```
 vm spec   Intrinsic set stable (no new vm.* builtins)
-language  Trait-like interfaces
+language  Protocols (compile-time structural typing), grammar frozen
 TIR       TIROp set stable (5+ OS, 1 VM per type prove op set complete)
 compiler  Pipeline fully in Trident — compiler compiles itself
 std.*     #[requires]/#[ensures] contracts on all public functions
@@ -82,7 +83,7 @@ Quantum   Quantum error correction in std.quantum
 
 ```
 vm spec   Triton backend emission proven correct
-language  Grammar finalized — no new syntax forms
+language  Type system finalized — no new type rules
 TIR       Per-function benchmarks < 1.2x, optimization passes land
 compiler  Each compilation produces a proof certificate (self-proving)
 std.*     std.crypto.* formally verified (poseidon, merkle, ecdsa)
@@ -97,7 +98,7 @@ Quantum   Real hardware backends (IBM, Google, IonQ)
 
 ```
 vm spec   3+ backends passing conformance suite
-language  Type system finalized — no new type rules
+language  Every language feature has a formal soundness proof
 TIR       Stack effect contracts proven for all ops
 compiler  Incremental proving (per-module proofs, composed)
 std.*     All modules verified — every public function proven
@@ -112,7 +113,7 @@ Quantum   Quantum advantage: problems classical can't touch
 
 ```
 vm spec   TargetConfig / StackBackend / CostModel traits frozen
-language  Every language feature has a formal soundness proof
+language  Protocol system proven sound (composability without dispatch)
 TIR       Every lowering path formally verified
 compiler  Proof verified on-chain, src/ deleted
 std.*     Public APIs frozen, no new exports
