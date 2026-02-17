@@ -253,11 +253,17 @@ fn run_neural_analysis(
 
         let per_block_baseline = baseline_cost / blocks.len().max(1) as u64;
 
-        // Try GPU acceleration
-        let gpu_accel = trident::gpu::neural_accel::NeuralAccelerator::try_new(
-            &blocks,
-            trident::ir::tir::neural::evolve::POP_SIZE as u32,
-        );
+        // GPU acceleration (opt-in: set TRIDENT_GPU=1 to enable)
+        // Parallel CPU is faster (~250ms/gen vs ~800ms/gen GPU) because
+        // GPU is memory-bound on 500KB weight reads per thread.
+        let gpu_accel = if std::env::var("TRIDENT_GPU").is_ok() {
+            trident::gpu::neural_accel::NeuralAccelerator::try_new(
+                &blocks,
+                trident::ir::tir::neural::evolve::POP_SIZE as u32,
+            )
+        } else {
+            None
+        };
         if gpu_accel.is_some() {
             eprintln!("  using GPU acceleration");
         }
@@ -304,7 +310,7 @@ fn run_neural_analysis(
                 }
                 pop.update_best();
             } else {
-                // CPU fallback
+                // Parallel CPU path (default — faster than GPU for this workload)
                 pop.evaluate(
                     &blocks,
                     |m: &mut NeuralModel, block: &trident::ir::tir::encode::TIRBlock| {

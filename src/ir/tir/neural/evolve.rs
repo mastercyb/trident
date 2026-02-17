@@ -83,23 +83,34 @@ impl Population {
     /// outputs count.
     pub fn evaluate<F>(&mut self, blocks: &[TIRBlock], scorer: F)
     where
-        F: Fn(&mut NeuralModel, &TIRBlock) -> i64,
+        F: Fn(&mut NeuralModel, &TIRBlock) -> i64 + Sync,
     {
-        for individual in &mut self.individuals {
-            let mut model = NeuralModel::from_weight_vec(&individual.weights);
-            let mut total_fitness = 0i64;
-            for block in blocks {
-                total_fitness = total_fitness.saturating_add(scorer(&mut model, block));
-            }
-            individual.fitness = total_fitness;
+        let fitnesses: Vec<i64> = std::thread::scope(|s| {
+            let handles: Vec<_> = self
+                .individuals
+                .iter()
+                .map(|individual| {
+                    let scorer = &scorer;
+                    s.spawn(move || {
+                        let mut model = NeuralModel::from_weight_vec(&individual.weights);
+                        let mut total_fitness = 0i64;
+                        for block in blocks {
+                            total_fitness = total_fitness.saturating_add(scorer(&mut model, block));
+                        }
+                        total_fitness
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("evaluate thread panicked"))
+                .collect()
+        });
+        for (individual, fitness) in self.individuals.iter_mut().zip(fitnesses) {
+            individual.fitness = fitness;
         }
 
-        // Update best
-        if let Some(best) = self.individuals.iter().max_by_key(|i| i.fitness) {
-            if best.fitness > self.best_fitness {
-                self.best_fitness = best.fitness;
-            }
-        }
+        self.update_best();
     }
 
     /// Run one generation: selection + crossover + mutation.

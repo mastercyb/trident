@@ -40,8 +40,14 @@ pub struct NeuralAccelerator {
     meta_buf: wgpu::Buffer,
     params_buf: wgpu::Buffer,
     scratch_buf: wgpu::Buffer,
+    weight_buf: wgpu::Buffer,
+    output_buf: wgpu::Buffer,
+    staging_buf: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
     num_blocks: u32,
     num_individuals: u32,
+    output_size: u64,
+    total_passes: u32,
 }
 
 impl NeuralAccelerator {
@@ -116,63 +122,33 @@ impl NeuralAccelerator {
             mapped_at_creation: false,
         });
 
-        Some(Self {
-            device,
-            queue,
-            pipeline,
-            block_buf,
-            meta_buf,
-            params_buf,
-            scratch_buf,
-            num_blocks,
-            num_individuals,
-        })
-    }
+        // Pre-allocate weight buffer (updated each generation via write_buffer)
+        let weight_size = (num_individuals as u64) * (WEIGHT_COUNT as u64) * 8; // 8 bytes per u64
+        let weight_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("weights"),
+            size: weight_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
-    /// Run batch forward passes for all individuals on all blocks.
-    /// `weight_vecs`: one raw u64 weight vector per individual.
-    /// Returns `[num_individuals][num_blocks]` where each entry is up to MAX_OUTPUT codes.
-    pub fn batch_forward(&self, weight_vecs: &[Vec<u64>]) -> Vec<Vec<Vec<u32>>> {
-        let total_passes = self.num_individuals * self.num_blocks;
-
-        // Encode weights as vec2<u32> pairs (lo, hi for each u64)
-        let mut weight_data: Vec<u32> =
-            Vec::with_capacity(weight_vecs.len() * WEIGHT_COUNT as usize * 2);
-        for wv in weight_vecs {
-            for &val in wv {
-                weight_data.push(val as u32);
-                weight_data.push((val >> 32) as u32);
-            }
-        }
-
-        let weight_buf = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("weights"),
-                contents: bytemuck::cast_slice(&weight_data),
-                usage: wgpu::BufferUsages::STORAGE,
-            });
-
-        // Output buffer
+        // Pre-allocate output and staging buffers
         let output_size = (total_passes * MAX_OUTPUT as u32) as u64 * 4;
-        let output_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+        let output_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("outputs"),
             size: output_size,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
-
-        // Staging buffer for readback
-        let staging_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+        let staging_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("staging"),
             size: output_size,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        // Bind group
-        let bind_group_layout = self.pipeline.get_bind_group_layout(0);
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        // Pre-build bind group (all buffer references are stable)
+        let bind_group_layout = pipeline.get_bind_group_layout(0);
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("neural_bind_group"),
             layout: &bind_group_layout,
             entries: &[
@@ -182,11 +158,11 @@ impl NeuralAccelerator {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: self.block_buf.as_entire_binding(),
+                    resource: block_buf.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: self.meta_buf.as_entire_binding(),
+                    resource: meta_buf.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
@@ -194,38 +170,71 @@ impl NeuralAccelerator {
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: self.params_buf.as_entire_binding(),
+                    resource: params_buf.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 5,
-                    resource: self.scratch_buf.as_entire_binding(),
+                    resource: scratch_buf.as_entire_binding(),
                 },
             ],
         });
 
-        // Dispatch
+        Some(Self {
+            device,
+            queue,
+            pipeline,
+            block_buf,
+            meta_buf,
+            params_buf,
+            scratch_buf,
+            weight_buf,
+            output_buf,
+            staging_buf,
+            bind_group,
+            num_blocks,
+            num_individuals,
+            output_size,
+            total_passes,
+        })
+    }
+
+    /// Run batch forward passes for all individuals on all blocks.
+    /// `weight_vecs`: one raw u64 weight vector per individual.
+    /// Returns `[num_individuals][num_blocks]` where each entry is up to MAX_OUTPUT codes.
+    pub fn batch_forward(&self, weight_vecs: &[Vec<u64>]) -> Vec<Vec<Vec<u32>>> {
+        // Upload weights to pre-allocated buffer
+        let mut weight_data: Vec<u32> =
+            Vec::with_capacity(weight_vecs.len() * WEIGHT_COUNT as usize * 2);
+        for wv in weight_vecs {
+            for &val in wv {
+                weight_data.push(val as u32);
+                weight_data.push((val >> 32) as u32);
+            }
+        }
+        self.queue
+            .write_buffer(&self.weight_buf, 0, bytemuck::cast_slice(&weight_data));
+
+        // Dispatch compute + copy in one submission
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("neural_encoder"),
             });
-
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("neural_pass"),
                 timestamp_writes: None,
             });
             pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = (total_passes + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            let workgroups = (self.total_passes + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
             pass.dispatch_workgroups(workgroups, 1, 1);
         }
-
-        encoder.copy_buffer_to_buffer(&output_buf, 0, &staging_buf, 0, output_size);
+        encoder.copy_buffer_to_buffer(&self.output_buf, 0, &self.staging_buf, 0, self.output_size);
         self.queue.submit(std::iter::once(encoder.finish()));
 
         // Readback
-        let slice = staging_buf.slice(..);
+        let slice = self.staging_buf.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
             let _ = tx.send(result);
@@ -255,7 +264,7 @@ impl NeuralAccelerator {
         }
 
         drop(data);
-        staging_buf.unmap();
+        self.staging_buf.unmap();
 
         result
     }
