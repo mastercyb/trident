@@ -1,8 +1,0 @@
-[optimizer]
-generation = 2
-weight_hash = "e75ef9c95b11ab16fca82b76986be66f"
-best_score = 4911
-prev_score = 986
-baseline_score = 1024
-improvement = "-379.6%"
-status = "improving"
