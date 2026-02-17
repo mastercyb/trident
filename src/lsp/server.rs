@@ -4,7 +4,7 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::LanguageServer;
 
-use super::document::{compute_line_starts, DocumentState};
+use super::document::{compute_line_starts, DocumentData};
 use super::util::{position_to_byte_offset, word_at_position};
 use super::{actions, folding, hints, incremental, indent, selection, semantic, TridentLsp};
 
@@ -65,7 +65,7 @@ impl LanguageServer for TridentLsp {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri.clone();
         let source = params.text_document.text;
-        let mut doc = DocumentState::new(source);
+        let mut doc = DocumentData::new(source);
 
         // Initial parse: cache AST and name_kinds
         if let Ok(file) = crate::parse_source_silent(&doc.source, "") {

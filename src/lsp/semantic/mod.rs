@@ -10,7 +10,7 @@ use crate::syntax::lexer::Comment;
 use crate::syntax::span::Spanned;
 
 use super::builtins::builtin_completions;
-use super::document::{DocumentState, NameKind};
+use super::document::{DocumentData, NameKind};
 
 // Token type indices — must match TOKEN_TYPES order.
 const TT_KEYWORD: u32 = 0;
@@ -61,7 +61,7 @@ pub fn token_legend() -> SemanticTokensLegend {
 }
 
 /// Generate semantic tokens from cached document state (no re-lex).
-pub(super) fn semantic_tokens_from_cache(doc: &DocumentState) -> Vec<SemanticToken> {
+pub(super) fn semantic_tokens_from_cache(doc: &DocumentData) -> Vec<SemanticToken> {
     let builtin_names: std::collections::BTreeSet<String> =
         builtin_completions().into_iter().map(|(n, _)| n).collect();
 

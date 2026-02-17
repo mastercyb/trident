@@ -28,7 +28,7 @@ use util::to_lsp_diagnostic;
 
 pub(crate) struct TridentLsp {
     pub(crate) client: Client,
-    pub(crate) documents: Mutex<BTreeMap<Url, document::DocumentState>>,
+    pub(crate) documents: Mutex<BTreeMap<Url, document::DocumentData>>,
 }
 
 impl TridentLsp {

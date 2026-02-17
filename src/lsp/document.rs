@@ -22,7 +22,7 @@ pub(crate) enum NameKind {
 }
 
 /// Cached state for a single open document.
-pub(crate) struct DocumentState {
+pub(crate) struct DocumentData {
     /// Current full source text.
     pub source: String,
     /// Cached lexer output: tokens sorted by byte offset.
@@ -41,7 +41,7 @@ pub(crate) struct DocumentState {
     pub result_version: u64,
 }
 
-impl DocumentState {
+impl DocumentData {
     pub fn new(source: String) -> Self {
         let line_starts = compute_line_starts(&source);
         let (tokens, comments, _diagnostics) = Lexer::new(&source, 0).tokenize();

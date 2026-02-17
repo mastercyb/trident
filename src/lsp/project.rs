@@ -9,7 +9,7 @@ use crate::ast::Item;
 use crate::resolve::resolve_modules;
 use crate::typecheck::{ModuleExports, TypeChecker};
 
-use super::document::DocumentState;
+use super::document::DocumentData;
 use super::util::{format_fn_signature, span_to_range};
 use super::TridentLsp;
 
@@ -150,7 +150,7 @@ impl TridentLsp {
     pub(super) fn workspace_symbols(
         &self,
         query: &str,
-        docs: &std::collections::BTreeMap<Url, DocumentState>,
+        docs: &std::collections::BTreeMap<Url, DocumentData>,
     ) -> Vec<SymbolInformation> {
         let query_lower = query.to_lowercase();
         let mut symbols = Vec::new();
