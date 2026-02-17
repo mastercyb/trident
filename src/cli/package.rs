@@ -15,6 +15,24 @@ pub struct PackageArgs {
     /// Target VM or OS (default: triton)
     #[arg(long, default_value = "triton")]
     pub target: String,
+    /// Engine (geeky for terrain/VM)
+    #[arg(long, conflicts_with_all = ["terrain", "network", "union_flag"])]
+    pub engine: Option<String>,
+    /// Terrain (gamy for engine/VM)
+    #[arg(long, conflicts_with_all = ["engine", "network", "union_flag"])]
+    pub terrain: Option<String>,
+    /// Network (geeky for union/OS)
+    #[arg(long, conflicts_with_all = ["engine", "terrain", "union_flag"])]
+    pub network: Option<String>,
+    /// Union (gamy for network/OS)
+    #[arg(long = "union", conflicts_with_all = ["engine", "terrain", "network"])]
+    pub union_flag: Option<String>,
+    /// Vimputer (geeky for state/chain instance)
+    #[arg(long, conflicts_with = "state")]
+    pub vimputer: Option<String>,
+    /// State (gamy for vimputer/chain instance)
+    #[arg(long, conflicts_with = "vimputer")]
+    pub state: Option<String>,
     /// Compilation profile for cfg flags (default: release)
     #[arg(long, default_value = "release")]
     pub profile: String,
@@ -31,10 +49,26 @@ pub fn cmd_package(args: PackageArgs) {
         input,
         output,
         target,
+        engine,
+        terrain,
+        network,
+        union_flag,
+        vimputer,
+        state,
         profile,
         audit,
         dry_run,
     } = args;
+    let bf = super::resolve_battlefield(
+        &target,
+        &engine,
+        &terrain,
+        &network,
+        &union_flag,
+        &vimputer,
+        &state,
+    );
+    let target = bf.target;
     let art = prepare_artifact(&input, &target, &profile, audit);
 
     // Determine output base directory

@@ -22,6 +22,66 @@ pub mod view;
 use std::path::{Path, PathBuf};
 use std::process;
 
+// ─── Three-Register Target Resolution ──────────────────────────────
+
+/// Resolved battlefield from three naming registers.
+///
+/// Users speak geeky (engine/network/vimputer), gamy
+/// (terrain/union/state), or universal (target). All resolve
+/// to the same battlefield.
+pub struct BattlefieldSelection {
+    /// Resolved target name (terrain or union name).
+    pub target: String,
+    /// Explicit state name, if provided.
+    pub state: Option<String>,
+}
+
+/// Resolve a battlefield from three naming registers.
+///
+/// Priority: explicit register flags override `--target`.
+/// Geeky (engine/network) and gamy (terrain/union) are synonyms.
+/// At most one terrain-level and one union-level flag may be set
+/// (enforced by clap `conflicts_with`).
+pub fn resolve_battlefield(
+    target: &str,
+    engine: &Option<String>,
+    terrain: &Option<String>,
+    network: &Option<String>,
+    union_flag: &Option<String>,
+    vimputer: &Option<String>,
+    state: &Option<String>,
+) -> BattlefieldSelection {
+    // Terrain-level: engine or terrain override target
+    let resolved_target = engine
+        .as_deref()
+        .or(terrain.as_deref())
+        .or(network.as_deref())
+        .or(union_flag.as_deref())
+        .unwrap_or(target)
+        .to_string();
+
+    // State-level: vimputer or state
+    let resolved_state = vimputer.clone().or_else(|| state.clone());
+
+    BattlefieldSelection {
+        target: resolved_target,
+        state: resolved_state,
+    }
+}
+
+/// Resolve a battlefield without state flags (compilation commands).
+pub fn resolve_battlefield_compile(
+    target: &str,
+    engine: &Option<String>,
+    terrain: &Option<String>,
+    network: &Option<String>,
+    union_flag: &Option<String>,
+) -> BattlefieldSelection {
+    resolve_battlefield(target, engine, terrain, network, union_flag, &None, &None)
+}
+
+// ─── Input Resolution ──────────────────────────────────────────────
+
 /// Resolved input: entry file and optional project.
 pub struct ResolvedInput {
     pub entry: PathBuf,
