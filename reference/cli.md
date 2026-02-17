@@ -47,6 +47,22 @@ trident package <file> -o <dir>         # Output to custom directory
 trident package <file> --verify         # Run verification before packaging
 trident package <file> --dry-run        # Show what would be produced
 
+# Run (delegates to hero)
+trident run <file>                      # Compile and run via hero
+trident run <file> --target neptune     # Run on specific target
+trident run <file> --input-values 1,2,3 # Public input field elements
+trident run <file> --secret 42          # Secret/divine input values
+
+# Prove (delegates to hero)
+trident prove <file>                    # Compile and generate proof via hero
+trident prove <file> --target neptune   # Prove on specific target
+trident prove <file> --output proof.bin # Write proof to file
+trident prove <file> --input-values 1,2 # Public input for proof
+
+# Verify Proof (delegates to hero)
+trident verify-proof <proof>            # Verify a proof via hero
+trident verify-proof <proof> --target neptune  # Verify against target
+
 # Deploy
 trident deploy <file>                   # Compile, package, deploy to registry
 trident deploy <dir>.deploy/            # Deploy pre-packaged artifact
@@ -90,6 +106,20 @@ trident init --lib <name>               # Create new library project
 trident generate <spec.tri>             # Generate scaffold from spec
 trident lsp                             # Start LSP server
 ```
+
+### Hero Discovery
+
+`run`, `prove`, and `verify-proof` delegate to external **hero** binaries.
+Heroes handle target-specific execution, proving, and deployment.
+
+Resolution order for finding a hero:
+
+1. Look for `trident-<target>` on PATH
+2. Check the target's `[hero]` config in `vm/<target>/target.toml`
+3. If target is an OS, check the underlying VM's hero config
+
+If no hero is found, Trident compiles the program and prints installation
+guidance. Heroes are installed separately (e.g. `cargo install trident-trisha`).
 
 ### Target Resolution
 
