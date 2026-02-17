@@ -61,5 +61,5 @@ pub fn cmd_verify_proof(args: VerifyProofArgs) {
     eprintln!("Warriors handle proof verification using target-specific verifiers.");
     eprintln!();
     eprintln!("Install a warrior for this target:");
-    eprintln!("  cargo install trident-trisha   # Triton VM + Neptune");
+    eprintln!("  cargo install trisha   # Triton VM + Neptune");
 }

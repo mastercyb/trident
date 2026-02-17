@@ -29,7 +29,7 @@ tables = ["processor", "hash", "u32", "op_stack", "ram", "jump_stack"]
 
 [warrior]
 name = "trisha"
-crate = "trident-trisha"
+crate = "trisha"
 runner = true
 prover = true
 

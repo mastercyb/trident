@@ -99,7 +99,7 @@ pub fn cmd_prove(args: ProveArgs) {
             eprintln!("Warriors handle proof generation using target-specific provers.");
             eprintln!();
             eprintln!("Install a warrior for this target:");
-            eprintln!("  cargo install trident-trisha   # Triton VM + Neptune");
+            eprintln!("  cargo install trisha   # Triton VM + Neptune");
         }
         Err(_) => {
             eprintln!("error: compilation failed");

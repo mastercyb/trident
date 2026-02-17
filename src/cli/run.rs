@@ -92,7 +92,7 @@ pub fn cmd_run(args: RunArgs) {
             eprintln!("Warriors handle execution, proving, and deployment.");
             eprintln!();
             eprintln!("Install a warrior for this target:");
-            eprintln!("  cargo install trident-trisha   # Triton VM + Neptune");
+            eprintln!("  cargo install trisha   # Triton VM + Neptune");
             eprintln!();
             eprintln!("Or use 'trident build' to produce TASM output directly.");
         }

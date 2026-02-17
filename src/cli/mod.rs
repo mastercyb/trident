@@ -381,8 +381,13 @@ pub fn find_warrior(target: &str) -> Option<PathBuf> {
     if let Ok(resolved) = trident::target::ResolvedTarget::resolve(target) {
         // Check VM's warrior config
         if let Some(ref warrior) = resolved.vm.warrior {
+            // Try prefixed name (trident-<warrior>)
             let warrior_bin = format!("trident-{}", warrior.name);
             if let Ok(path) = which_on_path(&warrior_bin) {
+                return Some(path);
+            }
+            // Try bare warrior name (standalone binary)
+            if let Ok(path) = which_on_path(&warrior.name) {
                 return Some(path);
             }
         }

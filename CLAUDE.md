@@ -218,6 +218,18 @@ For non-trivial decisions affecting correctness:
 
 Skip for trivial tasks.
 
+## Estimation Model
+
+Estimate work in sessions and pomodoros, not months.
+
+- **Pomodoro** = 30 minutes of focused work
+- **Session** = 3 focused hours (6 pomodoros)
+
+Use these units when planning tasks, milestones, and roadmaps.
+LLM-assisted development compresses traditional timelines — a
+"2-month project" might be 6-8 sessions. Plan in reality, not
+in inherited assumptions.
+
 ## Build & Test
 
 - `cargo test` must pass before committing.
