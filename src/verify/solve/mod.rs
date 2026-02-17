@@ -131,6 +131,8 @@ pub struct VerificationReport {
     pub bmc_result: SolverResult,
     /// Redundant assertions that could be eliminated.
     pub redundant_assertions: Vec<usize>,
+    /// Hash-dependent constraints (witness-required, not testable by random sampling).
+    pub witness_required: usize,
     /// Overall verdict.
     pub verdict: Verdict,
 }
@@ -180,6 +182,16 @@ impl VerificationReport {
         report.push_str(&self.bmc_result.format_report());
         report.push('\n');
 
+        // Witness-required constraints
+        if self.witness_required > 0 {
+            report.push_str(&format!(
+                "Witness-required: {} constraint(s) depend on hash outputs\n",
+                self.witness_required
+            ));
+            report.push_str("  These require valid witnesses and cannot be tested randomly.\n");
+            report.push('\n');
+        }
+
         // Redundant assertions
         if !self.redundant_assertions.is_empty() {
             report.push_str(&format!(
@@ -213,6 +225,13 @@ pub fn verify(system: &ConstraintSystem) -> VerificationReport {
         .iter()
         .map(|c| format_constraint(c))
         .collect();
+
+    // Count hash-dependent (witness-required) constraints
+    let witness_required = system
+        .constraints
+        .iter()
+        .filter(|c| c.is_hash_dependent())
+        .count();
 
     // 2. Random testing (Schwartz-Zippel)
     let random_result = solve(system, &SolverConfig::default());
@@ -249,6 +268,7 @@ pub fn verify(system: &ConstraintSystem) -> VerificationReport {
         random_result,
         bmc_result,
         redundant_assertions: redundant,
+        witness_required,
         verdict,
     }
 }

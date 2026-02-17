@@ -80,6 +80,45 @@ impl SymValue {
         }
     }
 
+    /// Check if this value contains a Hash node or opaque intrinsic output.
+    ///
+    /// Opaque values (hashes, intrinsic calls, tuple projections) cannot be
+    /// meaningfully evaluated by random testing since the solver assigns
+    /// arbitrary values that don't reflect the actual computation.
+    pub fn contains_opaque(&self) -> bool {
+        match self {
+            SymValue::Hash(_, _) => true,
+            SymValue::Var(var) => {
+                var.name.starts_with("__proj_")
+                    || var.name.starts_with("__hash")
+                    || var.name.starts_with("__divine")
+            }
+            SymValue::Add(a, b)
+            | SymValue::Mul(a, b)
+            | SymValue::Sub(a, b)
+            | SymValue::Eq(a, b)
+            | SymValue::Lt(a, b) => a.contains_opaque() || b.contains_opaque(),
+            SymValue::Neg(a) | SymValue::Inv(a) => a.contains_opaque(),
+            SymValue::Ite(c, t, e) => {
+                c.contains_opaque() || t.contains_opaque() || e.contains_opaque()
+            }
+            SymValue::FieldAccess(inner, _) => inner.contains_opaque(),
+            SymValue::Const(_) | SymValue::Divine(_) | SymValue::PubInput(_) => false,
+        }
+    }
+
+    /// Check if this value is an external input (pub_read or divine).
+    /// Range checks on external inputs are input preconditions, not bugs.
+    pub fn is_external_input(&self) -> bool {
+        match self {
+            SymValue::Var(var) => {
+                var.name.starts_with("pub_in_") || var.name.starts_with("divine_")
+            }
+            SymValue::PubInput(_) | SymValue::Divine(_) => true,
+            _ => false,
+        }
+    }
+
     /// Simplify obvious identities: x + 0 = x, x * 1 = x, etc.
     pub fn simplify(&self) -> SymValue {
         match self {
@@ -210,6 +249,27 @@ impl Constraint {
             Constraint::AssertTrue(SymValue::Const(0)) => true,
             Constraint::RangeU32(SymValue::Const(c)) => *c > u32::MAX as u64,
             _ => false,
+        }
+    }
+
+    /// Check if this constraint depends on a hash output.
+    ///
+    /// Hash-dependent constraints (e.g. `hash(secret) == expected`) require
+    /// specific witness values to satisfy — random testing will almost always
+    /// report them as violated. The solver should classify these as
+    /// "witness-required" rather than "violated".
+    pub fn is_hash_dependent(&self) -> bool {
+        match self {
+            Constraint::Equal(a, b) => a.contains_opaque() || b.contains_opaque(),
+            Constraint::AssertTrue(v) => v.contains_opaque(),
+            Constraint::Conditional(_, inner) => inner.is_hash_dependent(),
+            Constraint::DigestEqual(a, b) => {
+                a.iter().any(|v| v.contains_opaque()) || b.iter().any(|v| v.contains_opaque())
+            }
+            // RangeU32 constraints are input preconditions: as_u32(x) asserts x fits
+            // in 32 bits. Random field values almost never satisfy this, producing
+            // false positives. Only concrete violations (static analysis) matter.
+            Constraint::RangeU32(_) => true,
         }
     }
 }

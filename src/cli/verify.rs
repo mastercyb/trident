@@ -40,8 +40,7 @@ pub fn cmd_verify(args: VerifyArgs) {
 
     eprintln!("Verifying {}...", input.display());
 
-    let need_parse = verbose || smt_output.is_some() || run_z3 || json || synthesize;
-    let (system, parsed_file) = if need_parse {
+    let (system, parsed_file) = {
         let (_source, file) = load_and_parse(&entry);
         // Analyze all functions (works for both programs and modules)
         let per_fn = trident::sym::analyze_all(&file);
@@ -84,59 +83,40 @@ pub fn cmd_verify(args: VerifyArgs) {
         if verbose {
             eprintln!("\nCombined: {}", sys.summary());
         }
-        (Some(sys), Some(file))
-    } else {
-        (None, None)
+        (sys, Some(file))
     };
 
     if let Some(ref smt_path) = smt_output {
-        if let Some(ref sys) = system {
-            let smt_script = trident::smt::encode_system(sys, trident::smt::QueryMode::SafetyCheck);
-            if let Err(e) = std::fs::write(smt_path, &smt_script) {
-                eprintln!("error: cannot write '{}': {}", smt_path.display(), e);
-                process::exit(1);
-            }
-            eprintln!("SMT-LIB2 written to {}", smt_path.display());
+        let smt_script = trident::smt::encode_system(&system, trident::smt::QueryMode::SafetyCheck);
+        if let Err(e) = std::fs::write(smt_path, &smt_script) {
+            eprintln!("error: cannot write '{}': {}", smt_path.display(), e);
+            process::exit(1);
         }
+        eprintln!("SMT-LIB2 written to {}", smt_path.display());
     }
 
     if run_z3 {
-        if let Some(ref sys) = system {
-            run_z3_analysis(sys);
-        }
+        run_z3_analysis(&system);
     }
 
     if synthesize {
-        // parsed_file is always Some here because synthesize is included in need_parse
-        let file = parsed_file
-            .as_ref()
-            .expect("synthesize is included in need_parse");
-        let specs = trident::synthesize::synthesize_specs(file);
-        eprintln!("\n{}", trident::synthesize::format_report(&specs));
+        if let Some(ref file) = parsed_file {
+            let specs = trident::synthesize::synthesize_specs(file);
+            eprintln!("\n{}", trident::synthesize::format_report(&specs));
+        }
     }
 
-    match trident::verify_project(&entry) {
-        Ok(report) => {
-            if json {
-                if let Some(ref sys) = system {
-                    let file_name = entry.to_string_lossy().to_string();
-                    let json_output =
-                        trident::report::generate_json_report(&file_name, sys, &report);
-                    println!("{}", json_output);
-                } else {
-                    eprintln!("error: could not build constraint system for JSON report");
-                    process::exit(1);
-                }
-            } else {
-                eprintln!("\n{}", report.format_report());
-            }
-            if !report.is_safe() {
-                process::exit(1);
-            }
-        }
-        Err(_) => {
-            process::exit(1);
-        }
+    let report = trident::solve::verify(&system);
+
+    if json {
+        let file_name = entry.to_string_lossy().to_string();
+        let json_output = trident::report::generate_json_report(&file_name, &system, &report);
+        println!("{}", json_output);
+    } else {
+        eprintln!("\n{}", report.format_report());
+    }
+    if !report.is_safe() {
+        process::exit(1);
     }
 }
 

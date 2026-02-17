@@ -142,6 +142,13 @@ impl SymExecutor {
                 }
                 return SymValue::Const(0);
             }
+            "as_field" => {
+                // Type conversion: U32 → Field (identity in the field)
+                if let Some(arg) = args.first() {
+                    return self.eval_expr(&arg.node);
+                }
+                return SymValue::Const(0);
+            }
             "sub" => {
                 if args.len() >= 2 {
                     let a = self.eval_expr(&args[0].node);
@@ -203,8 +210,11 @@ impl SymExecutor {
     }
 
     /// Project element `i` from a tuple-like symbolic value.
-    pub(crate) fn project_tuple(&mut self, _val: &SymValue, i: usize) -> SymValue {
-        // For now, each projection creates a fresh variable linked to the source
+    pub(crate) fn project_tuple(&mut self, val: &SymValue, i: usize) -> SymValue {
+        // If projecting from a hash, preserve the Hash origin with the index
+        if let SymValue::Hash(inputs, _) = val {
+            return SymValue::Hash(inputs.clone(), i);
+        }
         let var = self.fresh_var(&format!("__proj_{}", i));
         SymValue::Var(var)
     }

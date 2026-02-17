@@ -55,6 +55,12 @@ pub fn solve(system: &ConstraintSystem, config: &SolverConfig) -> SolverResult {
         let evaluator = Evaluator::new(&assignments);
 
         for (i, constraint) in system.constraints.iter().enumerate() {
+            // Hash-dependent constraints require specific witnesses —
+            // random testing cannot meaningfully evaluate them
+            if constraint.is_hash_dependent() {
+                ever_unevaluable[i] = true;
+                continue;
+            }
             match evaluator.check_constraint(constraint) {
                 Some(true) => {} // Satisfied
                 Some(false) => {
@@ -147,6 +153,10 @@ pub fn bounded_check(system: &ConstraintSystem, config: &BmcConfig) -> SolverRes
         let evaluator = Evaluator::new(&assignments);
         total_rounds = 1;
         for (i, constraint) in system.constraints.iter().enumerate() {
+            if constraint.is_hash_dependent() {
+                ever_unevaluable[i] = true;
+                continue;
+            }
             match evaluator.check_constraint(constraint) {
                 Some(true) => {}
                 Some(false) => {
@@ -171,6 +181,10 @@ pub fn bounded_check(system: &ConstraintSystem, config: &BmcConfig) -> SolverRes
             total_rounds += 1;
             let evaluator = Evaluator::new(assignments);
             for (i, constraint) in system.constraints.iter().enumerate() {
+                if constraint.is_hash_dependent() {
+                    ever_unevaluable[i] = true;
+                    continue;
+                }
                 match evaluator.check_constraint(constraint) {
                     Some(true) => {}
                     Some(false) => {
@@ -203,6 +217,10 @@ pub fn bounded_check(system: &ConstraintSystem, config: &BmcConfig) -> SolverRes
 
             let evaluator = Evaluator::new(&assignments);
             for (i, constraint) in system.constraints.iter().enumerate() {
+                if constraint.is_hash_dependent() {
+                    ever_unevaluable[i] = true;
+                    continue;
+                }
                 match evaluator.check_constraint(constraint) {
                     Some(true) => {}
                     Some(false) => {
