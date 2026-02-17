@@ -38,6 +38,7 @@ Quantum         256K        128K
 ```
 - [x] CORE      16 patterns implemented in Trident (reference evaluator)
 - [x] AI        Tensor operations (dot, matmul, relu, dense) — DONE: std.nn.tensor
+- [x] AI        Neural TIR-TASM optimizer (91K params, evolutionary training, speculative compilation)
 - [x] Privacy   Polynomial ops and NTT for FHE — DONE: std.private.poly
 - [x] Quantum   Quantum gate set (H, X, Y, Z, S, T, CNOT, CZ, SWAP) — DONE: std.quantum.gates
 - [ ] tooling   Amazing cli
