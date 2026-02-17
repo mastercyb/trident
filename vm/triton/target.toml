@@ -27,6 +27,12 @@ degree = 3
 [cost]
 tables = ["processor", "hash", "u32", "op_stack", "ram", "jump_stack"]
 
+[hero]
+name = "trisha"
+crate = "trident-trisha"
+runner = true
+prover = true
+
 [status]
 level = 5
 lowering = "StackLowering"

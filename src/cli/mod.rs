@@ -307,16 +307,27 @@ pub fn load_dep_dirs(project: &trident::project::Project) -> Vec<PathBuf> {
 
 /// Find a hero binary on PATH for the given target.
 ///
-/// Convention: heroes are named `trident-<name>` (like git subcommands).
-/// Checks `trident-<target>` first. If the target is an OS with an
-/// underlying VM, also checks `trident-<vm>`.
+/// Resolution order:
+/// 1. `trident-<target>` directly on PATH
+/// 2. If target has a `[hero]` config, try `trident-<hero.name>`
+/// 3. If target is an OS, try `trident-<vm>` and the VM's hero config
 pub fn find_hero(target: &str) -> Option<PathBuf> {
+    // Direct match: trident-triton, trident-neptune, trident-trisha
     let direct = format!("trident-{}", target);
     if let Ok(path) = which_on_path(&direct) {
         return Some(path);
     }
 
     if let Ok(resolved) = trident::target::ResolvedTarget::resolve(target) {
+        // Check VM's hero config
+        if let Some(ref hero) = resolved.vm.hero {
+            let hero_bin = format!("trident-{}", hero.name);
+            if let Ok(path) = which_on_path(&hero_bin) {
+                return Some(path);
+            }
+        }
+
+        // If target is an OS, also try the VM name directly
         if resolved.os.is_some() {
             let vm_hero = format!("trident-{}", resolved.vm.name);
             if let Ok(path) = which_on_path(&vm_hero) {

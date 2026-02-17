@@ -25,6 +25,23 @@ pub struct EmulatedField {
     pub limbs: u32,
 }
 
+/// Optional hero configuration for a target VM.
+///
+/// Heroes are external binaries that handle execution, proving, and
+/// deployment for a specific VM. The `[hero]` section in target.toml
+/// tells Trident which hero to look for on PATH.
+#[derive(Clone, Debug)]
+pub struct HeroConfig {
+    /// Hero name (e.g. "trisha").
+    pub name: String,
+    /// Cargo crate name (e.g. "trident-trisha").
+    pub crate_name: String,
+    /// Whether this hero supports `run` (execution).
+    pub runner: bool,
+    /// Whether this hero supports `prove` (proof generation).
+    pub prover: bool,
+}
+
 /// Target VM configuration — replaces all hardcoded constants.
 ///
 /// Every numeric constant that was previously hardcoded for Triton VM
@@ -59,6 +76,8 @@ pub struct TargetConfig {
     pub output_extension: String,
     /// Names of the cost model tables (e.g. ["processor", "hash", ...]).
     pub cost_tables: Vec<String>,
+    /// Optional hero configuration for runtime/proving delegation.
+    pub hero: Option<HeroConfig>,
 }
 
 impl TargetConfig {
@@ -86,6 +105,12 @@ impl TargetConfig {
                 "ram".to_string(),
                 "jump_stack".to_string(),
             ],
+            hero: Some(HeroConfig {
+                name: "trisha".to_string(),
+                crate_name: "trident-trisha".to_string(),
+                runner: true,
+                prover: true,
+            }),
         }
     }
 
@@ -180,6 +205,10 @@ impl TargetConfig {
         let mut hash_rate: u32 = 0;
         let mut xfield_degree: u32 = 0;
         let mut cost_tables: Vec<String> = Vec::new();
+        let mut hero_name = String::new();
+        let mut hero_crate = String::new();
+        let mut hero_runner = false;
+        let mut hero_prover = false;
 
         let mut section = String::new();
 
@@ -241,6 +270,10 @@ impl TargetConfig {
                     ("cost", "tables") => {
                         cost_tables = parse_string_array(value);
                     }
+                    ("hero", "name") => hero_name = unquoted.to_string(),
+                    ("hero", "crate") => hero_crate = unquoted.to_string(),
+                    ("hero", "runner") => hero_runner = value == "true",
+                    ("hero", "prover") => hero_prover = value == "true",
                     _ => {
                         // Parse [emulated_field.NAME] sections
                         if section.starts_with("emulated_field.") {
@@ -330,6 +363,21 @@ impl TargetConfig {
             hash_rate,
             output_extension,
             cost_tables,
+            hero: if hero_name.is_empty() {
+                None
+            } else {
+                let default_crate = format!("trident-{}", hero_name);
+                Some(HeroConfig {
+                    name: hero_name,
+                    crate_name: if hero_crate.is_empty() {
+                        default_crate
+                    } else {
+                        hero_crate
+                    },
+                    runner: hero_runner,
+                    prover: hero_prover,
+                })
+            },
         })
     }
 }
