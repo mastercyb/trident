@@ -165,6 +165,7 @@ fn run_neural_analysis(
     options: &trident::CompileOptions,
     train_generations: Option<u64>,
 ) {
+    use trident::field::PrimeField;
     use trident::ir::tir::encode;
     use trident::ir::tir::lower::{create_speculative_lowering, decode_output, StackLowering};
     use trident::ir::tir::neural::evolve::Population;
@@ -252,30 +253,79 @@ fn run_neural_analysis(
 
         let per_block_baseline = baseline_cost / blocks.len().max(1) as u64;
 
+        // Try GPU acceleration
+        let gpu_accel = trident::gpu::neural_accel::NeuralAccelerator::try_new(
+            &blocks,
+            trident::ir::tir::neural::evolve::POP_SIZE as u32,
+        );
+        if gpu_accel.is_some() {
+            eprintln!("  using GPU acceleration");
+        }
+
         // Train for N generations with live progress
         let mut best_seen = i64::MIN;
         for gen in 0..generations {
-            pop.evaluate(
-                &blocks,
-                |m: &mut NeuralModel, block: &trident::ir::tir::encode::TIRBlock| {
-                    let output = m.forward(block);
-                    if output.is_empty() {
-                        return -(per_block_baseline as i64);
-                    }
-                    // Decode neural output codes through the real TASM vocabulary
-                    let candidate_lines = decode_output(&output);
-                    if candidate_lines.is_empty() {
-                        return -(per_block_baseline as i64);
-                    }
-                    let profile = trident::cost::scorer::profile_tasm(
-                        &candidate_lines
+            if let Some(ref accel) = gpu_accel {
+                // GPU path: batch all forward passes in one dispatch
+                let weight_vecs: Vec<Vec<u64>> = pop
+                    .individuals
+                    .iter()
+                    .map(|ind| ind.weights.iter().map(|w| w.raw().to_u64()).collect())
+                    .collect();
+                let gpu_outputs = accel.batch_forward(&weight_vecs);
+
+                // Score outputs on CPU
+                for (i, ind) in pop.individuals.iter_mut().enumerate() {
+                    let mut total = 0i64;
+                    for (b, _block) in blocks.iter().enumerate() {
+                        let codes: Vec<u64> = gpu_outputs[i][b]
                             .iter()
-                            .map(|s| s.as_str())
-                            .collect::<Vec<_>>(),
-                    );
-                    -(profile.cost() as i64)
-                },
-            );
+                            .take_while(|&&c| c != 0)
+                            .map(|&c| c as u64)
+                            .collect();
+                        if codes.is_empty() {
+                            total -= per_block_baseline as i64;
+                        } else {
+                            let candidate_lines = decode_output(&codes);
+                            if candidate_lines.is_empty() {
+                                total -= per_block_baseline as i64;
+                            } else {
+                                let profile = trident::cost::scorer::profile_tasm(
+                                    &candidate_lines
+                                        .iter()
+                                        .map(|s| s.as_str())
+                                        .collect::<Vec<_>>(),
+                                );
+                                total -= profile.cost() as i64;
+                            }
+                        }
+                    }
+                    ind.fitness = total;
+                }
+                pop.update_best();
+            } else {
+                // CPU fallback
+                pop.evaluate(
+                    &blocks,
+                    |m: &mut NeuralModel, block: &trident::ir::tir::encode::TIRBlock| {
+                        let output = m.forward(block);
+                        if output.is_empty() {
+                            return -(per_block_baseline as i64);
+                        }
+                        let candidate_lines = decode_output(&output);
+                        if candidate_lines.is_empty() {
+                            return -(per_block_baseline as i64);
+                        }
+                        let profile = trident::cost::scorer::profile_tasm(
+                            &candidate_lines
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>(),
+                        );
+                        -(profile.cost() as i64)
+                    },
+                );
+            }
 
             let gen_best = pop
                 .individuals

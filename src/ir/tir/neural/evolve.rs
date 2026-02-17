@@ -144,6 +144,16 @@ impl Population {
         self.generation += 1;
     }
 
+    /// Update best_fitness from current individual fitness values.
+    /// Used by GPU path where fitness is set externally.
+    pub fn update_best(&mut self) {
+        if let Some(best) = self.individuals.iter().max_by_key(|i| i.fitness) {
+            if best.fitness > self.best_fitness {
+                self.best_fitness = best.fitness;
+            }
+        }
+    }
+
     /// Get the best individual's weights.
     pub fn best_weights(&self) -> &[Fixed] {
         self.individuals
