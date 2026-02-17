@@ -43,6 +43,10 @@ Use `tokei src/` or `find src/ -name '*.rs'` to explore module structure.
 - **trisha** (`~/git/trisha`) — Triton VM warrior. Executes, proves,
   verifies, deploys programs compiled by trident. Depends on trident
   via `path = "../trident"`. ~2k LOC Rust + WGSL.
+- trisha patches triton-vm at build time via `patches/apply.nu`
+  instead of maintaining a fork. The pattern: fetch upstream crate
+  from cargo registry, apply a diff, vendor the result. See
+  `trisha/CLAUDE.md` "Dependency Patching" for details.
 - When referencing files across repos, use repo-qualified paths
   (e.g. `trident/src/cli/mod.rs` vs `trisha/src/cli.rs`).
 - After editing trident code, rebuild trisha too:
