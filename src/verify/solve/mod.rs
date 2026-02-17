@@ -21,7 +21,8 @@
 
 use std::collections::BTreeMap;
 
-use crate::sym::{Constraint, ConstraintSystem, SymValue, GOLDILOCKS_P};
+use crate::field::goldilocks::MODULUS as GOLDILOCKS_P;
+use crate::sym::{Constraint, ConstraintSystem, SymValue};
 
 mod eval;
 mod solver;

@@ -153,4 +153,59 @@ mod tests {
     fn mersenne31_field_laws() {
         test_field_laws::<Mersenne31>();
     }
+
+    /// Edge cases: values at modulus boundary, overflow in add, reduction on input.
+    fn test_field_edge_cases<F: PrimeField>() {
+        let zero = F::ZERO;
+        let one = F::ONE;
+        let p_minus_1 = F::from_u64((F::MODULUS - 1) as u64);
+
+        // p-1 + 1 = 0 (mod p)
+        assert_eq!(p_minus_1.add(one), zero);
+
+        // p-1 + p-1 = p-2 (mod p)
+        let p_minus_2 = F::from_u64((F::MODULUS - 2) as u64);
+        assert_eq!(p_minus_1.add(p_minus_1), p_minus_2);
+
+        // 0 - 1 = p-1
+        assert_eq!(zero.sub(one), p_minus_1);
+
+        // (p-1) * (p-1) = 1 (since (p-1) = -1 and (-1)^2 = 1)
+        assert_eq!(p_minus_1.mul(p_minus_1), one);
+
+        // from_u64 reduces values >= p
+        let p_as_u64 = F::MODULUS as u64;
+        assert_eq!(F::from_u64(p_as_u64), zero);
+        assert_eq!(F::from_u64(p_as_u64 + 1), one);
+
+        // Inverse of p-1 is p-1 (since -1 * -1 = 1)
+        assert_eq!(p_minus_1.inv(), Some(p_minus_1));
+
+        // Inverse of 1 is 1
+        assert_eq!(one.inv(), Some(one));
+
+        // pow(p-1, 2) = 1
+        assert_eq!(p_minus_1.pow(2), one);
+    }
+
+    #[test]
+    fn goldilocks_edge_cases() {
+        test_field_edge_cases::<Goldilocks>();
+
+        // Goldilocks-specific: test reduce128 with large products
+        let large = Goldilocks::from_u64(u64::MAX);
+        let result = large.mul(large);
+        // (u64::MAX mod p)^2 mod p — just verify it doesn't panic
+        assert!(result.to_u64() < goldilocks::MODULUS);
+    }
+
+    #[test]
+    fn babybear_edge_cases() {
+        test_field_edge_cases::<BabyBear>();
+    }
+
+    #[test]
+    fn mersenne31_edge_cases() {
+        test_field_edge_cases::<Mersenne31>();
+    }
 }

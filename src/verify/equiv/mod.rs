@@ -22,8 +22,8 @@ use std::fmt;
 use crate::ast::display;
 pub(crate) use crate::ast::display::format_ast_type as format_type;
 use crate::ast::{self, File, FnDef, Item, Type};
+
 use crate::hash;
-use crate::solve::{field_add, field_mul, field_neg};
 use crate::sym::SymValue;
 
 // ─── Result Types ──────────────────────────────────────────────────

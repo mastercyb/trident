@@ -244,9 +244,8 @@ impl<'a> CostAnalyzer<'a> {
 }
 
 /// Smallest power of 2 >= n.
+///
+/// Delegates to `field::proof::padded_height` — same formula, different name.
 pub(crate) fn next_power_of_two(n: u64) -> u64 {
-    if n <= 1 {
-        return 1;
-    }
-    1u64 << (64 - (n - 1).leading_zeros())
+    crate::field::proof::padded_height(n)
 }
