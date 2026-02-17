@@ -19,8 +19,8 @@ use cli::run::RunArgs;
 use cli::store::StoreAction;
 use cli::test::TestArgs;
 use cli::tree_sitter::TreeSitterArgs;
+use cli::validate::ValidateArgs;
 use cli::verify::{EquivArgs, VerifyArgs};
-use cli::verify_proof::VerifyProofArgs;
 use cli::view::ViewArgs;
 
 #[derive(Parser)]
@@ -83,8 +83,8 @@ enum Command {
     Run(RunArgs),
     /// Generate a proof of correct execution via a warrior
     Prove(ProveArgs),
-    /// Verify a proof via a warrior (target-specific verifier)
-    VerifyProof(VerifyProofArgs),
+    /// Validate a proof via a warrior (target-specific verifier)
+    Validate(ValidateArgs),
     /// Generate tree-sitter grammar.json from the Rust grammar definition
     TreeSitter(TreeSitterArgs),
     /// Start the Language Server Protocol server
@@ -114,7 +114,7 @@ fn main() {
         Command::Deploy(args) => cli::deploy::cmd_deploy(args),
         Command::Run(args) => cli::run::cmd_run(args),
         Command::Prove(args) => cli::prove::cmd_prove(args),
-        Command::VerifyProof(args) => cli::verify_proof::cmd_verify_proof(args),
+        Command::Validate(args) => cli::validate::cmd_validate(args),
         Command::TreeSitter(args) => cli::tree_sitter::cmd_tree_sitter(args),
         Command::Lsp => cmd_lsp(),
     }

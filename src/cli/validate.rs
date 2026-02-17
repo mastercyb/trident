@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Args;
 
 #[derive(Args)]
-pub struct VerifyProofArgs {
+pub struct ValidateArgs {
     /// Path to the proof file
     pub proof: PathBuf,
     /// Target VM or OS (default: triton)
@@ -11,7 +11,7 @@ pub struct VerifyProofArgs {
     pub target: String,
 }
 
-pub fn cmd_verify_proof(args: VerifyProofArgs) {
+pub fn cmd_validate(args: ValidateArgs) {
     let target = &args.target;
 
     if let Some(warrior_bin) = super::find_warrior(target) {
@@ -21,12 +21,12 @@ pub fn cmd_verify_proof(args: VerifyProofArgs) {
             args.target.clone(),
         ];
         let refs: Vec<&str> = extra.iter().map(|s| s.as_str()).collect();
-        super::delegate_to_warrior(&warrior_bin, "verify-proof", &refs);
+        super::delegate_to_warrior(&warrior_bin, "validate", &refs);
         return;
     }
 
-    eprintln!("No verification warrior found for target '{}'.", target);
-    eprintln!("Warriors handle proof verification using target-specific verifiers.");
+    eprintln!("No validation warrior found for target '{}'.", target);
+    eprintln!("Warriors handle proof validation using target-specific verifiers.");
     eprintln!();
     eprintln!("Install a warrior for this target:");
     eprintln!("  cargo install trident-trisha   # Triton VM + Neptune");

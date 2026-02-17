@@ -59,9 +59,9 @@ trident prove <file> --target neptune   # Prove on specific target
 trident prove <file> --output proof.bin # Write proof to file
 trident prove <file> --input-values 1,2 # Public input for proof
 
-# Verify Proof (delegates to warrior)
-trident verify-proof <proof>            # Verify a proof via warrior
-trident verify-proof <proof> --target neptune  # Verify against target
+# Validate (delegates to warrior)
+trident validate <proof>                # Validate a proof via warrior
+trident validate <proof> --target neptune  # Validate against target
 
 # Deploy
 trident deploy <file>                   # Compile, package, deploy to registry

@@ -15,8 +15,8 @@ pub mod run;
 pub mod store;
 pub mod test;
 pub mod tree_sitter;
+pub mod validate;
 pub mod verify;
-pub mod verify_proof;
 pub mod view;
 
 use std::path::{Path, PathBuf};
