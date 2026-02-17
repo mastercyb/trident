@@ -255,24 +255,27 @@ fn run_neural_analysis(
         // Train for N generations with live progress
         let mut best_seen = i64::MIN;
         for gen in 0..generations {
-            pop.evaluate(&blocks, |m, block| {
-                let output = m.forward(block);
-                if output.is_empty() {
-                    return -(per_block_baseline as i64);
-                }
-                // Decode neural output codes through the real TASM vocabulary
-                let candidate_lines = decode_output(&output);
-                if candidate_lines.is_empty() {
-                    return -(per_block_baseline as i64);
-                }
-                let profile = trident::cost::scorer::profile_tasm(
-                    &candidate_lines
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<_>>(),
-                );
-                -(profile.cost() as i64)
-            });
+            pop.evaluate(
+                &blocks,
+                |m: &mut NeuralModel, block: &trident::ir::tir::encode::TIRBlock| {
+                    let output = m.forward(block);
+                    if output.is_empty() {
+                        return -(per_block_baseline as i64);
+                    }
+                    // Decode neural output codes through the real TASM vocabulary
+                    let candidate_lines = decode_output(&output);
+                    if candidate_lines.is_empty() {
+                        return -(per_block_baseline as i64);
+                    }
+                    let profile = trident::cost::scorer::profile_tasm(
+                        &candidate_lines
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>(),
+                    );
+                    -(profile.cost() as i64)
+                },
+            );
 
             let gen_best = pop
                 .individuals

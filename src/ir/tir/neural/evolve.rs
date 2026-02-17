@@ -83,13 +83,13 @@ impl Population {
     /// outputs count.
     pub fn evaluate<F>(&mut self, blocks: &[TIRBlock], scorer: F)
     where
-        F: Fn(&NeuralModel, &TIRBlock) -> i64,
+        F: Fn(&mut NeuralModel, &TIRBlock) -> i64,
     {
         for individual in &mut self.individuals {
-            let model = NeuralModel::from_weight_vec(&individual.weights);
+            let mut model = NeuralModel::from_weight_vec(&individual.weights);
             let mut total_fitness = 0i64;
             for block in blocks {
-                total_fitness = total_fitness.saturating_add(scorer(&model, block));
+                total_fitness = total_fitness.saturating_add(scorer(&mut model, block));
             }
             individual.fitness = total_fitness;
         }

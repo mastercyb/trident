@@ -38,7 +38,7 @@ pub fn create_speculative_lowering(
 ) -> SpeculativeLowering {
     SpeculativeLowering {
         classical: TritonLowering::new(),
-        neural: model,
+        neural: std::cell::RefCell::new(model),
         report: std::cell::RefCell::new(OptimizerReport {
             status: meta_status,
             generation: meta_generation,
@@ -53,7 +53,7 @@ pub fn create_speculative_lowering(
 /// Speculative lowering: classical path always runs, neural path is pure upside.
 pub struct SpeculativeLowering {
     classical: TritonLowering,
-    neural: Option<NeuralModel>,
+    neural: std::cell::RefCell<Option<NeuralModel>>,
     report: std::cell::RefCell<OptimizerReport>,
 }
 
@@ -69,7 +69,8 @@ impl StackLowering for SpeculativeLowering {
         // Classical path always runs
         let baseline = self.classical.lower(ops);
 
-        let neural = match &self.neural {
+        let mut neural_ref = self.neural.borrow_mut();
+        let neural = match neural_ref.as_mut() {
             Some(model) => model,
             None => return baseline,
         };

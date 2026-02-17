@@ -119,16 +119,51 @@ impl std::fmt::Display for Fixed {
     }
 }
 
+// ─── Fused Dot Product ─────────────────────────────────────────────
+
+/// Raw accumulator for fused dot products.
+///
+/// Accumulates a.0 * b.0 in raw Goldilocks (no per-multiply rescale).
+/// Call `finish()` to apply inv(SCALE) once and get a proper Fixed value.
+/// For a dot product of length N: N+1 field muls instead of 2N.
+pub struct RawAccum(pub Goldilocks);
+
+impl RawAccum {
+    #[inline]
+    pub fn zero() -> Self {
+        Self(Goldilocks(0))
+    }
+
+    /// Accumulate one product: self += a.0 * b.0 (raw, no rescale).
+    #[inline]
+    pub fn add_prod(&mut self, a: Fixed, b: Fixed) {
+        self.0 = self.0.add(a.0.mul(b.0));
+    }
+
+    /// Accumulate a pre-scaled addition: self += bias.0 * SCALE.
+    /// Used when adding a Fixed bias to a raw accumulator.
+    #[inline]
+    pub fn add_bias(&mut self, bias: Fixed) {
+        self.0 = self.0.add(bias.0.mul(Goldilocks(SCALE)));
+    }
+
+    /// Finalize: apply inv(SCALE) once to produce a proper Fixed value.
+    #[inline]
+    pub fn finish(self) -> Fixed {
+        Fixed(self.0.mul(inv_scale()))
+    }
+}
+
 // ─── Vector Operations ─────────────────────────────────────────────
 
-/// Dot product of two fixed-point vectors.
+/// Dot product of two fixed-point vectors (fused, single rescale).
 pub fn dot(a: &[Fixed], b: &[Fixed]) -> Fixed {
     debug_assert_eq!(a.len(), b.len());
-    let mut acc = Fixed::ZERO;
+    let mut acc = RawAccum::zero();
     for i in 0..a.len() {
-        acc = acc.madd(a[i], b[i]);
+        acc.add_prod(a[i], b[i]);
     }
-    acc
+    acc.finish()
 }
 
 /// Matrix-vector multiply: out[i] = dot(mat[i], vec).
@@ -343,6 +378,47 @@ mod tests {
             (c.to_f64() - 1.0).abs() < 0.01,
             "4 * inv(4) = {}, expected 1.0",
             c.to_f64()
+        );
+    }
+
+    #[test]
+    fn raw_accum_dot_matches_naive() {
+        let a = [
+            Fixed::from_f64(1.0),
+            Fixed::from_f64(2.0),
+            Fixed::from_f64(3.0),
+        ];
+        let b = [
+            Fixed::from_f64(4.0),
+            Fixed::from_f64(5.0),
+            Fixed::from_f64(6.0),
+        ];
+        let naive = a[0].mul(b[0]).add(a[1].mul(b[1])).add(a[2].mul(b[2]));
+        let fused = dot(&a, &b);
+        assert!(
+            (naive.to_f64() - fused.to_f64()).abs() < 0.1,
+            "naive={}, fused={}",
+            naive.to_f64(),
+            fused.to_f64()
+        );
+        assert!(
+            (fused.to_f64() - 32.0).abs() < 0.1,
+            "fused dot = {}, expected 32.0",
+            fused.to_f64()
+        );
+    }
+
+    #[test]
+    fn raw_accum_with_bias() {
+        // bias + a*b = 10 + 3*4 = 22
+        let mut acc = RawAccum::zero();
+        acc.add_bias(Fixed::from_f64(10.0));
+        acc.add_prod(Fixed::from_f64(3.0), Fixed::from_f64(4.0));
+        let result = acc.finish();
+        assert!(
+            (result.to_f64() - 22.0).abs() < 0.1,
+            "bias+prod = {}, expected 22.0",
+            result.to_f64()
         );
     }
 

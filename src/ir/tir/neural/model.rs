@@ -1,10 +1,11 @@
-//! The 91K-parameter encoder-decoder neural model.
+//! The 78K-parameter encoder-decoder neural model.
 //!
 //! Encoder: 2-layer self-attention with DAG-aware masking, dim 64.
 //! Decoder: autoregressive MLP producing TASM instruction sequences.
-//! All arithmetic in fixed-point Goldilocks.
+//! All arithmetic in fixed-point Goldilocks via fused dot products.
 
-use crate::field::fixed::{self, Fixed};
+use crate::field::fixed::{self, Fixed, RawAccum};
+use crate::field::goldilocks::Goldilocks;
 use crate::field::PrimeField;
 use crate::ir::tir::encode::{TIRBlock, WORDS_PER_NODE};
 #[cfg(test)]
@@ -14,106 +15,149 @@ use crate::ir::tir::encode::{CONTEXT_SIZE, MAX_NODES};
 pub const DIM: usize = 64;
 pub const HEADS: usize = 2;
 pub const LAYERS: usize = 2;
-pub const FFN_HIDDEN: usize = 128;
-pub const MAX_OUTPUT: usize = 64;
+pub const FFN_HIDDEN: usize = 64;
+pub const MAX_OUTPUT: usize = 16;
 pub const HEAD_DIM: usize = DIM / HEADS;
 
-/// Total parameter count:
-/// Encoder: 2 layers * (3*64*64 + 64*64 + 64*128 + 128*64 + 2*64) = 2 * 33,024 = 66,048
-/// Decoder: 128*128 + 128 + 128*64 + 64 = 24,768
-/// Input projection: INPUT_DIM * DIM (not counted in the 91K — folded into first layer)
-/// Total core: ~91K
-pub const PARAM_COUNT: usize = 66_048 + 24_768;
+/// Encoder per-layer weights:
+///   QKV: 3 * 64 * 64 = 12,288
+///   out_proj: 64 * 64 = 4,096
+///   ffn1: 64 * 64 = 4,096
+///   ffn2: 64 * 64 = 4,096
+///   ln_scale + ln_bias: 128
+///   Total: 24,704 per layer, 49,408 for 2 layers
+///
+/// Decoder:
+///   hidden: (64+64) * 64 = 8,192
+///   hidden_bias: 64
+///   output: 64 * 64 = 4,096
+///   output_bias: 64
+///   Total: 12,416
+///
+/// Input projection: WORDS_PER_NODE * DIM = 4 * 64 = 256
+///
+/// Grand total: 49,408 + 12,416 + 256 = 62,080
+pub const PARAM_COUNT: usize = 49_408 + 12_416;
+
+/// Pre-allocated scratch buffers to avoid per-forward-pass allocations.
+pub struct Scratch {
+    embeddings: Vec<Fixed>,
+    q: Vec<Fixed>,
+    k: Vec<Fixed>,
+    v: Vec<Fixed>,
+    scores: Vec<Fixed>,
+    exp_scores: Vec<Fixed>,
+    attn_result: Vec<Fixed>,
+    projected: Vec<Fixed>,
+    ffn_output: Vec<Fixed>,
+    ffn_hidden: Vec<Fixed>,
+    decoder_hidden: Vec<Fixed>,
+    decoder_out: Vec<Fixed>,
+}
+
+impl Scratch {
+    fn new() -> Self {
+        use crate::ir::tir::encode::MAX_NODES;
+        Self {
+            embeddings: vec![Fixed::ZERO; MAX_NODES * DIM],
+            q: vec![Fixed::ZERO; MAX_NODES * HEAD_DIM],
+            k: vec![Fixed::ZERO; MAX_NODES * HEAD_DIM],
+            v: vec![Fixed::ZERO; MAX_NODES * HEAD_DIM],
+            scores: vec![Fixed::ZERO; MAX_NODES * MAX_NODES],
+            exp_scores: vec![Fixed::ZERO; MAX_NODES],
+            attn_result: vec![Fixed::ZERO; MAX_NODES * DIM],
+            projected: vec![Fixed::ZERO; MAX_NODES * DIM],
+            ffn_output: vec![Fixed::ZERO; MAX_NODES * DIM],
+            ffn_hidden: vec![Fixed::ZERO; FFN_HIDDEN],
+            decoder_hidden: vec![Fixed::ZERO; FFN_HIDDEN],
+            decoder_out: vec![Fixed::ZERO; DIM],
+        }
+    }
+
+    fn zero_range(buf: &mut [Fixed], len: usize) {
+        for x in buf[..len].iter_mut() {
+            *x = Fixed::ZERO;
+        }
+    }
+}
 
 /// The neural optimizer model.
 pub struct NeuralModel {
-    /// Encoder layers.
     pub encoder: [EncoderLayer; LAYERS],
-    /// Decoder weights.
     pub decoder: Decoder,
-    /// Input projection: maps INPUT_DIM -> DIM per node.
-    pub input_proj: Vec<Fixed>, // WORDS_PER_NODE * DIM
+    pub input_proj: Vec<Fixed>,
+    scratch: Scratch,
 }
 
 /// One encoder layer: self-attention + FFN + layer norm.
 pub struct EncoderLayer {
-    /// Q, K, V projection weights: 3 * DIM * DIM.
     pub qkv: Vec<Fixed>,
-    /// Output projection: DIM * DIM.
     pub out_proj: Vec<Fixed>,
-    /// FFN layer 1: DIM * FFN_HIDDEN.
     pub ffn1: Vec<Fixed>,
-    /// FFN layer 2: FFN_HIDDEN * DIM.
     pub ffn2: Vec<Fixed>,
-    /// Layer norm scale: DIM.
     pub ln_scale: Vec<Fixed>,
-    /// Layer norm bias: DIM.
     pub ln_bias: Vec<Fixed>,
 }
 
 /// Autoregressive MLP decoder.
 pub struct Decoder {
-    /// Hidden layer: (DIM + DIM) * FFN_HIDDEN = 128 * 128.
     pub hidden: Vec<Fixed>,
-    /// Hidden bias: FFN_HIDDEN.
     pub hidden_bias: Vec<Fixed>,
-    /// Output layer: FFN_HIDDEN * DIM = 128 * 64.
     pub output: Vec<Fixed>,
-    /// Output bias: DIM.
     pub output_bias: Vec<Fixed>,
 }
 
 impl NeuralModel {
-    /// Create a model with all-zero weights.
     pub fn zeros() -> Self {
         Self {
             encoder: [EncoderLayer::zeros(), EncoderLayer::zeros()],
             decoder: Decoder::zeros(),
             input_proj: vec![Fixed::ZERO; WORDS_PER_NODE * DIM],
+            scratch: Scratch::new(),
         }
     }
 
     /// Run forward pass: TIR block -> TASM instruction codes.
-    ///
-    /// Returns a sequence of u64 values, each encoding a TASM instruction
-    /// (opcode in bits 4..10, argument in bits 0..3).
-    pub fn forward(&self, block: &TIRBlock) -> Vec<u64> {
-        // 1. Project input nodes to DIM-dimensional embeddings
-        let mut embeddings = Vec::with_capacity(block.node_count.max(1) * DIM);
-        for n in 0..block.node_count.max(1) {
-            let node_start = n * WORDS_PER_NODE;
-            let mut emb = vec![Fixed::ZERO; DIM];
-            for d in 0..DIM {
-                let mut acc = Fixed::ZERO;
-                for w in 0..WORDS_PER_NODE {
-                    let weight = self.input_proj[w * DIM + d];
-                    let input = if node_start + w < block.nodes.len() {
-                        Fixed::from_raw(crate::field::Goldilocks::from_u64(
-                            block.nodes[node_start + w],
-                        ))
-                    } else {
-                        Fixed::ZERO
-                    };
-                    acc = acc.madd(input, weight);
-                }
-                emb[d] = acc;
-            }
-            embeddings.extend_from_slice(&emb);
+    pub fn forward(&mut self, block: &TIRBlock) -> Vec<u64> {
+        // Zero-weight fast path: if input projection is all zeros,
+        // the model hasn't been trained yet — skip the expensive forward pass
+        if self.input_proj.iter().all(|w| w.0 == Goldilocks(0)) {
+            return Vec::new();
         }
 
         let seq_len = block.node_count.max(1);
+        let s = &mut self.scratch;
 
-        // 2. Encoder layers
-        for layer in &self.encoder {
-            embeddings = layer.forward(&embeddings, seq_len);
+        // 1. Project input nodes to DIM-dimensional embeddings (fused dot)
+        Scratch::zero_range(&mut s.embeddings, seq_len * DIM);
+        for n in 0..seq_len {
+            let node_start = n * WORDS_PER_NODE;
+            for d in 0..DIM {
+                let mut acc = RawAccum::zero();
+                for w in 0..WORDS_PER_NODE {
+                    let weight = self.input_proj[w * DIM + d];
+                    let input = if node_start + w < block.nodes.len() {
+                        Fixed::from_raw(Goldilocks::from_u64(block.nodes[node_start + w]))
+                    } else {
+                        Fixed::ZERO
+                    };
+                    acc.add_prod(input, weight);
+                }
+                s.embeddings[n * DIM + d] = acc.finish();
+            }
         }
 
-        // 3. Pool encoder output: mean across nodes
-        let mut latent = vec![Fixed::ZERO; DIM];
+        // 2. Encoder layers (operate on s.embeddings in-place)
+        for layer in &self.encoder {
+            layer.forward(s, seq_len);
+        }
+
+        // 3. Pool: mean across nodes
+        let mut latent = [Fixed::ZERO; DIM];
         let n_inv = Fixed::from_f64(1.0 / seq_len as f64);
         for n in 0..seq_len {
             for d in 0..DIM {
-                latent[d] = latent[d].add(embeddings[n * DIM + d]);
+                latent[d] = latent[d].add(s.embeddings[n * DIM + d]);
             }
         }
         for d in 0..DIM {
@@ -122,15 +166,15 @@ impl NeuralModel {
 
         // 4. Autoregressive decoding
         let mut output = Vec::with_capacity(MAX_OUTPUT);
-        let mut prev_instr = vec![Fixed::ZERO; DIM];
+        let mut prev_instr = [Fixed::ZERO; DIM];
         for _ in 0..MAX_OUTPUT {
-            let instr = self.decoder.step(&latent, &prev_instr);
-            let code = instr_to_code(&instr);
+            self.decoder.step(&latent, &prev_instr, s);
+            let code = instr_to_code(&s.decoder_out[..DIM]);
             if code == 0 {
-                break; // End of sequence
+                break;
             }
             output.push(code);
-            prev_instr = instr;
+            prev_instr.copy_from_slice(&s.decoder_out[..DIM]);
         }
 
         output
@@ -191,6 +235,7 @@ impl NeuralModel {
             encoder,
             decoder,
             input_proj,
+            scratch: Scratch::new(),
         }
     }
 
@@ -212,92 +257,86 @@ impl EncoderLayer {
         }
     }
 
-    /// Self-attention + FFN forward pass for one layer.
-    fn forward(&self, input: &[Fixed], seq_len: usize) -> Vec<Fixed> {
-        let mut output = input.to_vec();
+    /// Self-attention + FFN forward pass on s.embeddings in-place.
+    fn forward(&self, s: &mut Scratch, seq_len: usize) {
+        // Multi-head self-attention (reads s.embeddings, writes s.projected)
+        self.attention(s, seq_len);
 
-        // Multi-head self-attention
-        let attended = self.attention(input, seq_len);
-
-        // Residual connection
-        for i in 0..output.len() {
-            output[i] = output[i].add(attended[i]);
+        // Residual connection: embeddings += projected
+        for i in 0..seq_len * DIM {
+            s.embeddings[i] = s.embeddings[i].add(s.projected[i]);
         }
 
-        // Layer norm
+        // Layer norm + scale/bias
         for n in 0..seq_len {
             let start = n * DIM;
             let end = start + DIM;
-            fixed::layer_norm(&mut output[start..end]);
-            // Apply scale + bias
+            fixed::layer_norm(&mut s.embeddings[start..end]);
             for d in 0..DIM {
-                output[start + d] = output[start + d].mul(self.ln_scale[d]).add(self.ln_bias[d]);
+                s.embeddings[start + d] = s.embeddings[start + d]
+                    .mul(self.ln_scale[d])
+                    .add(self.ln_bias[d]);
             }
         }
 
-        // FFN with residual
-        let ffn_out = self.ffn(&output, seq_len);
-        for i in 0..output.len() {
-            output[i] = output[i].add(ffn_out[i]);
+        // FFN with residual (reads s.embeddings, writes s.ffn_output)
+        self.ffn(s, seq_len);
+        for i in 0..seq_len * DIM {
+            s.embeddings[i] = s.embeddings[i].add(s.ffn_output[i]);
         }
-
-        output
     }
 
-    /// Multi-head self-attention.
-    fn attention(&self, input: &[Fixed], seq_len: usize) -> Vec<Fixed> {
-        let mut result = vec![Fixed::ZERO; seq_len * DIM];
+    /// Multi-head self-attention. Reads s.embeddings, writes s.projected.
+    fn attention(&self, s: &mut Scratch, seq_len: usize) {
+        Scratch::zero_range(&mut s.attn_result, seq_len * DIM);
 
         for h in 0..HEADS {
             let head_offset = h * HEAD_DIM;
 
-            // Compute Q, K, V for this head
-            let mut q = vec![Fixed::ZERO; seq_len * HEAD_DIM];
-            let mut k = vec![Fixed::ZERO; seq_len * HEAD_DIM];
-            let mut v = vec![Fixed::ZERO; seq_len * HEAD_DIM];
+            // QKV projection with fused dot
+            Scratch::zero_range(&mut s.q, seq_len * HEAD_DIM);
+            Scratch::zero_range(&mut s.k, seq_len * HEAD_DIM);
+            Scratch::zero_range(&mut s.v, seq_len * HEAD_DIM);
 
             for n in 0..seq_len {
                 for d in 0..HEAD_DIM {
                     let out_d = head_offset + d;
-                    let mut q_acc = Fixed::ZERO;
-                    let mut k_acc = Fixed::ZERO;
-                    let mut v_acc = Fixed::ZERO;
+                    let mut q_acc = RawAccum::zero();
+                    let mut k_acc = RawAccum::zero();
+                    let mut v_acc = RawAccum::zero();
                     for j in 0..DIM {
-                        let inp = input[n * DIM + j];
-                        q_acc = q_acc.madd(inp, self.qkv[0 * DIM * DIM + j * DIM + out_d]);
-                        k_acc = k_acc.madd(inp, self.qkv[1 * DIM * DIM + j * DIM + out_d]);
-                        v_acc = v_acc.madd(inp, self.qkv[2 * DIM * DIM + j * DIM + out_d]);
+                        let inp = s.embeddings[n * DIM + j];
+                        q_acc.add_prod(inp, self.qkv[j * DIM + out_d]);
+                        k_acc.add_prod(inp, self.qkv[DIM * DIM + j * DIM + out_d]);
+                        v_acc.add_prod(inp, self.qkv[2 * DIM * DIM + j * DIM + out_d]);
                     }
-                    q[n * HEAD_DIM + d] = q_acc;
-                    k[n * HEAD_DIM + d] = k_acc;
-                    v[n * HEAD_DIM + d] = v_acc;
+                    s.q[n * HEAD_DIM + d] = q_acc.finish();
+                    s.k[n * HEAD_DIM + d] = k_acc.finish();
+                    s.v[n * HEAD_DIM + d] = v_acc.finish();
                 }
             }
 
             // Attention scores: Q * K^T / sqrt(HEAD_DIM)
             let scale_inv = Fixed::from_f64(1.0 / (HEAD_DIM as f64).sqrt());
             for i in 0..seq_len {
-                // Compute scores for position i
-                let mut scores = vec![Fixed::ZERO; seq_len];
                 let mut max_score = Fixed::from_f64(-1000.0);
+
                 for j in 0..seq_len {
-                    let mut dot = Fixed::ZERO;
+                    let mut acc = RawAccum::zero();
                     for d in 0..HEAD_DIM {
-                        dot = dot.madd(q[i * HEAD_DIM + d], k[j * HEAD_DIM + d]);
+                        acc.add_prod(s.q[i * HEAD_DIM + d], s.k[j * HEAD_DIM + d]);
                     }
-                    scores[j] = dot.mul(scale_inv);
-                    if scores[j].to_f64() > max_score.to_f64() {
-                        max_score = scores[j];
+                    let score = acc.finish().mul(scale_inv);
+                    s.scores[i * seq_len + j] = score;
+                    if score.to_f64() > max_score.to_f64() {
+                        max_score = score;
                     }
                 }
 
-                // Softmax approximation: exp(x - max) / sum(exp(x - max))
-                // Use 1 + x + x^2/2 as exp approximation (sufficient for small ranges)
-                let mut exp_scores = vec![Fixed::ZERO; seq_len];
+                // Softmax: exp(x - max) / sum, using 1+x+x²/2 approximation
                 let mut exp_sum = Fixed::ZERO;
                 for j in 0..seq_len {
-                    let x = scores[j].sub(max_score);
-                    // exp(x) ≈ 1 + x + x^2/2 for small x
+                    let x = s.scores[i * seq_len + j].sub(max_score);
                     let x2 = x.mul(x);
                     let half = Fixed::from_f64(0.5);
                     let exp_x = Fixed::ONE.add(x).add(x2.mul(half));
@@ -306,7 +345,7 @@ impl EncoderLayer {
                     } else {
                         exp_x
                     };
-                    exp_scores[j] = exp_x;
+                    s.exp_scores[j] = exp_x;
                     exp_sum = exp_sum.add(exp_x);
                 }
                 let sum_inv = if exp_sum.to_f64().abs() > 1e-10 {
@@ -315,61 +354,58 @@ impl EncoderLayer {
                     Fixed::ONE
                 };
                 for j in 0..seq_len {
-                    exp_scores[j] = exp_scores[j].mul(sum_inv);
+                    s.exp_scores[j] = s.exp_scores[j].mul(sum_inv);
                 }
 
-                // Weighted sum of values
+                // Weighted sum of values (fused)
                 for d in 0..HEAD_DIM {
-                    let mut acc = Fixed::ZERO;
+                    let mut acc = RawAccum::zero();
                     for j in 0..seq_len {
-                        acc = acc.madd(exp_scores[j], v[j * HEAD_DIM + d]);
+                        acc.add_prod(s.exp_scores[j], s.v[j * HEAD_DIM + d]);
                     }
-                    result[i * DIM + head_offset + d] = result[i * DIM + head_offset + d].add(acc);
+                    let idx = i * DIM + head_offset + d;
+                    s.attn_result[idx] = s.attn_result[idx].add(acc.finish());
                 }
             }
         }
 
-        // Output projection
-        let mut projected = vec![Fixed::ZERO; seq_len * DIM];
+        // Output projection (fused)
+        Scratch::zero_range(&mut s.projected, seq_len * DIM);
         for n in 0..seq_len {
             for d in 0..DIM {
-                let mut acc = Fixed::ZERO;
+                let mut acc = RawAccum::zero();
                 for j in 0..DIM {
-                    acc = acc.madd(result[n * DIM + j], self.out_proj[j * DIM + d]);
+                    acc.add_prod(s.attn_result[n * DIM + j], self.out_proj[j * DIM + d]);
                 }
-                projected[n * DIM + d] = acc;
+                s.projected[n * DIM + d] = acc.finish();
             }
         }
-
-        projected
     }
 
-    /// Feed-forward network: DIM -> FFN_HIDDEN -> DIM with GeLU.
-    fn ffn(&self, input: &[Fixed], seq_len: usize) -> Vec<Fixed> {
-        let mut output = vec![Fixed::ZERO; seq_len * DIM];
+    /// Feed-forward network: DIM -> FFN_HIDDEN -> DIM with ReLU (fused dot).
+    /// Reads s.embeddings, writes s.ffn_output.
+    fn ffn(&self, s: &mut Scratch, seq_len: usize) {
+        Scratch::zero_range(&mut s.ffn_output, seq_len * DIM);
 
         for n in 0..seq_len {
             // Layer 1: DIM -> FFN_HIDDEN + ReLU
-            let mut hidden = vec![Fixed::ZERO; FFN_HIDDEN];
             for h in 0..FFN_HIDDEN {
-                let mut acc = Fixed::ZERO;
+                let mut acc = RawAccum::zero();
                 for d in 0..DIM {
-                    acc = acc.madd(input[n * DIM + d], self.ffn1[d * FFN_HIDDEN + h]);
+                    acc.add_prod(s.embeddings[n * DIM + d], self.ffn1[d * FFN_HIDDEN + h]);
                 }
-                hidden[h] = acc.relu();
+                s.ffn_hidden[h] = acc.finish().relu();
             }
 
             // Layer 2: FFN_HIDDEN -> DIM
             for d in 0..DIM {
-                let mut acc = Fixed::ZERO;
+                let mut acc = RawAccum::zero();
                 for h in 0..FFN_HIDDEN {
-                    acc = acc.madd(hidden[h], self.ffn2[h * DIM + d]);
+                    acc.add_prod(s.ffn_hidden[h], self.ffn2[h * DIM + d]);
                 }
-                output[n * DIM + d] = acc;
+                s.ffn_output[n * DIM + d] = acc.finish();
             }
         }
-
-        output
     }
 }
 
@@ -383,40 +419,36 @@ impl Decoder {
         }
     }
 
-    /// One decoding step: latent + prev_instruction -> next instruction embedding.
-    fn step(&self, latent: &[Fixed], prev: &[Fixed]) -> Vec<Fixed> {
-        // Concatenate latent + prev -> 128-dim input
-        let input_dim = 2 * DIM;
-        let mut input = Vec::with_capacity(input_dim);
-        input.extend_from_slice(latent);
-        input.extend_from_slice(prev);
-
-        // Hidden layer with ReLU
-        let mut hidden = vec![Fixed::ZERO; FFN_HIDDEN];
+    /// One decoding step: latent + prev -> next instruction embedding.
+    /// Result written to s.decoder_out.
+    fn step(&self, latent: &[Fixed; DIM], prev: &[Fixed; DIM], s: &mut Scratch) {
+        // Hidden layer with ReLU (fused dot with bias)
         for h in 0..FFN_HIDDEN {
-            let mut acc = self.hidden_bias[h];
-            for d in 0..input_dim {
-                acc = acc.madd(input[d], self.hidden[d * FFN_HIDDEN + h]);
+            let mut acc = RawAccum::zero();
+            acc.add_bias(self.hidden_bias[h]);
+            for d in 0..DIM {
+                acc.add_prod(latent[d], self.hidden[d * FFN_HIDDEN + h]);
             }
-            hidden[h] = acc.relu();
+            for d in 0..DIM {
+                acc.add_prod(prev[d], self.hidden[(DIM + d) * FFN_HIDDEN + h]);
+            }
+            s.decoder_hidden[h] = acc.finish().relu();
         }
 
-        // Output layer
-        let mut out = vec![Fixed::ZERO; DIM];
+        // Output layer (fused dot with bias)
         for d in 0..DIM {
-            let mut acc = self.output_bias[d];
+            let mut acc = RawAccum::zero();
+            acc.add_bias(self.output_bias[d]);
             for h in 0..FFN_HIDDEN {
-                acc = acc.madd(hidden[h], self.output[h * DIM + d]);
+                acc.add_prod(s.decoder_hidden[h], self.output[h * DIM + d]);
             }
-            out[d] = acc;
+            s.decoder_out[d] = acc.finish();
         }
-
-        out
     }
 }
 
 /// Convert a DIM-dimensional output vector to a TASM instruction code.
-/// Takes the argmax across the first 128 positions (7-bit opcode + 4-bit arg).
+/// Takes the argmax across positions.
 fn instr_to_code(output: &[Fixed]) -> u64 {
     let mut best_val = output[0].to_f64();
     let mut best_idx = 0u64;
@@ -436,7 +468,7 @@ mod tests {
 
     #[test]
     fn zeros_model_produces_empty() {
-        let model = NeuralModel::zeros();
+        let mut model = NeuralModel::zeros();
         let block = TIRBlock {
             nodes: [0; MAX_NODES * WORDS_PER_NODE],
             context: [0; CONTEXT_SIZE],
@@ -446,8 +478,8 @@ mod tests {
             end_idx: 3,
         };
         let output = model.forward(&block);
-        // Zero weights -> all-zero outputs -> argmax = index 0 -> code 0 -> stops immediately
-        assert!(output.is_empty() || output.len() <= MAX_OUTPUT);
+        // Zero weights -> fast path returns empty immediately
+        assert!(output.is_empty());
     }
 
     #[test]
@@ -466,14 +498,17 @@ mod tests {
     fn weight_count_reasonable() {
         let model = NeuralModel::zeros();
         let count = model.weight_count();
-        // Should be around 91K
-        assert!(count > 80_000, "too few weights: {}", count);
-        assert!(count < 120_000, "too many weights: {}", count);
+        // Should be around 62K (was 91K before shrink)
+        assert!(count > 50_000, "too few weights: {}", count);
+        assert!(count < 80_000, "too many weights: {}", count);
     }
 
     #[test]
     fn forward_deterministic() {
-        let model = NeuralModel::zeros();
+        let mut model = NeuralModel::from_weight_vec(&vec![
+            Fixed::from_f64(0.01);
+            NeuralModel::zeros().weight_count()
+        ]);
         let block = TIRBlock {
             nodes: [0; MAX_NODES * WORDS_PER_NODE],
             context: [0; CONTEXT_SIZE],
