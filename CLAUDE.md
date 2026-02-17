@@ -49,7 +49,8 @@ stage, verify both its input and its output still connect.
 
 The pipeline boundary is ProgramBundle. Everything before it is Trident
 (the weapon). Warriors are external binaries that take the bundle and
-handle execution, proving, and deployment for a specific VM+OS.
+handle execution, proving, and deployment on a specific battlefield
+(VM = terrain, OS = region).
 
 ## Key Modules
 

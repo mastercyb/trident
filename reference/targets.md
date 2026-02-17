@@ -198,10 +198,22 @@ Summary: 15 done, 1 placeholder, 2 stubs, 1 hardcoded.
 
 Trident is the weapon. **Warriors** wield it on specific battlefields.
 
-A warrior is an external binary that takes Trident's compiled output and
-handles execution, proving, and deployment for a particular VM+OS
-combination. Trident stays clean — zero heavy dependencies. Warriors bring
-the VM runtime, the prover, the GPU acceleration, and the chain client.
+A **battlefield** is a target — a VM+OS combination where compiled code
+runs, proves, and deploys. Every battlefield has two dimensions:
+
+- **Terrain** — the VM (instruction set architecture). Triton, Miden,
+  EVM, WASM, x86-64. The ground the warrior fights on.
+- **Region** — the OS (runtime environment). Neptune, Ethereum, Solana,
+  Linux. The jurisdiction that defines the rules of engagement.
+
+`--target neptune` selects a battlefield: Neptune region, Triton terrain.
+`--target triton` selects bare terrain — no region, just raw ground.
+
+A warrior is an external binary trained for a specific terrain+region
+combination. It takes Trident's compiled output and handles execution,
+proving, and deployment. Trident stays clean — zero heavy dependencies.
+Warriors bring the VM runtime, the prover, the GPU acceleration, and
+the chain client.
 
 ### Why Warriors
 

@@ -165,6 +165,7 @@ xb_dot_step(acc, ptr_a, ptr_b) -> (XField, Field, Field)
 ### Warriors (Runtime Delegation)
 
 Trident is the weapon. Warriors wield it on specific battlefields.
+Battlefield = target (VM+OS). Terrain = VM. Region = OS.
 
 ```text
 Trident (this crate)           Warrior (separate crate)
