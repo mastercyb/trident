@@ -166,7 +166,7 @@ fn run_neural_analysis(
     train_generations: Option<u64>,
 ) {
     use trident::ir::tir::encode;
-    use trident::ir::tir::lower::{create_speculative_lowering, StackLowering};
+    use trident::ir::tir::lower::{create_speculative_lowering, decode_output, StackLowering};
     use trident::ir::tir::neural::evolve::Population;
     use trident::ir::tir::neural::model::NeuralModel;
     use trident::ir::tir::neural::report::OptimizerReport;
@@ -243,26 +243,27 @@ fn run_neural_analysis(
             baseline_cost
         };
 
-        // Train for N generations
+        eprintln!(
+            "Training neural optimizer on {} blocks ({} weights), baseline cost: {}",
+            blocks.len(),
+            pop.individuals[0].weights.len(),
+            baseline_cost,
+        );
+
+        let per_block_baseline = baseline_cost / blocks.len().max(1) as u64;
+
+        // Train for N generations with live progress
+        let mut best_seen = i64::MIN;
         for gen in 0..generations {
             pop.evaluate(&blocks, |m, block| {
                 let output = m.forward(block);
                 if output.is_empty() {
-                    return -(baseline_cost as i64);
+                    return -(per_block_baseline as i64);
                 }
-                // Score = negative padded cost (higher is better for evolution)
-                let candidate_lines: Vec<String> = output
-                    .iter()
-                    .filter_map(|&code| {
-                        if code == 0 || code > 63 {
-                            None
-                        } else {
-                            Some(format!("nop")) // placeholder — real decode in lowering
-                        }
-                    })
-                    .collect();
+                // Decode neural output codes through the real TASM vocabulary
+                let candidate_lines = decode_output(&output);
                 if candidate_lines.is_empty() {
-                    return -(baseline_cost as i64);
+                    return -(per_block_baseline as i64);
                 }
                 let profile = trident::cost::scorer::profile_tasm(
                     &candidate_lines
@@ -272,14 +273,53 @@ fn run_neural_analysis(
                 );
                 -(profile.cost() as i64)
             });
+
+            let gen_best = pop
+                .individuals
+                .iter()
+                .map(|i| i.fitness)
+                .max()
+                .unwrap_or(i64::MIN);
+            let improved = gen_best > best_seen;
+            if improved {
+                best_seen = gen_best;
+            }
+
+            // Print progress: every gen for <=20, every 5 for <=100, every 10 otherwise
+            let print_interval = if generations <= 20 {
+                1
+            } else if generations <= 100 {
+                5
+            } else {
+                10
+            };
+            let is_last = gen + 1 == generations;
+            if gen % print_interval == 0 || is_last || improved {
+                let elapsed_so_far = start_time.elapsed();
+                let cost_est = (-gen_best) as u64;
+                let marker = if improved { " *" } else { "" };
+                // Use \r to overwrite + pad with spaces to clear previous content
+                eprint!(
+                    "\r  gen {}/{}  cost: {}  ({:.1}s){}          ",
+                    gen_start + gen + 1,
+                    gen_start + generations,
+                    cost_est,
+                    elapsed_so_far.as_secs_f64(),
+                    marker,
+                );
+                use std::io::Write;
+                let _ = std::io::stderr().flush();
+            }
+
             pop.evolve(gen_start.wrapping_add(gen));
         }
+        eprintln!(); // newline after progress line
 
         let elapsed = start_time.elapsed();
         let best = pop.best_weights();
         let best_model = NeuralModel::from_weight_vec(best);
 
-        // Evaluate best model's actual cost
+        // Evaluate best model via speculative lowering on the real IR
         let spec = create_speculative_lowering(
             &options.target_config.name,
             Some(best_model),
@@ -289,11 +329,19 @@ fn run_neural_analysis(
         );
         let _ = spec.lower(&ir);
         let report = spec.report();
-        let score_after = if report.total_neural_cost > 0 {
-            report.total_neural_cost
+
+        // Use the best evolutionary cost as the score (more accurate than report total)
+        let best_evo_cost = if best_seen > i64::MIN {
+            (-best_seen) as u64
         } else {
             baseline_cost
         };
+        let score_after =
+            if report.total_neural_cost > 0 && report.total_neural_cost < best_evo_cost {
+                report.total_neural_cost
+            } else {
+                best_evo_cost
+            };
 
         // Save weights
         let weight_hash = weights::hash_weights(best);

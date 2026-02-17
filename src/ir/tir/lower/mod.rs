@@ -169,7 +169,7 @@ impl StackLowering for SpeculativeLowering {
 
 /// Decode neural output codes to TASM instruction strings.
 /// Each code maps to a basic TASM instruction.
-fn decode_output(codes: &[u64]) -> Vec<String> {
+pub fn decode_output(codes: &[u64]) -> Vec<String> {
     // TASM instruction vocabulary (simplified)
     const VOCAB: &[&str] = &[
         "",                  // 0: end of sequence
