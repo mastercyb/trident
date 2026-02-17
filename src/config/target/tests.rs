@@ -219,4 +219,112 @@ fn test_resolved_target_vm_only() {
     let resolved = ResolvedTarget::resolve("triton").unwrap();
     assert_eq!(resolved.vm.name, "triton");
     assert!(resolved.os.is_none());
+    assert!(resolved.state.is_none());
+}
+
+// ── StateConfig ────────────────────────────────────────────
+
+#[test]
+fn test_state_config_parse_toml() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mainnet.toml");
+    std::fs::write(
+        &path,
+        r#"
+[state]
+name = "mainnet"
+display_name = "Neptune Mainnet"
+union = "neptune"
+chain_id = "1"
+is_default = true
+
+[endpoints]
+rpc_url = "https://rpc.neptune.cash"
+explorer_url = "https://explorer.neptune.cash"
+
+[currency]
+symbol = "NEPT"
+"#,
+    )
+    .unwrap();
+
+    let config = StateConfig::load(&path).unwrap();
+    assert_eq!(config.name, "mainnet");
+    assert_eq!(config.display_name, "Neptune Mainnet");
+    assert_eq!(config.union, "neptune");
+    assert_eq!(config.chain_id, "1");
+    assert!(config.is_default);
+    assert_eq!(config.rpc_url, "https://rpc.neptune.cash");
+    assert_eq!(config.explorer_url, "https://explorer.neptune.cash");
+    assert_eq!(config.currency_symbol, "NEPT");
+}
+
+#[test]
+fn test_state_config_missing_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("bad.toml");
+    std::fs::write(
+        &path,
+        r#"
+[state]
+union = "neptune"
+"#,
+    )
+    .unwrap();
+
+    assert!(StateConfig::load(&path).is_err());
+}
+
+#[test]
+fn test_state_config_missing_union() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("bad.toml");
+    std::fs::write(
+        &path,
+        r#"
+[state]
+name = "orphan"
+"#,
+    )
+    .unwrap();
+
+    assert!(StateConfig::load(&path).is_err());
+}
+
+#[test]
+fn test_state_config_resolve_rejects_traversal() {
+    let result = StateConfig::resolve("../etc", "passwd").unwrap();
+    assert!(result.is_none());
+    let result = StateConfig::resolve("neptune", "../etc/passwd").unwrap();
+    assert!(result.is_none());
+}
+
+#[test]
+fn test_state_requires_union_target() {
+    // Bare terrain (VM) + state should fail
+    let result = ResolvedTarget::resolve_with_state("triton", Some("mainnet"));
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_state_config_optional_fields() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("minimal.toml");
+    std::fs::write(
+        &path,
+        r#"
+[state]
+name = "devnet"
+union = "neptune"
+"#,
+    )
+    .unwrap();
+
+    let config = StateConfig::load(&path).unwrap();
+    assert_eq!(config.name, "devnet");
+    assert_eq!(config.union, "neptune");
+    assert!(!config.is_default);
+    assert!(config.chain_id.is_empty());
+    assert!(config.rpc_url.is_empty());
+    assert!(config.currency_symbol.is_empty());
 }

@@ -1,0 +1,13 @@
+[state]
+name = "sepolia"
+display_name = "Ethereum Sepolia"
+union = "ethereum"
+chain_id = "11155111"
+is_default = false
+
+[endpoints]
+rpc_url = "https://rpc.sepolia.org"
+explorer_url = "https://sepolia.etherscan.io"
+
+[currency]
+symbol = "ETH"

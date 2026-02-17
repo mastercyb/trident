@@ -1,0 +1,13 @@
+[state]
+name = "optimism"
+display_name = "Optimism"
+union = "ethereum"
+chain_id = "10"
+is_default = false
+
+[endpoints]
+rpc_url = "https://mainnet.optimism.io"
+explorer_url = "https://optimistic.etherscan.io"
+
+[currency]
+symbol = "ETH"

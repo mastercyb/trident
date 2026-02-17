@@ -1,0 +1,13 @@
+[state]
+name = "mainnet"
+display_name = "Neptune Mainnet"
+union = "neptune"
+chain_id = "1"
+is_default = true
+
+[endpoints]
+rpc_url = "https://rpc.neptune.cash"
+explorer_url = "https://explorer.neptune.cash"
+
+[currency]
+symbol = "NEPT"

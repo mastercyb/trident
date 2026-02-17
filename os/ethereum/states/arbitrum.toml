@@ -1,0 +1,13 @@
+[state]
+name = "arbitrum"
+display_name = "Arbitrum One"
+union = "ethereum"
+chain_id = "42161"
+is_default = false
+
+[endpoints]
+rpc_url = "https://arb1.arbitrum.io/rpc"
+explorer_url = "https://arbiscan.io"
+
+[currency]
+symbol = "ETH"

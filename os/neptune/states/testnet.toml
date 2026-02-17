@@ -1,0 +1,13 @@
+[state]
+name = "testnet"
+display_name = "Neptune Testnet"
+union = "neptune"
+chain_id = "2"
+is_default = false
+
+[endpoints]
+rpc_url = "https://rpc.testnet.neptune.cash"
+explorer_url = "https://explorer.testnet.neptune.cash"
+
+[currency]
+symbol = "tNEPT"

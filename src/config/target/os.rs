@@ -153,6 +153,8 @@ pub struct ResolvedTarget {
     pub vm: TerrainConfig,
     /// OS configuration (present only if the target name was an OS).
     pub os: Option<UnionConfig>,
+    /// State configuration (present only if explicitly specified).
+    pub state: Option<StateConfig>,
 }
 
 impl ResolvedTarget {
@@ -169,12 +171,53 @@ impl ResolvedTarget {
             return Ok(ResolvedTarget {
                 vm,
                 os: Some(os_config),
+                state: None,
             });
         }
 
         // 2. Try VM
         let vm = TerrainConfig::resolve(name)?;
-        Ok(ResolvedTarget { vm, os: None })
+        Ok(ResolvedTarget {
+            vm,
+            os: None,
+            state: None,
+        })
+    }
+
+    /// Resolve a target with an explicit state.
+    ///
+    /// A state requires a union target — bare terrain (VM) targets
+    /// cannot have states because states are chain instances within
+    /// a network.
+    pub fn resolve_with_state(target: &str, state_name: Option<&str>) -> Result<Self, Diagnostic> {
+        let mut resolved = Self::resolve(target)?;
+        if let Some(state) = state_name {
+            let union = resolved
+                .os
+                .as_ref()
+                .map(|os| os.name.as_str())
+                .ok_or_else(|| {
+                    Diagnostic::error(
+                        format!(
+                            "--state requires a union target, not bare terrain '{}'",
+                            target
+                        ),
+                        Span::dummy(),
+                    )
+                })?;
+            resolved.state = StateConfig::resolve(union, state)?;
+            if resolved.state.is_none() {
+                return Err(Diagnostic::error(
+                    format!("unknown state '{}' for union '{}'", state, union),
+                    Span::dummy(),
+                )
+                .with_help(format!(
+                    "available states: {}",
+                    StateConfig::list_states(union).join(", ")
+                )));
+            }
+        }
+        Ok(resolved)
     }
 }
 

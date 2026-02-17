@@ -1,0 +1,13 @@
+[state]
+name = "base"
+display_name = "Base"
+union = "ethereum"
+chain_id = "8453"
+is_default = false
+
+[endpoints]
+rpc_url = "https://mainnet.base.org"
+explorer_url = "https://basescan.org"
+
+[currency]
+symbol = "ETH"

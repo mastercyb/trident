@@ -382,6 +382,9 @@ impl TerrainConfig {
     }
 }
 
+mod state;
+pub use state::*;
+
 mod os;
 pub use os::*;
 
