@@ -5,3 +5,4 @@ mod docs;
 mod features;
 mod format;
 mod neptune;
+mod prove;
