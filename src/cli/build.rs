@@ -459,13 +459,12 @@ fn run_neural_analysis(
 }
 
 /// Build TIR from a source entry point (for neural analysis).
+/// Uses full project resolution so imports (use vm.*, std.*) work.
 fn build_tir(
     entry: &std::path::Path,
     options: &trident::CompileOptions,
 ) -> Option<Vec<trident::tir::TIROp>> {
-    let source = std::fs::read_to_string(entry).ok()?;
-    let filename = entry.to_string_lossy().to_string();
-    trident::build_tir(&source, &filename, options).ok()
+    trident::build_tir_project(entry, options).ok()
 }
 
 /// Score a neural output against a per-block baseline.

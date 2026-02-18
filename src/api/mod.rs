@@ -412,6 +412,49 @@ pub fn build_tir(
     Ok(optimize_tir(ir))
 }
 
+/// Build TIR from a project entry point with full module resolution.
+///
+/// Uses the same multi-module pipeline as `compile_project_with_options`
+/// but returns combined TIR ops instead of TASM. Required for neural
+/// training on files that import other modules (e.g. merkle.tri imports
+/// vm.crypto.merkle).
+pub fn build_tir_project(
+    entry_path: &Path,
+    options: &CompileOptions,
+) -> Result<Vec<crate::tir::TIROp>, Vec<Diagnostic>> {
+    use crate::pipeline::PreparedProject;
+
+    let project = PreparedProject::build(entry_path, options)?;
+
+    let intrinsic_map = project.intrinsic_map();
+    let module_aliases = project.module_aliases();
+    let external_constants = project.external_constants();
+
+    let mut all_ir = Vec::new();
+    for (i, pm) in project.modules.iter().enumerate() {
+        let mono = project
+            .exports
+            .get(i)
+            .map(|e| e.mono_instances.clone())
+            .unwrap_or_default();
+        let call_res = project
+            .exports
+            .get(i)
+            .map(|e| e.call_resolutions.clone())
+            .unwrap_or_default();
+        let ir = TIRBuilder::new(options.target_config.clone())
+            .with_cfg_flags(options.cfg_flags.clone())
+            .with_intrinsics(intrinsic_map.clone())
+            .with_module_aliases(module_aliases.clone())
+            .with_constants(external_constants.clone())
+            .with_mono_instances(mono)
+            .with_call_resolutions(call_res)
+            .build_file(&pm.file);
+        all_ir.extend(optimize_tir(ir));
+    }
+    Ok(all_ir)
+}
+
 pub(crate) mod doc;
 pub(crate) mod pipeline;
 mod tools;
