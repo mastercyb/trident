@@ -228,12 +228,21 @@ pub fn load_meta(path: &Path) -> std::io::Result<OptimizerMeta> {
 }
 
 /// Default paths for weight storage (relative to project root).
-pub fn weights_path(project_root: &Path) -> PathBuf {
-    project_root.join("neural").join("weights.bin")
+/// Global neural weights directory: ~/.trident/neural/
+/// One model learns TIR → TASM across all files.
+fn global_neural_dir() -> PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".into());
+    PathBuf::from(home).join(".trident").join("neural")
 }
 
-pub fn meta_path(project_root: &Path) -> PathBuf {
-    project_root.join("neural").join("meta.toml")
+pub fn weights_path(_project_root: &Path) -> PathBuf {
+    global_neural_dir().join("weights.bin")
+}
+
+pub fn meta_path(_project_root: &Path) -> PathBuf {
+    global_neural_dir().join("meta.toml")
 }
 
 #[cfg(test)]
