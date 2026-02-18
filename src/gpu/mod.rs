@@ -5,6 +5,7 @@
 
 pub mod neural_accel;
 pub mod neural_f32;
+pub mod neural_f32_lite;
 pub(crate) mod shaders;
 
 /// Try to create a wgpu device and queue.

@@ -32,6 +32,27 @@ pub struct Population {
 }
 
 impl Population {
+    /// Create a new random population with explicit weight count.
+    pub fn new_random_with_size(weight_count: usize, seed: u64) -> Self {
+        let mut individuals = Vec::with_capacity(POP_SIZE);
+
+        for i in 0..POP_SIZE {
+            let weights = random_weights(weight_count, seed.wrapping_add(i as u64));
+            individuals.push(Individual {
+                weights,
+                fitness: i64::MIN,
+            });
+        }
+
+        Self {
+            individuals,
+            generation: 0,
+            best_fitness: i64::MIN,
+            mutation_rate: MUTATION_RATE,
+            stale_count: 0,
+        }
+    }
+
     /// Create a new random population.
     pub fn new_random(seed: u64) -> Self {
         let mut individuals = Vec::with_capacity(POP_SIZE);

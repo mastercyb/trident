@@ -10,6 +10,9 @@ const NEURAL_FORWARD: &str = include_str!("shaders/neural_forward.wgsl");
 /// Neural forward pass (float32, no field emulation).
 pub const NEURAL_F32: &str = include_str!("shaders/neural_f32.wgsl");
 
+/// Lite neural forward pass (float32, MLP-only, ~1KB private memory).
+pub const NEURAL_F32_LITE: &str = include_str!("shaders/neural_f32_lite.wgsl");
+
 /// Concatenated neural shader: goldilocks + fixed_point + forward pass.
 pub fn neural_shader() -> String {
     format!("{}\n{}\n{}", GOLDILOCKS, FIXED_POINT, NEURAL_FORWARD)

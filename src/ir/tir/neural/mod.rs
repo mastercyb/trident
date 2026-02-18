@@ -7,5 +7,6 @@
 
 pub mod evolve;
 pub mod model;
+pub mod model_lite;
 pub mod report;
 pub mod weights;

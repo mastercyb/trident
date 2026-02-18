@@ -252,6 +252,36 @@ pub fn meta_path(_project_root: &Path) -> PathBuf {
     local_neural_dir().join("meta.toml")
 }
 
+/// Lite weights path for saving.
+pub fn weights_lite_path(_project_root: &Path) -> PathBuf {
+    local_neural_dir().join("weights_lite.bin")
+}
+
+/// Lite meta path for saving.
+pub fn meta_lite_path(_project_root: &Path) -> PathBuf {
+    local_neural_dir().join("meta_lite.toml")
+}
+
+/// Load lite weights: user-local first, then bundled.
+pub fn load_best_weights_lite() -> std::io::Result<Vec<Fixed>> {
+    let local = local_neural_dir().join("weights_lite.bin");
+    if local.exists() {
+        return load_weights(&local);
+    }
+    let bundled = bundled_neural_dir().join("weights_lite.bin");
+    load_weights(&bundled)
+}
+
+/// Load lite meta: user-local first, then bundled.
+pub fn load_best_meta_lite() -> std::io::Result<OptimizerMeta> {
+    let local = local_neural_dir().join("meta_lite.toml");
+    if local.exists() {
+        return load_meta(&local);
+    }
+    let bundled = bundled_neural_dir().join("meta_lite.toml");
+    load_meta(&bundled)
+}
+
 /// Load weights: user-local first, then bundled.
 pub fn load_best_weights() -> std::io::Result<Vec<Fixed>> {
     let local = local_neural_dir().join("weights.bin");
