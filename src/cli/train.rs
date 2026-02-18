@@ -68,7 +68,8 @@ pub fn cmd_train(args: TrainArgs) {
     // Create GPU accelerator once, sized for the largest file in corpus
     let mut gpu_accel = if args.gpu {
         let max_blocks = compiled.iter().map(|c| c.blocks.len()).max().unwrap_or(1) as u32;
-        match trident::gpu::neural_accel::NeuralAccelerator::try_create(max_blocks) {
+        let pop_size = trident::ir::tir::neural::evolve::POP_SIZE as u32;
+        match trident::gpu::neural_accel::NeuralAccelerator::try_create(max_blocks, pop_size) {
             Some(accel) => {
                 eprintln!("  GPU initialized (capacity: {} blocks)", max_blocks);
                 Some(accel)

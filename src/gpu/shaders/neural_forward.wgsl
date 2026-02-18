@@ -1,11 +1,12 @@
-// Neural forward pass — block-parallel dispatch.
+// Neural forward pass — batched dispatch.
 //
-// Each thread runs one forward pass for one block using a SINGLE individual's
-// weights. Thread ID = block index. All threads read the same weight buffer,
-// enabling GPU L2 cache efficiency (484KB weights fit in L2).
+// 2D dispatch: gid.x = block index, gid.y = individual index.
+// All individuals × all blocks run in a SINGLE dispatch.
+// Weights are laid out as [num_individuals][WEIGHT_COUNT] in a flat buffer.
+// Scratch is [num_individuals * num_blocks][SCRATCH_PER_THREAD].
+// Outputs are [num_individuals][num_blocks][MAX_OUTPUT].
 //
-// Dispatch: ceil(num_blocks / 64) workgroups of 64 threads.
-// Host loops over individuals, uploading one weight vector per dispatch.
+// Dispatch: (ceil(num_blocks / 64), num_individuals, 1)
 //
 // Requires goldilocks.wgsl and fixed_point.wgsl to be prepended.
 
@@ -48,7 +49,7 @@ const S_K: u32 = 9216u;
 const S_V: u32 = 10240u;
 
 // ============================================================
-// Buffers — one individual's weights per dispatch
+// Buffers — all individuals' weights in one buffer
 // ============================================================
 
 struct Params {
@@ -57,7 +58,7 @@ struct Params {
     inv_scale_hi: u32,
     half_p_lo: u32,
     half_p_hi: u32,
-    _pad0: u32,
+    num_individuals: u32,
     _pad1: u32,
     _pad2: u32,
 }
@@ -70,7 +71,15 @@ struct Params {
 @group(0) @binding(5) var<storage, read_write> scratch: array<vec2<u32>>;
 
 // ============================================================
-// Scratch buffer access
+// Weight access — offset by individual
+// ============================================================
+
+fn w_get(ind: u32, idx: u32) -> vec2<u32> {
+    return weights[ind * WEIGHT_COUNT + idx];
+}
+
+// ============================================================
+// Scratch buffer access — offset by (individual, block)
 // ============================================================
 
 fn s_get(base: u32, idx: u32) -> vec2<u32> {
@@ -82,25 +91,29 @@ fn s_set(base: u32, idx: u32, val: vec2<u32>) {
 }
 
 // ============================================================
-// Main entry point — one thread per block
+// Main entry point — one thread per (block, individual) pair
 // ============================================================
 
 @compute @workgroup_size(64)
 fn neural_forward(@builtin(global_invocation_id) gid: vec3<u32>) {
     let blk = gid.x;
+    let ind = gid.y;
     if blk >= params.num_blocks { return; }
+    if ind >= params.num_individuals { return; }
 
     let seq_len = max(block_meta[blk], 1u);
     let b_base = blk * MAX_NODES * WORDS_PER_NODE;
 
-    // Per-thread scratch region
-    let sb = blk * SCRATCH_PER_THREAD;
+    // Per-(individual, block) scratch region
+    let sb = (ind * params.num_blocks + blk) * SCRATCH_PER_THREAD;
+
+    // Per-(individual, block) output region
+    let out_base = (ind * params.num_blocks + blk) * MAX_OUTPUT;
 
     // Zero-weight fast path
-    let out_base = blk * MAX_OUTPUT;
     var all_zero = true;
     for (var i = 0u; i < INPUT_PROJ_SIZE; i++) {
-        let w = weights[i];
+        let w = w_get(ind, i);
         if w.x != 0u || w.y != 0u { all_zero = false; break; }
     }
     if all_zero {
@@ -113,7 +126,7 @@ fn neural_forward(@builtin(global_invocation_id) gid: vec3<u32>) {
         for (var d = 0u; d < DIM; d++) {
             var acc = FP_ZERO;
             for (var w = 0u; w < WORDS_PER_NODE; w++) {
-                let weight = weights[w * DIM + d];
+                let weight = w_get(ind, w * DIM + d);
                 let input = blocks[b_base + n * WORDS_PER_NODE + w];
                 acc = gl_add(acc, canon_mul(input, weight));
             }
@@ -142,9 +155,9 @@ fn neural_forward(@builtin(global_invocation_id) gid: vec3<u32>) {
                     var v_acc = FP_ZERO;
                     for (var j = 0u; j < DIM; j++) {
                         let inp = s_get(sb + S_EMB, n * DIM + j);
-                        q_acc = gl_add(q_acc, canon_mul(inp, weights[qkv_base + j * DIM + out_d]));
-                        k_acc = gl_add(k_acc, canon_mul(inp, weights[qkv_base + DIM * DIM + j * DIM + out_d]));
-                        v_acc = gl_add(v_acc, canon_mul(inp, weights[qkv_base + 2u * DIM * DIM + j * DIM + out_d]));
+                        q_acc = gl_add(q_acc, canon_mul(inp, w_get(ind, qkv_base + j * DIM + out_d)));
+                        k_acc = gl_add(k_acc, canon_mul(inp, w_get(ind, qkv_base + DIM * DIM + j * DIM + out_d)));
+                        v_acc = gl_add(v_acc, canon_mul(inp, w_get(ind, qkv_base + 2u * DIM * DIM + j * DIM + out_d)));
                     }
                     s_set(sb + S_Q, n * HEAD_DIM + d, canon_mul(q_acc, inv_scale()));
                     s_set(sb + S_K, n * HEAD_DIM + d, canon_mul(k_acc, inv_scale()));
@@ -202,7 +215,7 @@ fn neural_forward(@builtin(global_invocation_id) gid: vec3<u32>) {
             for (var d = 0u; d < DIM; d++) {
                 var acc = FP_ZERO;
                 for (var j = 0u; j < DIM; j++) {
-                    acc = gl_add(acc, canon_mul(s_get(sb + S_ATTN, n * DIM + j), weights[op_base + j * DIM + d]));
+                    acc = gl_add(acc, canon_mul(s_get(sb + S_ATTN, n * DIM + j), w_get(ind, op_base + j * DIM + d)));
                 }
                 s_set(sb + S_PROJ, n * DIM + d, canon_mul(acc, inv_scale()));
             }
@@ -236,7 +249,7 @@ fn neural_forward(@builtin(global_invocation_id) gid: vec3<u32>) {
             for (var d = 0u; d < DIM; d++) {
                 let normed = fp_mul(gl_sub(s_get(sb + S_EMB, start + d), mean), var_scale);
                 s_set(sb + S_EMB, start + d,
-                    gl_add(fp_mul(normed, weights[ln_s_base + d]), weights[ln_b_base + d]));
+                    gl_add(fp_mul(normed, w_get(ind, ln_s_base + d)), w_get(ind, ln_b_base + d)));
             }
         }
 
@@ -248,14 +261,14 @@ fn neural_forward(@builtin(global_invocation_id) gid: vec3<u32>) {
             for (var fh = 0u; fh < FFN_HIDDEN; fh++) {
                 var acc = FP_ZERO;
                 for (var d = 0u; d < DIM; d++) {
-                    acc = gl_add(acc, canon_mul(s_get(sb + S_EMB, n * DIM + d), weights[ffn1_base + d * FFN_HIDDEN + fh]));
+                    acc = gl_add(acc, canon_mul(s_get(sb + S_EMB, n * DIM + d), w_get(ind, ffn1_base + d * FFN_HIDDEN + fh)));
                 }
                 ffn_h[fh] = fp_relu(canon_mul(acc, inv_scale()));
             }
             for (var d = 0u; d < DIM; d++) {
                 var acc = FP_ZERO;
                 for (var fh = 0u; fh < FFN_HIDDEN; fh++) {
-                    acc = gl_add(acc, canon_mul(ffn_h[fh], weights[ffn2_base + fh * DIM + d]));
+                    acc = gl_add(acc, canon_mul(ffn_h[fh], w_get(ind, ffn2_base + fh * DIM + d)));
                 }
                 s_set(sb + S_FFN_OUT, n * DIM + d, canon_mul(acc, inv_scale()));
             }
@@ -290,22 +303,22 @@ fn neural_forward(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     for (var step = 0u; step < MAX_OUTPUT; step++) {
         for (var fh = 0u; fh < FFN_HIDDEN; fh++) {
-            let bias = weights[dhb_base + fh];
+            let bias = w_get(ind, dhb_base + fh);
             var acc = canon_mul(bias, vec2<u32>(FP_ONE_LO, FP_ONE_HI));
             for (var d = 0u; d < DIM; d++) {
-                acc = gl_add(acc, canon_mul(latent[d], weights[dh_base + d * FFN_HIDDEN + fh]));
+                acc = gl_add(acc, canon_mul(latent[d], w_get(ind, dh_base + d * FFN_HIDDEN + fh)));
             }
             for (var d = 0u; d < DIM; d++) {
-                acc = gl_add(acc, canon_mul(prev[d], weights[dh_base + (DIM + d) * FFN_HIDDEN + fh]));
+                acc = gl_add(acc, canon_mul(prev[d], w_get(ind, dh_base + (DIM + d) * FFN_HIDDEN + fh)));
             }
             dec_h[fh] = fp_relu(canon_mul(acc, inv_scale()));
         }
 
         for (var d = 0u; d < DIM; d++) {
-            let bias = weights[dob_base + d];
+            let bias = w_get(ind, dob_base + d);
             var acc = canon_mul(bias, vec2<u32>(FP_ONE_LO, FP_ONE_HI));
             for (var fh = 0u; fh < FFN_HIDDEN; fh++) {
-                acc = gl_add(acc, canon_mul(dec_h[fh], weights[do_base + fh * DIM + d]));
+                acc = gl_add(acc, canon_mul(dec_h[fh], w_get(ind, do_base + fh * DIM + d)));
             }
             dec_out[d] = canon_mul(acc, inv_scale());
         }

@@ -1,12 +1,11 @@
 //! GPU-accelerated batch forward pass for neural optimizer training.
 //!
-//! Sequential-individual, parallel-block dispatch: upload ONE individual's
-//! weights per dispatch, run all blocks in parallel. All threads read the
-//! same 484KB weight buffer from L2 cache. 16 dispatches per generation.
+//! Batched dispatch: ALL individuals × ALL blocks in a SINGLE dispatch.
+//! 2D workgroup: gid.x = block index, gid.y = individual index.
+//! One submit, one readback per generation. Zero CPU↔GPU sync per individual.
 //!
-//! The accelerator is created once with a `max_blocks` capacity and reused
-//! across files via `upload_blocks()`. GPU init (device, shader, pipeline)
-//! happens only once.
+//! The accelerator is created once with `try_create(max_blocks, max_individuals)`
+//! and reused across files via `upload_blocks()`.
 
 use crate::field::fixed::SCALE;
 use crate::field::goldilocks::{Goldilocks, MODULUS};
@@ -17,13 +16,13 @@ use crate::ir::tir::neural::model::{MAX_OUTPUT, PARAM_COUNT};
 use super::shaders;
 
 const WORKGROUP_SIZE: u32 = 64;
-/// Total flat weight count including input_proj.
+/// Total flat weight count per individual including input_proj.
 const WEIGHT_COUNT: u32 =
     (PARAM_COUNT + WORDS_PER_NODE * crate::ir::tir::neural::model::DIM) as u32;
 /// Per-thread scratch size in vec2<u32> units (must match shader SCRATCH_PER_THREAD).
 const SCRATCH_PER_THREAD: u32 = 11264;
 
-/// GPU params struct matching the WGSL Params layout (block-parallel).
+/// GPU params struct matching the WGSL Params layout.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct GpuParams {
@@ -32,7 +31,7 @@ struct GpuParams {
     inv_scale_hi: u32,
     half_p_lo: u32,
     half_p_hi: u32,
-    _pad0: u32,
+    num_individuals: u32,
     _pad1: u32,
     _pad2: u32,
 }
@@ -52,27 +51,23 @@ pub struct NeuralAccelerator {
     bind_group: wgpu::BindGroup,
     num_blocks: u32,
     max_blocks: u32,
-    output_size: u64,
+    max_individuals: u32,
     inv_scale_raw: u64,
     half_p: u64,
 }
 
 impl NeuralAccelerator {
-    /// Create a GPU accelerator sized for up to `max_blocks` blocks.
-    /// Initializes the GPU device, compiles shaders, and allocates buffers once.
-    /// Use `upload_blocks()` to load a specific file's blocks before `batch_forward()`.
-    ///
-    /// The old `try_new(blocks, _num_individuals)` API still works for backward
-    /// compatibility (tests, single-file build).
-    pub fn try_new(blocks: &[TIRBlock], _num_individuals: u32) -> Option<Self> {
-        let mut accel = Self::try_create(blocks.len() as u32)?;
+    /// Backward-compatible constructor: create accelerator and upload blocks.
+    pub fn try_new(blocks: &[TIRBlock], num_individuals: u32) -> Option<Self> {
+        let mut accel = Self::try_create(blocks.len() as u32, num_individuals.max(1))?;
         accel.upload_blocks(blocks);
         Some(accel)
     }
 
-    /// Create the accelerator with capacity for `max_blocks`. No blocks loaded yet.
-    pub fn try_create(max_blocks: u32) -> Option<Self> {
+    /// Create the accelerator with capacity for `max_blocks` × `max_individuals`.
+    pub fn try_create(max_blocks: u32, max_individuals: u32) -> Option<Self> {
         let max_blocks = max_blocks.max(1);
+        let max_individuals = max_individuals.max(1);
         let (device, queue) = super::try_create_device()?;
 
         let shader_src = shaders::neural_shader();
@@ -96,7 +91,7 @@ impl NeuralAccelerator {
             .to_u64();
         let half_p = (MODULUS - 1) / 2;
 
-        // All buffers sized for max_blocks capacity
+        // Block data buffer (shared across individuals)
         let slots_per_block = MAX_NODES * WORDS_PER_NODE;
         let block_buf_size = (max_blocks as u64) * (slots_per_block as u64) * 8;
         let block_buf = device.create_buffer(&wgpu::BufferDescriptor {
@@ -120,7 +115,7 @@ impl NeuralAccelerator {
             inv_scale_hi: (inv_scale_raw >> 32) as u32,
             half_p_lo: half_p as u32,
             half_p_hi: (half_p >> 32) as u32,
-            _pad0: 0,
+            num_individuals: 0,
             _pad1: 0,
             _pad2: 0,
         };
@@ -130,7 +125,9 @@ impl NeuralAccelerator {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let scratch_size = (max_blocks as u64) * (SCRATCH_PER_THREAD as u64) * 8;
+        // Scratch: max_individuals * max_blocks threads, each SCRATCH_PER_THREAD vec2<u32>
+        let scratch_size =
+            (max_individuals as u64) * (max_blocks as u64) * (SCRATCH_PER_THREAD as u64) * 8;
         let scratch_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("scratch"),
             size: scratch_size,
@@ -138,7 +135,8 @@ impl NeuralAccelerator {
             mapped_at_creation: false,
         });
 
-        let weight_size = (WEIGHT_COUNT as u64) * 8;
+        // Weights: max_individuals * WEIGHT_COUNT vec2<u32>
+        let weight_size = (max_individuals as u64) * (WEIGHT_COUNT as u64) * 8;
         let weight_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("weights"),
             size: weight_size,
@@ -146,7 +144,8 @@ impl NeuralAccelerator {
             mapped_at_creation: false,
         });
 
-        let output_size = (max_blocks * MAX_OUTPUT as u32) as u64 * 4;
+        // Output: max_individuals * max_blocks * MAX_OUTPUT u32s
+        let output_size = (max_individuals as u64) * (max_blocks as u64) * (MAX_OUTPUT as u64) * 4;
         let output_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("outputs"),
             size: output_size,
@@ -206,82 +205,92 @@ impl NeuralAccelerator {
             bind_group,
             num_blocks: 0,
             max_blocks,
-            output_size,
+            max_individuals,
             inv_scale_raw,
             half_p,
         })
     }
 
     /// Upload a new set of blocks for the next training file.
-    /// Reuses existing buffers — only writes data, no allocation.
     pub fn upload_blocks(&mut self, blocks: &[TIRBlock]) {
         let n = (blocks.len() as u32).min(self.max_blocks);
         self.num_blocks = n;
 
-        // Upload block node data
         let block_data = encode_blocks_for_gpu(&blocks[..n as usize]);
         self.queue
             .write_buffer(&self.block_buf, 0, bytemuck::cast_slice(&block_data));
 
-        // Upload block metadata
         let meta_data: Vec<u32> = blocks[..n as usize]
             .iter()
             .map(|b| b.node_count as u32)
             .collect();
         self.queue
             .write_buffer(&self.meta_buf, 0, bytemuck::cast_slice(&meta_data));
+    }
 
-        // Update params with new block count
+    /// Run forward pass for ALL individuals on all blocks in a SINGLE dispatch.
+    /// Returns `[num_individuals][num_blocks][output_codes]`.
+    pub fn batch_forward(&self, weight_vecs: &[Vec<u64>]) -> Vec<Vec<Vec<u32>>> {
+        let num_ind = (weight_vecs.len() as u32).min(self.max_individuals);
+        if num_ind == 0 || self.num_blocks == 0 {
+            return vec![];
+        }
+
+        // Upload ALL individuals' weights in one write
+        let mut weight_data: Vec<u32> =
+            Vec::with_capacity(num_ind as usize * WEIGHT_COUNT as usize * 2);
+        for wv in &weight_vecs[..num_ind as usize] {
+            for &val in wv {
+                weight_data.push(val as u32);
+                weight_data.push((val >> 32) as u32);
+            }
+            // Pad if individual has fewer weights than expected
+            let written = wv.len();
+            for _ in written..WEIGHT_COUNT as usize {
+                weight_data.push(0);
+                weight_data.push(0);
+            }
+        }
+        self.queue
+            .write_buffer(&self.weight_buf, 0, bytemuck::cast_slice(&weight_data));
+
+        // Update params with current block count and individual count
         let params = GpuParams {
-            num_blocks: n,
+            num_blocks: self.num_blocks,
             inv_scale_lo: self.inv_scale_raw as u32,
             inv_scale_hi: (self.inv_scale_raw >> 32) as u32,
             half_p_lo: self.half_p as u32,
             half_p_hi: (self.half_p >> 32) as u32,
-            _pad0: 0,
+            num_individuals: num_ind,
             _pad1: 0,
             _pad2: 0,
         };
         self.queue
             .write_buffer(&self.params_buf, 0, bytemuck::bytes_of(&params));
 
-        // Update output size for readback
-        self.output_size = (n * MAX_OUTPUT as u32) as u64 * 4;
-    }
+        // Single dispatch: (ceil(num_blocks/64), num_individuals, 1)
+        let workgroups_x = (self.num_blocks + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+        let output_size = (num_ind as u64) * (self.num_blocks as u64) * (MAX_OUTPUT as u64) * 4;
 
-    /// Run forward pass for ONE individual on all blocks.
-    /// Returns `Vec<Vec<u32>>` — one output sequence per block.
-    fn forward_one(&self, weights: &[u64]) -> Vec<Vec<u32>> {
-        // Upload this individual's weights
-        let mut weight_data: Vec<u32> = Vec::with_capacity(weights.len() * 2);
-        for &val in weights {
-            weight_data.push(val as u32);
-            weight_data.push((val >> 32) as u32);
-        }
-        self.queue
-            .write_buffer(&self.weight_buf, 0, bytemuck::cast_slice(&weight_data));
-
-        // Dispatch: ceil(num_blocks / 64) workgroups
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("neural_encoder"),
+                label: Some("neural_batch_encoder"),
             });
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("neural_pass"),
+                label: Some("neural_batch_pass"),
                 timestamp_writes: None,
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.bind_group, &[]);
-            let workgroups = (self.num_blocks + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
-            pass.dispatch_workgroups(workgroups, 1, 1);
+            pass.dispatch_workgroups(workgroups_x, num_ind, 1);
         }
-        encoder.copy_buffer_to_buffer(&self.output_buf, 0, &self.staging_buf, 0, self.output_size);
+        encoder.copy_buffer_to_buffer(&self.output_buf, 0, &self.staging_buf, 0, output_size);
         self.queue.submit(std::iter::once(encoder.finish()));
 
-        // Readback
-        let slice = self.staging_buf.slice(..);
+        // Single readback
+        let slice = self.staging_buf.slice(..output_size);
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
             let _ = tx.send(result);
@@ -294,35 +303,30 @@ impl NeuralAccelerator {
         let data = slice.get_mapped_range();
         let output_codes: &[u32] = bytemuck::cast_slice(&data);
 
-        let mut blocks_out = Vec::with_capacity(self.num_blocks as usize);
-        for b in 0..self.num_blocks {
-            let base = (b * MAX_OUTPUT as u32) as usize;
-            let codes: Vec<u32> = output_codes[base..base + MAX_OUTPUT]
-                .iter()
-                .copied()
-                .collect();
-            blocks_out.push(codes);
+        // Parse: output layout is [individual][block][MAX_OUTPUT]
+        let nb = self.num_blocks as usize;
+        let mut results = Vec::with_capacity(num_ind as usize);
+        for i in 0..num_ind as usize {
+            let mut blocks_out = Vec::with_capacity(nb);
+            for b in 0..nb {
+                let base = (i * nb + b) * MAX_OUTPUT;
+                let codes: Vec<u32> = output_codes[base..base + MAX_OUTPUT]
+                    .iter()
+                    .copied()
+                    .collect();
+                blocks_out.push(codes);
+            }
+            results.push(blocks_out);
         }
 
         drop(data);
         self.staging_buf.unmap();
 
-        blocks_out
-    }
-
-    /// Run forward pass for all individuals (sequential dispatch, parallel blocks).
-    /// Returns `[num_individuals][num_blocks][output_codes]`.
-    pub fn batch_forward(&self, weight_vecs: &[Vec<u64>]) -> Vec<Vec<Vec<u32>>> {
-        let mut results = Vec::with_capacity(weight_vecs.len());
-        for wv in weight_vecs {
-            results.push(self.forward_one(wv));
-        }
         results
     }
 }
 
 /// Encode TIR blocks as flat u32 pairs for GPU upload.
-/// Each block occupies MAX_NODES * WORDS_PER_NODE slots (128 vec2<u32> entries).
 fn encode_blocks_for_gpu(blocks: &[TIRBlock]) -> Vec<u32> {
     let slots_per_block = MAX_NODES * WORDS_PER_NODE;
     let mut data = Vec::with_capacity(blocks.len() * slots_per_block * 2);
@@ -357,7 +361,6 @@ mod tests {
             }
         };
 
-        // Shader that reads pairs from input, multiplies them, writes to output
         let shader_src = format!(
             "{}\n{}",
             crate::gpu::shaders::GOLDILOCKS,
@@ -388,7 +391,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             cache: None,
         });
 
-        // Test cases: pairs of (a, b) as u64
         let test_pairs: Vec<(u64, u64)> = vec![
             (3, 7),
             (65536, 65536),
