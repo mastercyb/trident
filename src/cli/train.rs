@@ -33,6 +33,55 @@ const CYAN: &str = "\x1b[36m";
 const BOLD: &str = "\x1b[1m";
 const WHITE: &str = "\x1b[37m";
 
+fn term_width() -> usize {
+    if let Some(w) = std::env::var("COLUMNS").ok().and_then(|s| s.parse().ok()) {
+        return w;
+    }
+    #[cfg(unix)]
+    if let Ok(out) = std::process::Command::new("tput").arg("cols").output() {
+        if let Ok(w) = String::from_utf8_lossy(&out.stdout).trim().parse::<usize>() {
+            if w > 0 {
+                return w;
+            }
+        }
+    }
+    80
+}
+
+/// Visible length of a string (strips ANSI escape sequences).
+fn visible_len(s: &str) -> usize {
+    let mut len = 0;
+    let mut in_esc = false;
+    for c in s.chars() {
+        if in_esc {
+            if c.is_ascii_alphabetic() {
+                in_esc = false;
+            }
+        } else if c == '\x1b' {
+            in_esc = true;
+        } else {
+            len += 1;
+        }
+    }
+    len
+}
+
+/// Print a box around lines. Each line is padded to fill the box width.
+/// The box adapts to the widest content line, capped at terminal width.
+fn print_box(lines: &[String]) {
+    let tw = term_width().saturating_sub(4); // 2 indent + border chars
+    let max_content = lines.iter().map(|l| visible_len(l)).max().unwrap_or(0);
+    let inner = max_content.min(tw);
+
+    eprintln!("  {DIM}┌{}┐{RESET}", "─".repeat(inner + 2));
+    for line in lines {
+        let vlen = visible_len(line);
+        let pad = inner.saturating_sub(vlen);
+        eprintln!("  {DIM}│{RESET} {}{} {DIM}│{RESET}", line, " ".repeat(pad));
+    }
+    eprintln!("  {DIM}└{}┘{RESET}", "─".repeat(inner + 2));
+}
+
 pub fn cmd_train(args: TrainArgs) {
     use trident::ir::tir::neural::weights;
 
@@ -56,23 +105,27 @@ pub fn cmd_train(args: TrainArgs) {
     let total_baseline: u64 = compiled.iter().map(|c| c.baseline_cost).sum();
     let total_gens = args.epochs * compiled.len() as u64 * args.generations;
 
-    // Header table
+    // Header
     eprintln!();
-    eprintln!("  {DIM}┌──────────────────────────────────────────┐{RESET}");
-    eprintln!("  {DIM}│{RESET} corpus    {WHITE}{}{RESET} files ({CYAN}{}{RESET} trainable, {CYAN}{}{RESET} blocks) {DIM}│{RESET}",
-        corpus.len(), compiled.len(), total_blocks);
-    eprintln!(
-        "  {DIM}│{RESET} baseline  {WHITE}{}{RESET} total cost                    {DIM}│{RESET}",
-        total_baseline
-    );
-    eprintln!("  {DIM}│{RESET} schedule  {WHITE}{}{RESET} epochs x {WHITE}{}{RESET} gens = {CYAN}{}{RESET} total     {DIM}│{RESET}",
-        args.epochs, args.generations, total_gens);
-    eprintln!(
-        "  {DIM}│{RESET} model     gen {WHITE}{}{RESET} | {}                       {DIM}│{RESET}",
-        gen_start,
-        if args.gpu { "GPU" } else { "CPU" }
-    );
-    eprintln!("  {DIM}└──────────────────────────────────────────┘{RESET}");
+    let header = vec![
+        format!(
+            "corpus    {WHITE}{}{RESET} files ({CYAN}{}{RESET} trainable, {CYAN}{}{RESET} blocks)",
+            corpus.len(),
+            compiled.len(),
+            total_blocks
+        ),
+        format!("baseline  {WHITE}{}{RESET} total cost", total_baseline),
+        format!(
+            "schedule  {WHITE}{}{RESET} epochs x {WHITE}{}{RESET} gens = {CYAN}{}{RESET} total",
+            args.epochs, args.generations, total_gens
+        ),
+        format!(
+            "model     gen {WHITE}{}{RESET} | {}",
+            gen_start,
+            if args.gpu { "GPU" } else { "CPU" }
+        ),
+    ];
+    print_box(&header);
     eprintln!();
 
     let start = std::time::Instant::now();
@@ -156,96 +209,146 @@ pub fn cmd_train(args: TrainArgs) {
     let gen_end = meta.as_ref().map_or(0, |m| m.generation);
 
     // Summary
-    eprintln!("  {DIM}┌────────────────────────────────────────┐{RESET}");
-    eprintln!("  {DIM}│{RESET} {BOLD}done{RESET}                                   {DIM}│{RESET}");
-    eprintln!("  {DIM}│{RESET} generations  {WHITE}{}{RESET} -> {WHITE}{}{RESET} ({GREEN}+{}{RESET})          {DIM}│{RESET}",
-        gen_start, gen_end, gen_end - gen_start);
-    eprintln!("  {DIM}│{RESET} trained      {WHITE}{}{RESET} file-passes in {WHITE}{:.1}s{RESET}    {DIM}│{RESET}",
-        total_trained, elapsed.as_secs_f64());
+    let mut summary = vec![
+        format!("{BOLD}done{RESET}"),
+        format!(
+            "generations  {WHITE}{}{RESET} -> {WHITE}{}{RESET} ({GREEN}+{}{RESET})",
+            gen_start,
+            gen_end,
+            gen_end - gen_start
+        ),
+        format!(
+            "trained      {WHITE}{}{RESET} file-passes in {WHITE}{:.1}s{RESET}",
+            total_trained,
+            elapsed.as_secs_f64()
+        ),
+    ];
     if let Some(meta) = meta {
-        eprintln!(
-            "  {DIM}│{RESET} model        score {BOLD}{}{RESET} | {}         {DIM}│{RESET}",
+        summary.push(format!(
+            "model        score {BOLD}{}{RESET} | {}",
             meta.best_score, meta.status
-        );
-        eprintln!(
-            "  {DIM}│{RESET} weights      {DIM}{}{RESET}   {DIM}│{RESET}",
+        ));
+        summary.push(format!(
+            "weights      {DIM}{}{RESET}",
             &meta.weight_hash[..16.min(meta.weight_hash.len())]
-        );
+        ));
     }
-    eprintln!("  {DIM}└────────────────────────────────────────┘{RESET}");
+    print_box(&summary);
 }
 
 fn print_file_table(rows: &[(&str, usize, u64, u64)], label: &str) {
-    // Column widths
-    let w_file = 45;
-    let w_blk = 5;
-    let w_cost = 6;
-    let w_base = 6;
-    let w_ratio = 7;
-    let w_bar = 12;
+    let tw = term_width();
 
-    eprintln!("  {DIM}{}{RESET}", label);
-    eprintln!(
+    // Fixed columns: blk(5) + cost(6) + base(6) + ratio(7) = 24
+    // Separators and padding: 7 columns × 3 chars (│ + 2 spaces) + outer = ~28
+    // Minimum file = 12, minimum bar = 4
+    let w_blk = 5;
+    let w_ratio = 7;
+
+    // Measure actual data widths for cost/base columns
+    let total_cost: u64 = rows.iter().map(|(_, _, c, _)| c).sum();
+    let total_base: u64 = rows.iter().map(|(_, _, _, b)| b).sum();
+    let w_cost = format!(
+        "{}",
+        rows.iter()
+            .map(|(_, _, c, _)| c)
+            .max()
+            .copied()
+            .unwrap_or(0)
+            .max(total_cost)
+    )
+    .len()
+    .max(4);
+    let w_base = format!(
+        "{}",
+        rows.iter()
+            .map(|(_, _, _, b)| b)
+            .max()
+            .copied()
+            .unwrap_or(0)
+            .max(total_base)
+    )
+    .len()
+    .max(4);
+
+    // Fixed overhead: 2 indent + 7 borders + 12 padding (2 per col)
+    let fixed = 2 + 7 + 12 + w_blk + w_cost + w_base + w_ratio;
+    let flexible = tw.saturating_sub(fixed);
+
+    // Split flexible space: 70% file, 30% bar (min 4)
+    let w_bar = (flexible * 3 / 10).max(4);
+    let w_file = flexible.saturating_sub(w_bar).max(12);
+
+    let sep_top = format!(
         "  {DIM}┌{}┬{}┬{}┬{}┬{}┬{}┐{RESET}",
         "─".repeat(w_file + 2),
         "─".repeat(w_blk + 2),
         "─".repeat(w_cost + 2),
         "─".repeat(w_base + 2),
         "─".repeat(w_ratio + 2),
-        "─".repeat(w_bar + 2)
+        "─".repeat(w_bar + 2),
     );
-    eprintln!("  {DIM}│{RESET} {BOLD}{:<w_file$}{RESET} {DIM}│{RESET} {BOLD}{:>w_blk$}{RESET} {DIM}│{RESET} {BOLD}{:>w_cost$}{RESET} {DIM}│{RESET} {BOLD}{:>w_base$}{RESET} {DIM}│{RESET} {BOLD}{:>w_ratio$}{RESET} {DIM}│{RESET} {BOLD}{:<w_bar$}{RESET} {DIM}│{RESET}",
-        "file", "blk", "cost", "base", "ratio", "");
-    eprintln!(
+    let sep_mid = format!(
         "  {DIM}├{}┼{}┼{}┼{}┼{}┼{}┤{RESET}",
         "─".repeat(w_file + 2),
         "─".repeat(w_blk + 2),
         "─".repeat(w_cost + 2),
         "─".repeat(w_base + 2),
         "─".repeat(w_ratio + 2),
-        "─".repeat(w_bar + 2)
+        "─".repeat(w_bar + 2),
     );
-
-    for (path, blocks, cost, baseline) in rows {
-        let r = *cost as f64 / (*baseline).max(1) as f64;
-        let color = ratio_to_color(r);
-        let bar = ratio_bar(r, w_bar);
-        eprintln!(
-            "  {DIM}│{RESET} {:<w_file$} {DIM}│{RESET} {:>w_blk$} {DIM}│{RESET} {:>w_cost$} {DIM}│{RESET} {:>w_base$} {DIM}│{RESET} {color}{:>w_ratio$}{RESET} {DIM}│{RESET} {} {DIM}│{RESET}",
-            path, blocks, cost, baseline, format!("{:.2}x", r), bar,
-        );
-    }
-
-    // Footer with totals
-    let total_blocks: usize = rows.iter().map(|(_, b, _, _)| b).sum();
-    let total_cost: u64 = rows.iter().map(|(_, _, c, _)| c).sum();
-    let total_base: u64 = rows.iter().map(|(_, _, _, b)| b).sum();
-    let total_ratio = total_cost as f64 / total_base.max(1) as f64;
-    let total_color = ratio_to_color(total_ratio);
-
-    eprintln!(
-        "  {DIM}├{}┼{}┼{}┼{}┼{}┼{}┤{RESET}",
-        "─".repeat(w_file + 2),
-        "─".repeat(w_blk + 2),
-        "─".repeat(w_cost + 2),
-        "─".repeat(w_base + 2),
-        "─".repeat(w_ratio + 2),
-        "─".repeat(w_bar + 2)
-    );
-    eprintln!(
-        "  {DIM}│{RESET} {BOLD}{:<w_file$}{RESET} {DIM}│{RESET} {BOLD}{:>w_blk$}{RESET} {DIM}│{RESET} {BOLD}{:>w_cost$}{RESET} {DIM}│{RESET} {BOLD}{:>w_base$}{RESET} {DIM}│{RESET} {total_color}{BOLD}{:>w_ratio$}{RESET} {DIM}│{RESET} {} {DIM}│{RESET}",
-        "total", total_blocks, total_cost, total_base,
-        format!("{:.2}x", total_ratio), ratio_bar(total_ratio, w_bar),
-    );
-    eprintln!(
+    let sep_bot = format!(
         "  {DIM}└{}┴{}┴{}┴{}┴{}┴{}┘{RESET}",
         "─".repeat(w_file + 2),
         "─".repeat(w_blk + 2),
         "─".repeat(w_cost + 2),
         "─".repeat(w_base + 2),
         "─".repeat(w_ratio + 2),
-        "─".repeat(w_bar + 2)
+        "─".repeat(w_bar + 2),
     );
+
+    eprintln!("  {DIM}{}{RESET}", label);
+    eprintln!("{}", sep_top);
+    eprintln!(
+        "  {DIM}│{RESET} {BOLD}{:<w_file$}{RESET} {DIM}│{RESET} {BOLD}{:>w_blk$}{RESET} {DIM}│{RESET} {BOLD}{:>w_cost$}{RESET} {DIM}│{RESET} {BOLD}{:>w_base$}{RESET} {DIM}│{RESET} {BOLD}{:>w_ratio$}{RESET} {DIM}│{RESET} {BOLD}{:<w_bar$}{RESET} {DIM}│{RESET}",
+        "file", "blk", "cost", "base", "ratio", "",
+    );
+    eprintln!("{}", sep_mid);
+
+    for (path, blocks, cost, baseline) in rows {
+        let r = *cost as f64 / (*baseline).max(1) as f64;
+        let color = ratio_to_color(r);
+        let bar = ratio_bar(r, w_bar);
+        let display_path = truncate_path(path, w_file);
+        eprintln!(
+            "  {DIM}│{RESET} {:<w_file$} {DIM}│{RESET} {:>w_blk$} {DIM}│{RESET} {:>w_cost$} {DIM}│{RESET} {:>w_base$} {DIM}│{RESET} {color}{:>w_ratio$}{RESET} {DIM}│{RESET} {} {DIM}│{RESET}",
+            display_path, blocks, cost, baseline, format!("{:.2}x", r), bar,
+        );
+    }
+
+    // Totals
+    let total_blocks: usize = rows.iter().map(|(_, b, _, _)| b).sum();
+    let total_ratio = total_cost as f64 / total_base.max(1) as f64;
+    let total_color = ratio_to_color(total_ratio);
+
+    eprintln!("{}", sep_mid);
+    eprintln!(
+        "  {DIM}│{RESET} {BOLD}{:<w_file$}{RESET} {DIM}│{RESET} {BOLD}{:>w_blk$}{RESET} {DIM}│{RESET} {BOLD}{:>w_cost$}{RESET} {DIM}│{RESET} {BOLD}{:>w_base$}{RESET} {DIM}│{RESET} {total_color}{BOLD}{:>w_ratio$}{RESET} {DIM}│{RESET} {} {DIM}│{RESET}",
+        "total", total_blocks, total_cost, total_base,
+        format!("{:.2}x", total_ratio), ratio_bar(total_ratio, w_bar),
+    );
+    eprintln!("{}", sep_bot);
+}
+
+/// Truncate a path to fit in `max` chars, preserving the tail.
+fn truncate_path(path: &str, max: usize) -> String {
+    if path.len() <= max {
+        return path.to_string();
+    }
+    if max <= 3 {
+        return path[path.len().saturating_sub(max)..].to_string();
+    }
+    format!("..{}", &path[path.len() - (max - 2)..])
 }
 
 fn ratio_to_color(r: f64) -> &'static str {
