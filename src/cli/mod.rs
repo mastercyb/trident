@@ -15,6 +15,7 @@ pub mod registry;
 pub mod run;
 pub mod store;
 pub mod test;
+pub mod train;
 pub mod tree_sitter;
 pub mod verify;
 pub mod view;

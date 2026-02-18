@@ -19,6 +19,7 @@ use cli::registry::RegistryAction;
 use cli::run::RunArgs;
 use cli::store::StoreAction;
 use cli::test::TestArgs;
+use cli::train::TrainArgs;
 use cli::tree_sitter::TreeSitterArgs;
 use cli::verify::VerifyProofArgs;
 use cli::view::ViewArgs;
@@ -54,6 +55,8 @@ enum Command {
     Hash(HashArgs),
     /// Run benchmarks: compare Trident output vs hand-written TASM
     Bench(BenchArgs),
+    /// Train the neural optimizer on .tri files
+    Train(TrainArgs),
     /// Generate code scaffold from spec annotations
     Generate(GenerateArgs),
     /// View a function definition (pretty-printed from AST)
@@ -104,6 +107,7 @@ fn main() {
         Command::Audit(args) => cli::audit::cmd_audit(args),
         Command::Hash(args) => cli::hash::cmd_hash(args),
         Command::Bench(args) => cli::bench::cmd_bench(args),
+        Command::Train(args) => cli::train::cmd_train(args),
         Command::Generate(args) => cli::generate::cmd_generate(args),
         Command::View(args) => cli::view::cmd_view(args),
         Command::Store { action } => cli::store::cmd_store(action),
