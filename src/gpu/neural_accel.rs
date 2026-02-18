@@ -96,9 +96,13 @@ impl NeuralAccelerator {
             .to_u64();
         let half_p = (MODULUS - 1) / 2;
 
-        // Compute blocks_per_chunk from device max buffer size.
+        // Compute blocks_per_chunk from device limits.
         // Scratch is the largest buffer: individuals * blocks * SCRATCH_PER_THREAD * 8 bytes.
-        let max_buf = device.limits().max_buffer_size;
+        // Must respect BOTH max_buffer_size AND max_storage_buffer_binding_size.
+        let limits = device.limits();
+        let max_buf = limits
+            .max_buffer_size
+            .min(limits.max_storage_buffer_binding_size as u64);
         let bytes_per_block_per_ind = SCRATCH_PER_THREAD as u64 * 8;
         let blocks_per_chunk = (max_buf / (max_individuals as u64 * bytes_per_block_per_ind))
             .min(max_blocks as u64)
