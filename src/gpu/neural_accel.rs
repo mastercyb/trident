@@ -4,8 +4,9 @@
 //! weights per dispatch, run all blocks in parallel. All threads read the
 //! same 484KB weight buffer from L2 cache. 16 dispatches per generation.
 //!
-//! Expected: ~1-2ms per dispatch × 16 = ~16-32ms per generation
-//! (vs 800ms old GPU, 250ms parallel CPU).
+//! The accelerator is created once with a `max_blocks` capacity and reused
+//! across files via `upload_blocks()`. GPU init (device, shader, pipeline)
+//! happens only once.
 
 use crate::field::fixed::SCALE;
 use crate::field::goldilocks::{Goldilocks, MODULUS};
@@ -50,19 +51,30 @@ pub struct NeuralAccelerator {
     staging_buf: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     num_blocks: u32,
+    max_blocks: u32,
     output_size: u64,
+    inv_scale_raw: u64,
+    half_p: u64,
 }
 
 impl NeuralAccelerator {
-    /// Create a GPU accelerator and upload blocks. Returns None if no GPU available.
+    /// Create a GPU accelerator sized for up to `max_blocks` blocks.
+    /// Initializes the GPU device, compiles shaders, and allocates buffers once.
+    /// Use `upload_blocks()` to load a specific file's blocks before `batch_forward()`.
     ///
-    /// Buffers are sized for ONE individual at a time (block-parallel dispatch).
-    /// The `_num_individuals` parameter is kept for API compatibility but does not
-    /// affect buffer sizing — individuals are processed sequentially.
+    /// The old `try_new(blocks, _num_individuals)` API still works for backward
+    /// compatibility (tests, single-file build).
     pub fn try_new(blocks: &[TIRBlock], _num_individuals: u32) -> Option<Self> {
+        let mut accel = Self::try_create(blocks.len() as u32)?;
+        accel.upload_blocks(blocks);
+        Some(accel)
+    }
+
+    /// Create the accelerator with capacity for `max_blocks`. No blocks loaded yet.
+    pub fn try_create(max_blocks: u32) -> Option<Self> {
+        let max_blocks = max_blocks.max(1);
         let (device, queue) = super::try_create_device()?;
 
-        // Compile shader (goldilocks + fixed_point + neural_forward concatenated)
         let shader_src = shaders::neural_shader();
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("neural_forward"),
@@ -78,33 +90,32 @@ impl NeuralAccelerator {
             cache: None,
         });
 
-        let num_blocks = blocks.len() as u32;
-
-        // Upload blocks: each block's nodes as vec2<u32> (lo, hi) pairs
-        let block_data = encode_blocks_for_gpu(blocks);
-        let block_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("blocks"),
-            contents: bytemuck::cast_slice(&block_data),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
-
-        // Upload block metadata (node counts)
-        let meta_data: Vec<u32> = blocks.iter().map(|b| b.node_count as u32).collect();
-        let meta_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("block_meta"),
-            contents: bytemuck::cast_slice(&meta_data),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
-
-        // Compute fixed-point constants
         let inv_scale_raw = Goldilocks::from_u64(SCALE)
             .inv()
             .expect("SCALE is nonzero")
             .to_u64();
         let half_p = (MODULUS - 1) / 2;
 
+        // All buffers sized for max_blocks capacity
+        let slots_per_block = MAX_NODES * WORDS_PER_NODE;
+        let block_buf_size = (max_blocks as u64) * (slots_per_block as u64) * 8;
+        let block_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("blocks"),
+            size: block_buf_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let meta_buf_size = (max_blocks as u64) * 4;
+        let meta_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("block_meta"),
+            size: meta_buf_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         let params = GpuParams {
-            num_blocks,
+            num_blocks: 0,
             inv_scale_lo: inv_scale_raw as u32,
             inv_scale_hi: (inv_scale_raw >> 32) as u32,
             half_p_lo: half_p as u32,
@@ -113,16 +124,13 @@ impl NeuralAccelerator {
             _pad1: 0,
             _pad2: 0,
         };
-
         let params_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("params"),
             contents: bytemuck::bytes_of(&params),
-            usage: wgpu::BufferUsages::UNIFORM,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        // Scratch buffer: per-block working memory (not per-individual!)
-        // num_blocks threads, each needs SCRATCH_PER_THREAD vec2<u32> entries
-        let scratch_size = (num_blocks as u64) * (SCRATCH_PER_THREAD as u64) * 8;
+        let scratch_size = (max_blocks as u64) * (SCRATCH_PER_THREAD as u64) * 8;
         let scratch_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("scratch"),
             size: scratch_size,
@@ -130,7 +138,6 @@ impl NeuralAccelerator {
             mapped_at_creation: false,
         });
 
-        // Weight buffer: ONE individual's weights (rewritten each dispatch)
         let weight_size = (WEIGHT_COUNT as u64) * 8;
         let weight_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("weights"),
@@ -139,8 +146,7 @@ impl NeuralAccelerator {
             mapped_at_creation: false,
         });
 
-        // Output buffer: num_blocks * MAX_OUTPUT codes per dispatch
-        let output_size = (num_blocks * MAX_OUTPUT as u32) as u64 * 4;
+        let output_size = (max_blocks * MAX_OUTPUT as u32) as u64 * 4;
         let output_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("outputs"),
             size: output_size,
@@ -154,7 +160,6 @@ impl NeuralAccelerator {
             mapped_at_creation: false,
         });
 
-        // Pre-build bind group (all buffer references are stable)
         let bind_group_layout = pipeline.get_bind_group_layout(0);
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("neural_bind_group"),
@@ -199,9 +204,49 @@ impl NeuralAccelerator {
             output_buf,
             staging_buf,
             bind_group,
-            num_blocks,
+            num_blocks: 0,
+            max_blocks,
             output_size,
+            inv_scale_raw,
+            half_p,
         })
+    }
+
+    /// Upload a new set of blocks for the next training file.
+    /// Reuses existing buffers — only writes data, no allocation.
+    pub fn upload_blocks(&mut self, blocks: &[TIRBlock]) {
+        let n = (blocks.len() as u32).min(self.max_blocks);
+        self.num_blocks = n;
+
+        // Upload block node data
+        let block_data = encode_blocks_for_gpu(&blocks[..n as usize]);
+        self.queue
+            .write_buffer(&self.block_buf, 0, bytemuck::cast_slice(&block_data));
+
+        // Upload block metadata
+        let meta_data: Vec<u32> = blocks[..n as usize]
+            .iter()
+            .map(|b| b.node_count as u32)
+            .collect();
+        self.queue
+            .write_buffer(&self.meta_buf, 0, bytemuck::cast_slice(&meta_data));
+
+        // Update params with new block count
+        let params = GpuParams {
+            num_blocks: n,
+            inv_scale_lo: self.inv_scale_raw as u32,
+            inv_scale_hi: (self.inv_scale_raw >> 32) as u32,
+            half_p_lo: self.half_p as u32,
+            half_p_hi: (self.half_p >> 32) as u32,
+            _pad0: 0,
+            _pad1: 0,
+            _pad2: 0,
+        };
+        self.queue
+            .write_buffer(&self.params_buf, 0, bytemuck::bytes_of(&params));
+
+        // Update output size for readback
+        self.output_size = (n * MAX_OUTPUT as u32) as u64 * 4;
     }
 
     /// Run forward pass for ONE individual on all blocks.

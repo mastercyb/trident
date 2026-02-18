@@ -128,6 +128,26 @@ pub fn cmd_train(args: TrainArgs) {
     print_box(&header);
     eprintln!();
 
+    // Create GPU accelerator once, sized for the largest file in corpus
+    let mut gpu_accel = if args.gpu {
+        let max_blocks = compiled.iter().map(|c| c.blocks.len()).max().unwrap_or(1) as u32;
+        match trident::gpu::neural_accel::NeuralAccelerator::try_create(max_blocks) {
+            Some(accel) => {
+                eprintln!(
+                    "  {GREEN}GPU initialized{RESET} (capacity: {} blocks)",
+                    max_blocks
+                );
+                Some(accel)
+            }
+            None => {
+                eprintln!("  {YELLOW}GPU unavailable, falling back to CPU{RESET}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let start = std::time::Instant::now();
     let mut total_trained = 0u64;
     let mut prev_epoch_avg = 0u64;
@@ -154,7 +174,7 @@ pub fn cmd_train(args: TrainArgs) {
             use std::io::Write;
             let _ = std::io::stderr().flush();
 
-            let cost = train_one_compiled(cf, args.generations, args.gpu);
+            let cost = train_one_compiled(cf, args.generations, &mut gpu_accel);
             epoch_costs.push((file_idx, cost));
             total_trained += 1;
         }
@@ -423,7 +443,11 @@ fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
     compiled
 }
 
-fn train_one_compiled(cf: &CompiledFile, generations: u64, gpu: bool) -> u64 {
+fn train_one_compiled(
+    cf: &CompiledFile,
+    generations: u64,
+    gpu_accel: &mut Option<trident::gpu::neural_accel::NeuralAccelerator>,
+) -> u64 {
     use trident::field::PrimeField;
     use trident::ir::tir::lower::decode_output;
     use trident::ir::tir::neural::evolve::Population;
@@ -469,14 +493,10 @@ fn train_one_compiled(cf: &CompiledFile, generations: u64, gpu: bool) -> u64 {
         cf.baseline_cost
     };
 
-    let gpu_accel = if gpu {
-        trident::gpu::neural_accel::NeuralAccelerator::try_new(
-            &cf.blocks,
-            trident::ir::tir::neural::evolve::POP_SIZE as u32,
-        )
-    } else {
-        None
-    };
+    // Upload this file's blocks to the shared GPU accelerator
+    if let Some(ref mut accel) = gpu_accel {
+        accel.upload_blocks(&cf.blocks);
+    }
 
     let mut best_seen = i64::MIN;
     for gen in 0..generations {
