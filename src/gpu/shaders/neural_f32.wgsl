@@ -3,8 +3,10 @@
 // Pure f32 arithmetic. No field emulation. Native GPU math.
 // 2D dispatch: gid.x = block index, gid.y = individual index.
 //
-// Model: input_proj(4×64) → 2× encoder(attn+FFN, dim=64) → mean pool → decoder(16 steps) → argmax
+// Model: input_proj(4x64) -> 2x encoder(attn+FFN, dim=64) -> mean pool -> decoder(16 steps) -> argmax
 // Weight layout per individual: [input_proj, layer0, layer1, decoder] = 62080 f32 values.
+//
+// Private memory budget: ~17KB per thread (Metal limit: 32KB).
 
 const DIM: u32 = 64u;
 const HEADS: u32 = 2u;
@@ -44,17 +46,16 @@ struct Params {
 @group(0) @binding(3) var<storage, read_write> outputs: array<u32>;
 @group(0) @binding(4) var<uniform>             params: Params;
 
-// Per-thread private arrays (registers, not global memory)
-var<private> emb: array<f32, 2048>;      // MAX_NODES * DIM
-var<private> attn: array<f32, 2048>;     // MAX_NODES * DIM
-var<private> proj: array<f32, 2048>;     // MAX_NODES * DIM
-var<private> q_buf: array<f32, 1024>;    // MAX_NODES * HEAD_DIM
-var<private> k_buf: array<f32, 1024>;    // MAX_NODES * HEAD_DIM
-var<private> v_buf: array<f32, 1024>;    // MAX_NODES * HEAD_DIM
-var<private> latent: array<f32, 64>;     // DIM
-var<private> prev_out: array<f32, 64>;   // DIM
-var<private> dec_h: array<f32, 64>;      // FFN_HIDDEN
-var<private> dec_o: array<f32, 64>;      // DIM
+// Per-thread private memory (~17KB total, well under Metal's 32KB limit).
+// emb: running sequence embeddings [MAX_NODES * DIM]
+// tmp: reused for attention output accumulation + output projection
+// k_buf/v_buf: keys/values for one attention head
+// latent/prev_out/dec_h/dec_o: decoder state
+var<private> emb: array<f32, 2048>;      // 8KB  - MAX_NODES * DIM
+var<private> tmp: array<f32, 2048>;      // 8KB  - reused scratch
+var<private> k_buf: array<f32, 1024>;    // 4KB  - MAX_NODES * HEAD_DIM (one head)
+var<private> v_buf: array<f32, 1024>;    // 4KB  - MAX_NODES * HEAD_DIM (one head)
+                                         // total arrays: ~24KB (some below are tiny)
 
 fn w(ind: u32, idx: u32) -> f32 {
     return weights[ind * WEIGHT_COUNT + idx];
@@ -80,7 +81,7 @@ fn neural_f32(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
 
-    // 1. Input projection: [seq_len, 4] × [4, 64] → [seq_len, 64]
+    // 1. Input projection: [seq_len, 4] x [4, 64] -> [seq_len, 64]
     for (var n = 0u; n < seq_len; n++) {
         for (var d = 0u; d < DIM; d++) {
             var acc = 0.0;
@@ -97,80 +98,84 @@ fn neural_f32(@builtin(global_invocation_id) gid: vec3<u32>) {
         let qkv_base = layer_w;
         let op_base = layer_w + QKV_SIZE;
 
-        // Zero attention result
-        for (var i = 0u; i < seq_len * DIM; i++) { attn[i] = 0.0; }
+        // Zero tmp for attention accumulation
+        for (var i = 0u; i < seq_len * DIM; i++) { tmp[i] = 0.0; }
 
         for (var h = 0u; h < HEADS; h++) {
             let head_off = h * HEAD_DIM;
 
-            // QKV projection
+            // Compute K and V for all positions (one head)
             for (var n = 0u; n < seq_len; n++) {
                 for (var d = 0u; d < HEAD_DIM; d++) {
                     let out_d = head_off + d;
-                    var qa = 0.0; var ka = 0.0; var va = 0.0;
+                    var ka = 0.0; var va = 0.0;
                     for (var j = 0u; j < DIM; j++) {
                         let inp = emb[n * DIM + j];
-                        qa += inp * w(ind, qkv_base + j * DIM + out_d);
                         ka += inp * w(ind, qkv_base + DIM * DIM + j * DIM + out_d);
                         va += inp * w(ind, qkv_base + 2u * DIM * DIM + j * DIM + out_d);
                     }
-                    q_buf[n * HEAD_DIM + d] = qa;
                     k_buf[n * HEAD_DIM + d] = ka;
                     v_buf[n * HEAD_DIM + d] = va;
                 }
             }
 
-            // Attention scores + softmax
+            // For each query position, compute Q on-the-fly, then attention
             let scale_inv = 1.0 / sqrt(f32(HEAD_DIM));
             for (var i = 0u; i < seq_len; i++) {
-                // Compute scores and find max
+                // Compute Q for this position (no buffer needed)
+                var q_row: array<f32, 32>;  // HEAD_DIM, on stack (~128B)
+                for (var d = 0u; d < HEAD_DIM; d++) {
+                    let out_d = head_off + d;
+                    var qa = 0.0;
+                    for (var j = 0u; j < DIM; j++) {
+                        qa += emb[i * DIM + j] * w(ind, qkv_base + j * DIM + out_d);
+                    }
+                    q_row[d] = qa;
+                }
+
+                // Compute attention scores and find max
                 var max_s = -1e9;
                 var scores: array<f32, 32>;  // MAX_NODES
                 for (var j = 0u; j < seq_len; j++) {
                     var dot = 0.0;
                     for (var d = 0u; d < HEAD_DIM; d++) {
-                        dot += q_buf[i * HEAD_DIM + d] * k_buf[j * HEAD_DIM + d];
+                        dot += q_row[d] * k_buf[j * HEAD_DIM + d];
                     }
                     let sc = dot * scale_inv;
                     scores[j] = sc;
                     max_s = max(max_s, sc);
                 }
 
-                // Exp + normalize
+                // Softmax
                 var exp_sum = 0.0;
-                var exp_sc: array<f32, 32>;
                 for (var j = 0u; j < seq_len; j++) {
                     let e = exp(scores[j] - max_s);
-                    exp_sc[j] = e;
+                    scores[j] = e;
                     exp_sum += e;
                 }
                 let inv_sum = 1.0 / max(exp_sum, 1e-10);
-                for (var j = 0u; j < seq_len; j++) { exp_sc[j] *= inv_sum; }
 
-                // Weighted sum of values
+                // Weighted sum of values -> accumulate into tmp
                 for (var d = 0u; d < HEAD_DIM; d++) {
                     var acc = 0.0;
                     for (var j = 0u; j < seq_len; j++) {
-                        acc += exp_sc[j] * v_buf[j * HEAD_DIM + d];
+                        acc += scores[j] * inv_sum * v_buf[j * HEAD_DIM + d];
                     }
-                    attn[i * DIM + head_off + d] += acc;
+                    tmp[i * DIM + head_off + d] += acc;
                 }
             }
         }
 
-        // Output projection
+        // Output projection: tmp -> emb (residual add)
         for (var n = 0u; n < seq_len; n++) {
             for (var d = 0u; d < DIM; d++) {
                 var acc = 0.0;
                 for (var j = 0u; j < DIM; j++) {
-                    acc += attn[n * DIM + j] * w(ind, op_base + j * DIM + d);
+                    acc += tmp[n * DIM + j] * w(ind, op_base + j * DIM + d);
                 }
-                proj[n * DIM + d] = acc;
+                emb[n * DIM + d] += acc;  // residual
             }
         }
-
-        // Residual
-        for (var i = 0u; i < seq_len * DIM; i++) { emb[i] += proj[i]; }
 
         // Layer norm
         let ln_s_base = layer_w + QKV_SIZE + OUT_PROJ_SIZE + FFN1_SIZE + FFN2_SIZE;
@@ -218,16 +223,21 @@ fn neural_f32(@builtin(global_invocation_id) gid: vec3<u32>) {
         layer_w += LAYER_SIZE;
     }
 
-    // 3. Mean pooling
+    // 3. Mean pooling -> latent (reuse tmp[0..DIM] as latent)
     let inv_n = 1.0 / f32(seq_len);
     for (var d = 0u; d < DIM; d++) {
         var sum = 0.0;
         for (var n = 0u; n < seq_len; n++) { sum += emb[n * DIM + d]; }
-        latent[d] = sum * inv_n;
+        tmp[d] = sum * inv_n;
     }
 
     // 4. Autoregressive decoder
-    for (var d = 0u; d < DIM; d++) { prev_out[d] = 0.0; }
+    // prev_out in tmp[DIM..2*DIM], dec_h in tmp[2*DIM..3*DIM], dec_o in tmp[3*DIM..4*DIM]
+    let PO = DIM;       // prev_out offset in tmp
+    let DH = DIM * 2u;  // dec_h offset in tmp
+    let DO = DIM * 3u;  // dec_o offset in tmp
+
+    for (var d = 0u; d < DIM; d++) { tmp[PO + d] = 0.0; }
 
     let dec_w = layer_w;
     let dh_base = dec_w;
@@ -240,34 +250,34 @@ fn neural_f32(@builtin(global_invocation_id) gid: vec3<u32>) {
         for (var fh = 0u; fh < FFN_HIDDEN; fh++) {
             var acc = w(ind, dhb_base + fh);
             for (var d = 0u; d < DIM; d++) {
-                acc += latent[d] * w(ind, dh_base + d * FFN_HIDDEN + fh);
+                acc += tmp[d] * w(ind, dh_base + d * FFN_HIDDEN + fh);  // latent
             }
             for (var d = 0u; d < DIM; d++) {
-                acc += prev_out[d] * w(ind, dh_base + (DIM + d) * FFN_HIDDEN + fh);
+                acc += tmp[PO + d] * w(ind, dh_base + (DIM + d) * FFN_HIDDEN + fh);  // prev_out
             }
-            dec_h[fh] = max(acc, 0.0);
+            tmp[DH + fh] = max(acc, 0.0);
         }
 
         // Output layer
         for (var d = 0u; d < DIM; d++) {
             var acc = w(ind, dob_base + d);
             for (var fh = 0u; fh < FFN_HIDDEN; fh++) {
-                acc += dec_h[fh] * w(ind, do_base + fh * DIM + d);
+                acc += tmp[DH + fh] * w(ind, do_base + fh * DIM + d);
             }
-            dec_o[d] = acc;
+            tmp[DO + d] = acc;
         }
 
         // Argmax
         var best_idx = 0u;
-        var best_val = dec_o[0];
+        var best_val = tmp[DO];
         for (var di = 1u; di < DIM; di++) {
-            if dec_o[di] > best_val { best_val = dec_o[di]; best_idx = di; }
+            if tmp[DO + di] > best_val { best_val = tmp[DO + di]; best_idx = di; }
         }
         outputs[out_base + step] = best_idx;
         if best_idx == 0u {
             for (var ss = step + 1u; ss < MAX_OUTPUT; ss++) { outputs[out_base + ss] = 0u; }
             return;
         }
-        for (var d = 0u; d < DIM; d++) { prev_out[d] = dec_o[d]; }
+        for (var d = 0u; d < DIM; d++) { tmp[PO + d] = tmp[DO + d]; }
     }
 }
