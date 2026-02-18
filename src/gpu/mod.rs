@@ -4,6 +4,7 @@
 //! Currently provides neural optimizer batch forward pass.
 
 pub mod neural_accel;
+pub mod neural_f32;
 pub(crate) mod shaders;
 
 /// Try to create a wgpu device and queue.

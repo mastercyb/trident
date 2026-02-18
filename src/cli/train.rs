@@ -65,13 +65,13 @@ pub fn cmd_train(args: TrainArgs) {
     );
     eprintln!();
 
-    // Create GPU accelerator once, sized for the largest file in corpus
+    // Create f32 GPU accelerator once, sized for the largest file in corpus
     let mut gpu_accel = if args.gpu {
         let max_blocks = compiled.iter().map(|c| c.blocks.len()).max().unwrap_or(1) as u32;
         let pop_size = trident::ir::tir::neural::evolve::POP_SIZE as u32;
-        match trident::gpu::neural_accel::NeuralAccelerator::try_create(max_blocks, pop_size) {
+        match trident::gpu::neural_f32::F32Accelerator::try_create(max_blocks, pop_size) {
             Some(accel) => {
-                eprintln!("  GPU initialized (capacity: {} blocks)", max_blocks);
+                eprintln!("  GPU initialized (f32, capacity: {} blocks)", max_blocks);
                 Some(accel)
             }
             None => {
@@ -269,9 +269,8 @@ fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
 fn train_one_compiled(
     cf: &CompiledFile,
     generations: u64,
-    gpu_accel: &mut Option<trident::gpu::neural_accel::NeuralAccelerator>,
+    gpu_accel: &mut Option<trident::gpu::neural_f32::F32Accelerator>,
 ) -> u64 {
-    use trident::field::PrimeField;
     use trident::ir::tir::lower::decode_output;
     use trident::ir::tir::neural::evolve::Population;
     use trident::ir::tir::neural::model::NeuralModel;
@@ -324,10 +323,10 @@ fn train_one_compiled(
     let mut best_seen = i64::MIN;
     for gen in 0..generations {
         if let Some(ref accel) = gpu_accel {
-            let weight_vecs: Vec<Vec<u64>> = pop
+            let weight_vecs: Vec<Vec<trident::field::fixed::Fixed>> = pop
                 .individuals
                 .iter()
-                .map(|ind| ind.weights.iter().map(|w| w.raw().to_u64()).collect())
+                .map(|ind| ind.weights.clone())
                 .collect();
             let gpu_outputs = accel.batch_forward(&weight_vecs);
             for (i, ind) in pop.individuals.iter_mut().enumerate() {
