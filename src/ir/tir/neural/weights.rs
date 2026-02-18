@@ -227,22 +227,49 @@ pub fn load_meta(path: &Path) -> std::io::Result<OptimizerMeta> {
     })
 }
 
-/// Default paths for weight storage (relative to project root).
-/// Global neural weights directory: ~/.trident/neural/
-/// One model learns TIR → TASM across all files.
-fn global_neural_dir() -> PathBuf {
+/// User-local neural weights directory: ~/.trident/neural/
+/// Training writes here. Takes priority over bundled weights.
+fn local_neural_dir() -> PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".into());
     PathBuf::from(home).join(".trident").join("neural")
 }
 
-pub fn weights_path(_project_root: &Path) -> PathBuf {
-    global_neural_dir().join("weights.bin")
+/// Bundled weights shipped with the compiler: data/neural/
+fn bundled_neural_dir() -> PathBuf {
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    PathBuf::from(manifest).join("data").join("neural")
 }
 
+/// Weights path for saving (always writes to user-local).
+pub fn weights_path(_project_root: &Path) -> PathBuf {
+    local_neural_dir().join("weights.bin")
+}
+
+/// Meta path for saving (always writes to user-local).
 pub fn meta_path(_project_root: &Path) -> PathBuf {
-    global_neural_dir().join("meta.toml")
+    local_neural_dir().join("meta.toml")
+}
+
+/// Load weights: user-local first, then bundled.
+pub fn load_best_weights() -> std::io::Result<Vec<Fixed>> {
+    let local = local_neural_dir().join("weights.bin");
+    if local.exists() {
+        return load_weights(&local);
+    }
+    let bundled = bundled_neural_dir().join("weights.bin");
+    load_weights(&bundled)
+}
+
+/// Load meta: user-local first, then bundled.
+pub fn load_best_meta() -> std::io::Result<OptimizerMeta> {
+    let local = local_neural_dir().join("meta.toml");
+    if local.exists() {
+        return load_meta(&local);
+    }
+    let bundled = bundled_neural_dir().join("meta.toml");
+    load_meta(&bundled)
 }
 
 #[cfg(test)]

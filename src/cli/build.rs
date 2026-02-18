@@ -173,15 +173,15 @@ fn run_neural_analysis(
     use trident::ir::tir::neural::report::OptimizerReport;
     use trident::ir::tir::neural::weights::{self, OptimizerMeta, OptimizerStatus};
 
-    // Determine project root for weight storage
+    // Determine project root for weight storage (saves go to ~/.trident/neural/)
     let project_root = entry.parent().unwrap_or(std::path::Path::new("."));
-    let weights_path = weights::weights_path(project_root);
-    let meta_path = weights::meta_path(project_root);
+    let save_weights_path = weights::weights_path(project_root);
+    let save_meta_path = weights::meta_path(project_root);
 
-    // Load existing weights or start fresh
-    let (model, meta) = match weights::load_weights(&weights_path) {
+    // Load existing weights: user-local first, then bundled with compiler
+    let (model, meta) = match weights::load_best_weights() {
         Ok(w) => {
-            let meta = weights::load_meta(&meta_path).unwrap_or(OptimizerMeta {
+            let meta = weights::load_best_meta().unwrap_or(OptimizerMeta {
                 generation: 0,
                 weight_hash: weights::hash_weights(&w),
                 best_score: 0,
@@ -409,7 +409,7 @@ fn run_neural_analysis(
 
         // Save weights
         let weight_hash = weights::hash_weights(best);
-        if let Err(e) = weights::save_weights(best, &weights_path) {
+        if let Err(e) = weights::save_weights(best, &save_weights_path) {
             eprintln!("warning: could not save weights: {}", e);
         }
 
@@ -425,7 +425,7 @@ fn run_neural_analysis(
             baseline_score: baseline_cost,
             status: status.clone(),
         };
-        if let Err(e) = weights::save_meta(&new_meta, &meta_path) {
+        if let Err(e) = weights::save_meta(&new_meta, &save_meta_path) {
             eprintln!("warning: could not save meta: {}", e);
         }
 
@@ -441,7 +441,11 @@ fn run_neural_analysis(
                 &status,
             )
         );
-        eprintln!("  weights: {} -> {}", weights_path.display(), weight_hash);
+        eprintln!(
+            "  weights: {} -> {}",
+            save_weights_path.display(),
+            weight_hash
+        );
         return;
     }
 
