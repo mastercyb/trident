@@ -393,7 +393,6 @@ fn train_one_compiled(
     generations: u64,
     gpu_accel: &mut Option<trident::gpu::neural_accel::NeuralAccelerator>,
 ) -> TrainResult {
-    use trident::ir::tir::lower::decode_output;
     use trident::ir::tir::neural::evolve::Population;
     use trident::ir::tir::neural::model::NeuralModel;
     use trident::ir::tir::neural::weights::{self, OptimizerMeta, OptimizerStatus};
@@ -442,102 +441,55 @@ fn train_one_compiled(
     }
 
     let mut best_seen = i64::MIN;
-    let mut best_individual_weights: Option<Vec<trident::field::fixed::Fixed>> = None;
+    // Captured TASM from the best individual (same arithmetic path that scored it)
+    let mut best_captured: Option<(Vec<Vec<String>>, u64)> = None;
     for gen in 0..generations {
-        if let Some(ref accel) = gpu_accel {
+        // Evaluate all individuals, returning (fitness, per_block_tasm, honest_cost)
+        let evals: Vec<(i64, Vec<Vec<String>>, u64)> = if let Some(ref accel) = gpu_accel {
             let weight_vecs: Vec<Vec<trident::field::fixed::Fixed>> = pop
                 .individuals
                 .iter()
                 .map(|ind| ind.weights.clone())
                 .collect();
             let gpu_outputs = accel.batch_forward(&weight_vecs);
-            // Score in parallel — one thread per individual
             let baselines = &cf.per_block_baselines;
             let block_tasm = &cf.per_block_tasm;
-            let fitnesses: Vec<i64> = std::thread::scope(|s| {
+            std::thread::scope(|s| {
                 let handles: Vec<_> = gpu_outputs
                     .iter()
                     .map(|ind_outputs| {
-                        s.spawn(move || {
-                            let mut total = 0i64;
-                            for (b, block_out) in ind_outputs.iter().enumerate() {
-                                total += score_neural_improvement(
-                                    block_out,
-                                    baselines[b],
-                                    &block_tasm[b],
-                                    b as u64,
-                                ) as i64;
-                            }
-                            total
-                        })
+                        s.spawn(move || eval_individual_gpu(ind_outputs, baselines, block_tasm))
                     })
                     .collect();
                 handles.into_iter().map(|h| h.join().unwrap()).collect()
-            });
-            for (i, ind) in pop.individuals.iter_mut().enumerate() {
-                ind.fitness = fitnesses[i];
-            }
-            pop.update_best();
+            })
         } else {
-            // CPU path
-            let fitnesses: Vec<i64> = std::thread::scope(|s| {
+            std::thread::scope(|s| {
                 let handles: Vec<_> = pop
                     .individuals
                     .iter()
-                    .map(|individual| {
-                        s.spawn(move || {
-                            use trident::cost::stack_verifier;
-                            let mut model = NeuralModel::from_weight_vec(&individual.weights);
-                            let mut total = 0i64;
-                            for (i, block) in cf.blocks.iter().enumerate() {
-                                let baseline = cf.per_block_baselines[i];
-                                let output = model.forward(block);
-                                if output.is_empty() {
-                                    continue;
-                                }
-                                let candidate_lines = decode_output(&output);
-                                if candidate_lines.is_empty() {
-                                    continue;
-                                }
-                                let baseline_tasm = &cf.per_block_tasm[i];
-                                if baseline_tasm.is_empty()
-                                    || !stack_verifier::verify_equivalent(
-                                        baseline_tasm,
-                                        &candidate_lines,
-                                        i as u64,
-                                    )
-                                {
-                                    continue;
-                                }
-                                let profile = trident::cost::scorer::profile_tasm(
-                                    &candidate_lines
-                                        .iter()
-                                        .map(|s| s.as_str())
-                                        .collect::<Vec<_>>(),
-                                );
-                                let cost = profile.cost().min(baseline);
-                                total += (baseline as i64) - (cost as i64);
-                            }
-                            total
-                        })
-                    })
+                    .map(|individual| s.spawn(move || eval_individual_cpu(individual, cf)))
                     .collect();
                 handles
                     .into_iter()
                     .map(|h| h.join().expect("evaluate thread panicked"))
                     .collect()
-            });
-            for (i, ind) in pop.individuals.iter_mut().enumerate() {
-                ind.fitness = fitnesses[i];
-            }
-            pop.update_best();
-        }
+            })
+        };
 
-        let gen_best_ind = pop.individuals.iter().max_by_key(|i| i.fitness);
-        if let Some(ind) = gen_best_ind {
-            if ind.fitness > best_seen {
-                best_seen = ind.fitness;
-                best_individual_weights = Some(ind.weights.clone());
+        for (i, (fitness, _, _)) in evals.iter().enumerate() {
+            pop.individuals[i].fitness = *fitness;
+        }
+        pop.update_best();
+
+        // Track best individual's captured TASM (from same arithmetic path)
+        if let Some((idx, (fitness, _, _))) =
+            evals.iter().enumerate().max_by_key(|(_, (f, _, _))| *f)
+        {
+            if *fitness > best_seen {
+                best_seen = *fitness;
+                let (_, tasm, cost) = evals.into_iter().nth(idx).unwrap();
+                best_captured = Some((tasm, cost));
             }
         }
         pop.evolve(gen_start.wrapping_add(gen));
@@ -567,29 +519,22 @@ fn train_one_compiled(
     };
     let _ = weights::save_meta(&new_meta, &weights::meta_path(dummy_root));
 
-    // Capture per-block neural TASM from the actual best individual.
-    // The reported cost reflects only what was actually captured and verified —
-    // not the evolutionary population's best_seen (which may not reproduce).
-    let (neural_blocks, honest_cost) = if let Some(ref bw) = best_individual_weights {
-        capture_neural_tasm(cf, bw)
+    // Use TASM captured during fitness evaluation (same arithmetic path).
+    // No re-derivation — what scored is what gets saved.
+    let (honest_cost, neural_tasm) = if let Some((tasm, cost)) = best_captured {
+        let has_neural = cost != cf.baseline_cost
+            || tasm
+                .iter()
+                .zip(cf.per_block_tasm.iter())
+                .any(|(n, b)| n != b);
+        (cost, if has_neural { Some(tasm) } else { None })
     } else {
-        (cf.per_block_tasm.clone(), cf.baseline_cost)
+        (cf.baseline_cost, None)
     };
-
-    // Write file if any block had a verified neural candidate
-    let has_neural = honest_cost != cf.baseline_cost
-        || neural_blocks
-            .iter()
-            .zip(cf.per_block_tasm.iter())
-            .any(|(n, b)| n != b);
 
     TrainResult {
         cost: honest_cost,
-        neural_tasm: if has_neural {
-            Some(neural_blocks)
-        } else {
-            None
-        },
+        neural_tasm,
     }
 }
 
@@ -641,56 +586,6 @@ fn short_path(path: &Path) -> String {
     s.to_string()
 }
 
-/// Capture per-block neural TASM from specific weights (the actual best individual).
-/// Always returns per-block TASM: for blocks where the neural candidate passes
-/// verification, use the candidate (even if more expensive — honest reporting).
-/// For blocks that fail verification, fall back to baseline.
-/// Also returns the honest cost (sum of all block costs as-used).
-fn capture_neural_tasm(
-    cf: &CompiledFile,
-    weights: &[trident::field::fixed::Fixed],
-) -> (Vec<Vec<String>>, u64) {
-    use trident::cost::{scorer, stack_verifier};
-    use trident::ir::tir::lower::decode_output;
-    use trident::ir::tir::neural::model::NeuralModel;
-
-    let mut model = NeuralModel::from_weight_vec(weights);
-    let mut per_block: Vec<Vec<String>> = Vec::with_capacity(cf.blocks.len());
-    let mut total_cost = 0u64;
-    let mut any_neural = false;
-
-    for (i, block) in cf.blocks.iter().enumerate() {
-        let baseline_tasm = &cf.per_block_tasm[i];
-        let baseline_cost = cf.per_block_baselines[i];
-
-        let output = model.forward(block);
-        if !output.is_empty() {
-            let candidate = decode_output(&output);
-            if !candidate.is_empty()
-                && !baseline_tasm.is_empty()
-                && stack_verifier::verify_equivalent(baseline_tasm, &candidate, i as u64)
-            {
-                let profile =
-                    scorer::profile_tasm(&candidate.iter().map(|s| s.as_str()).collect::<Vec<_>>());
-                total_cost += profile.cost();
-                per_block.push(candidate);
-                any_neural = true;
-                continue;
-            }
-        }
-        // Verification failed or empty output — baseline fallback
-        total_cost += baseline_cost;
-        per_block.push(baseline_tasm.clone());
-    }
-
-    // Only write files when the model actually produced at least one verified block
-    if !any_neural {
-        total_cost = cf.baseline_cost;
-    }
-
-    (per_block, total_cost)
-}
-
 /// Write captured neural TASM to disk at benches/<path>.neural.tasm.
 fn write_neural_tasm(cf: &CompiledFile, per_block: &[Vec<String>], repo_root: &Path) {
     let benches_dir = repo_root.join("benches");
@@ -715,16 +610,95 @@ fn write_neural_tasm(cf: &CompiledFile, per_block: &[Vec<String>], repo_root: &P
     }
 }
 
-fn score_neural_improvement(
-    raw_codes: &[u32],
-    block_baseline: u64,
-    baseline_tasm: &[String],
-    block_seed: u64,
-) -> u64 {
-    trident::cost::stack_verifier::score_neural_improvement(
-        raw_codes,
-        block_baseline,
-        baseline_tasm,
-        block_seed,
-    )
+/// Evaluate one individual on GPU outputs: returns (fitness, per_block_tasm, honest_cost).
+/// Uses the same GPU f32 decode path for both scoring and capture.
+fn eval_individual_gpu(
+    ind_outputs: &[Vec<u32>],
+    baselines: &[u64],
+    block_tasm: &[Vec<String>],
+) -> (i64, Vec<Vec<String>>, u64) {
+    use trident::cost::{scorer, stack_verifier};
+    use trident::ir::tir::lower::decode_output;
+
+    let mut fitness = 0i64;
+    let mut per_block: Vec<Vec<String>> = Vec::with_capacity(ind_outputs.len());
+    let mut honest_cost = 0u64;
+
+    for (b, block_out) in ind_outputs.iter().enumerate() {
+        let baseline = baselines[b];
+        let baseline_lines = &block_tasm[b];
+
+        // Decode GPU output (same path as score_neural_improvement)
+        let codes: Vec<u64> = block_out
+            .iter()
+            .take_while(|&&c| c != 0)
+            .map(|&c| c as u64)
+            .collect();
+        if !codes.is_empty() {
+            let candidate = decode_output(&codes);
+            if !candidate.is_empty()
+                && !baseline_lines.is_empty()
+                && stack_verifier::verify_equivalent(baseline_lines, &candidate, b as u64)
+            {
+                let profile =
+                    scorer::profile_tasm(&candidate.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+                let cost = profile.cost();
+                honest_cost += cost;
+                if cost < baseline {
+                    fitness += (baseline as i64) - (cost as i64);
+                }
+                per_block.push(candidate);
+                continue;
+            }
+        }
+        // Failed verification or empty — baseline fallback
+        honest_cost += baseline;
+        per_block.push(baseline_lines.clone());
+    }
+
+    (fitness, per_block, honest_cost)
+}
+
+/// Evaluate one individual on CPU: returns (fitness, per_block_tasm, honest_cost).
+fn eval_individual_cpu(
+    individual: &trident::ir::tir::neural::evolve::Individual,
+    cf: &CompiledFile,
+) -> (i64, Vec<Vec<String>>, u64) {
+    use trident::cost::{scorer, stack_verifier};
+    use trident::ir::tir::lower::decode_output;
+    use trident::ir::tir::neural::model::NeuralModel;
+
+    let mut model = NeuralModel::from_weight_vec(&individual.weights);
+    let mut fitness = 0i64;
+    let mut per_block: Vec<Vec<String>> = Vec::with_capacity(cf.blocks.len());
+    let mut honest_cost = 0u64;
+
+    for (i, block) in cf.blocks.iter().enumerate() {
+        let baseline = cf.per_block_baselines[i];
+        let baseline_tasm = &cf.per_block_tasm[i];
+
+        let output = model.forward(block);
+        if !output.is_empty() {
+            let candidate = decode_output(&output);
+            if !candidate.is_empty()
+                && !baseline_tasm.is_empty()
+                && stack_verifier::verify_equivalent(baseline_tasm, &candidate, i as u64)
+            {
+                let profile =
+                    scorer::profile_tasm(&candidate.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+                let cost = profile.cost();
+                honest_cost += cost;
+                if cost < baseline {
+                    fitness += (baseline as i64) - (cost as i64);
+                }
+                per_block.push(candidate);
+                continue;
+            }
+        }
+        // Failed verification or empty — baseline fallback
+        honest_cost += baseline;
+        per_block.push(baseline_tasm.clone());
+    }
+
+    (fitness, per_block, honest_cost)
 }
