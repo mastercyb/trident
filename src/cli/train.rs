@@ -158,15 +158,15 @@ pub fn cmd_train(args: TrainArgs) {
             String::new()
         };
 
+        let reduction_pct = (1.0 - ratio) * 100.0;
         eprintln!(
-            "\r  epoch {}/{} | {} blocks | cost {} / baseline {} ({:.2}x) | avg {} | {:.1}s{}{}",
+            "\r  epoch {}/{} | cost {}/{} ({:.2}x) | {:.1}% reduction | {:.1}s{}{}",
             epoch + 1,
             args.epochs,
-            total_blocks,
             epoch_cost,
             total_baseline,
             ratio,
-            avg_cost,
+            reduction_pct,
             epoch_elapsed.as_secs_f64(),
             trend,
             conv_info,
