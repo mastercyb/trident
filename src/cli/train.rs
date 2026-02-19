@@ -156,20 +156,21 @@ pub fn cmd_train(args: TrainArgs) {
         }
 
         let epoch_elapsed = epoch_start.elapsed();
-        let epoch_cost: u64 = epoch_costs.iter().map(|e| e.1).sum();
-        let avg_cost = epoch_cost / compiled.len().max(1) as u64;
+        // Track raw neural cost for convergence — not fallback cost
+        let epoch_raw: u64 = epoch_costs.iter().map(|e| e.6).sum();
+        let avg_raw = epoch_raw / compiled.len().max(1) as u64;
 
         let trend = if epoch == 0 {
             String::new()
-        } else if avg_cost < prev_epoch_avg {
-            format!(" (-{} vs prev)", prev_epoch_avg - avg_cost)
-        } else if avg_cost > prev_epoch_avg {
-            format!(" (+{} vs prev)", avg_cost - prev_epoch_avg)
+        } else if avg_raw < prev_epoch_avg {
+            format!(" (-{} vs prev)", prev_epoch_avg - avg_raw)
+        } else if avg_raw > prev_epoch_avg {
+            format!(" (+{} vs prev)", avg_raw - prev_epoch_avg)
         } else {
             " (=)".into()
         };
-        prev_epoch_avg = avg_cost;
-        epoch_history.push(epoch_cost);
+        prev_epoch_avg = avg_raw;
+        epoch_history.push(epoch_raw);
 
         // EMA convergence: track smoothed improvement rate + volatility
         let conv_info = if epoch_history.len() >= 2 {
@@ -212,7 +213,6 @@ pub fn cmd_train(args: TrainArgs) {
         let total_blk: usize = epoch_costs.iter().map(|e| e.3).sum();
         let epoch_verified: usize = epoch_costs.iter().map(|e| e.4).sum();
         let epoch_decoded: usize = epoch_costs.iter().map(|e| e.5).sum();
-        let epoch_raw: u64 = epoch_costs.iter().map(|e| e.6).sum();
         let raw_ratio = epoch_raw as f64 / total_baseline.max(1) as f64;
         eprintln!(
             "\r  epoch {}/{} | neural {}/{} ({:.2}x) | decoded {}/{} | verified {} | won {} | {:.1}s{}{}",
