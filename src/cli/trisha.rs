@@ -202,10 +202,12 @@ pub fn run_trisha(args: &[&str]) -> Result<TrishaResult, String> {
 pub fn trisha_args_with_inputs(base_args: &[&str], harness: &Harness) -> Vec<String> {
     let mut args: Vec<String> = base_args.iter().map(|s| s.to_string()).collect();
 
-    // Over-provision for nested calls: each function might call others,
-    // so divine/digest consumption can exceed static count. n_funcs is a
-    // reasonable upper bound (read_io is already replaced with push 0).
-    let multiplier = harness.n_funcs.max(1);
+    // Over-provision for nested calls: functions call each other internally
+    // (e.g. hash→permute→full_round→divine), so runtime divine consumption
+    // can far exceed the static instruction count. Use n_funcs² as multiplier
+    // since each of n_funcs harness calls can trigger n_funcs internal calls.
+    // Unused secret/digest inputs are harmless (Triton VM ignores them).
+    let multiplier = (harness.n_funcs * harness.n_funcs).max(1);
 
     if harness.read_io_count > 0 {
         args.push("--input-values".into());
