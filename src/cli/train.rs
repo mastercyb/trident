@@ -195,30 +195,22 @@ pub fn cmd_train(args: TrainArgs) {
         };
 
         let epoch_wins: usize = epoch_costs.iter().map(|(_, _, w, _)| w).sum();
-        if epoch_wins > 0 {
-            let reduction_pct = (1.0 - ratio) * 100.0;
-            eprintln!(
-                "\r  epoch {}/{} | cost {}/{} ({:.2}x) | {:.1}% reduction | {:.1}s{}{}",
-                epoch + 1,
-                args.epochs,
-                epoch_cost,
-                total_baseline,
-                ratio,
-                reduction_pct,
-                epoch_elapsed.as_secs_f64(),
-                trend,
-                conv_info,
-            );
-        } else {
-            eprintln!(
-                "\r  epoch {}/{} | cost {} (baseline) | no neural wins | {:.1}s{}",
-                epoch + 1,
-                args.epochs,
-                total_baseline,
-                epoch_elapsed.as_secs_f64(),
-                conv_info,
-            );
-        }
+        let total_blk: usize = epoch_costs.iter().map(|(_, _, _, b)| b).sum();
+        let reduction_pct = (1.0 - ratio) * 100.0;
+        eprintln!(
+            "\r  epoch {}/{} | {}/{} ({:.2}x) | {:.1}% | {}/{} blocks won | {:.1}s{}{}",
+            epoch + 1,
+            args.epochs,
+            epoch_cost,
+            total_baseline,
+            ratio,
+            reduction_pct,
+            epoch_wins,
+            total_blk,
+            epoch_elapsed.as_secs_f64(),
+            trend,
+            conv_info,
+        );
 
         // Per-file breakdown on first and last epoch
         if epoch == 0 || epoch + 1 == args.epochs {
@@ -249,25 +241,22 @@ pub fn cmd_train(args: TrainArgs) {
                 label, total_wins, total_blk,
             );
             for (path, blocks, cost, baseline, wins) in &sorted {
-                if *wins > 0 {
-                    let r = *cost as f64 / (*baseline).max(1) as f64;
-                    eprintln!(
-                        "      {:<45} {:>3} blk  {:>6} / {:<6} ({:.2}x) {} {}/{} won",
-                        path,
-                        blocks,
-                        cost,
-                        baseline,
-                        r,
-                        cost_bar(r),
-                        wins,
-                        blocks,
-                    );
+                let r = *cost as f64 / (*baseline).max(1) as f64;
+                let wins_tag = if *wins > 0 {
+                    format!("{}/{} won", wins, blocks)
                 } else {
-                    eprintln!(
-                        "      {:<45} {:>3} blk  {:>6}           (baseline)",
-                        path, blocks, baseline,
-                    );
-                }
+                    "0 won".into()
+                };
+                eprintln!(
+                    "      {:<45} {:>3} blk  {:>6} / {:<6} ({:.2}x) {} {}",
+                    path,
+                    blocks,
+                    cost,
+                    baseline,
+                    r,
+                    cost_bar(r),
+                    wins_tag,
+                );
             }
             eprintln!();
         }
@@ -312,20 +301,13 @@ pub fn cmd_train(args: TrainArgs) {
         total_trained,
         elapsed.as_secs_f64()
     );
-    if final_cost < total_baseline {
-        eprintln!(
-            "  corpus cost  {} / {} baseline ({:.2}x) — {:.1}% reduction",
-            final_cost,
-            total_baseline,
-            final_ratio,
-            (1.0 - final_ratio) * 100.0,
-        );
-    } else {
-        eprintln!(
-            "  corpus cost  {} (no improvement over baseline)",
-            total_baseline,
-        );
-    }
+    eprintln!(
+        "  corpus cost  {} / {} baseline ({:.2}x) — {:.1}% reduction",
+        final_cost,
+        total_baseline,
+        final_ratio,
+        (1.0 - final_ratio) * 100.0,
+    );
     if let Some(rate) = ema_rate {
         let vol = ema_volatility.unwrap_or(0.0);
         let (label, hint) = if vol > 0.02 {
