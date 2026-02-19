@@ -173,23 +173,24 @@ implementation.
 
 ## Agent Memory
 
-`.claude/` is persistent agent memory — signed-off plans, audit results,
-performance reports, and design decisions. Structured as:
+All signed-off plans and design documents persist in the project repo,
+not in ephemeral agent storage. When the user approves a plan, it
+becomes a committed artifact.
 
 ```
-.claude/
-  settings.local.json   Claude Code settings
+.cortex/
   plans/                Signed-off design decisions and implementation plans
-  audits/               Audit logs (chronological) and summaries
-  other/                Performance reports, analysis, misc findings
+  audits/               Audit logs and summaries
+  reports/              Performance reports, analysis, findings
 ```
 
 Rules:
 
 1. Read what's already there before writing.
-2. Plans go in `plans/` with descriptive names (e.g. `gpu-neural-rewrite.md`).
-3. Audits are chronological logs, one per date, plus a rolling `summary.md`.
+2. Plans go in `.cortex/plans/` with descriptive names (e.g. `gpu-neural-rewrite.md`).
+3. Every plan the user signs off on gets committed to the repo.
 4. Compress old entries when files grow stale — density over volume.
+5. Budget: 1000 lines total across `.cortex/`. Merge or delete weakest entries when exceeded.
 
 ## Dual-Stream Optimization
 

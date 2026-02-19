@@ -28,5 +28,5 @@ editor/zed/grammars/
 !data/neural/weights.bin
 !data/neural/meta.toml
 
-# Agent shared memory (migrated to .claude/)
-/.cortex/
+# Agent memory — keep plans/audits/reports, ignore scratch
+/.cortex/scratch/

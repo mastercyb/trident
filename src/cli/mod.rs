@@ -1,6 +1,7 @@
 pub mod audit;
 pub mod bench;
 pub mod build;
+// no subcommand — shared trisha subprocess helpers for bench + audit
 pub mod check;
 pub mod deploy;
 pub mod deps;
@@ -17,6 +18,7 @@ pub mod store;
 pub mod test;
 pub mod train;
 pub mod tree_sitter;
+pub mod trisha;
 pub mod verify;
 pub mod view;
 
