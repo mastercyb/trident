@@ -66,6 +66,10 @@ Rules:
    is a lie. `0 verified out of 1439 decoded` is the truth.
 5. The user knows what they are saying. Trust their words over your
    interpretation of their intent.
+6. Neural output can be worse than formal. A 10K MLP with broken
+   training signal produces garbage more expensive than a compiler.
+   That is expected, not an error in measurement. Never hide bad
+   neural results because "neural should be better." Show them.
 
 ## Source of Truth
 
