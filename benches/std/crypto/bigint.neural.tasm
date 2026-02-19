@@ -1,0 +1,550 @@
+    push 0
+    split
+    pop 1
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    swap 8
+    pop 5
+    pop 3
+    push 0
+    split
+    pop 1
+    push 1
+    split
+    pop 1
+    dup 0
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    swap 9
+    pop 5
+    pop 4
+xb_mul
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    add
+    dup 1
+    add
+    dup 0
+    split
+    dup 0
+    dup 2
+    push 1073741824
+    swap 1
+    swap 2
+    write_mem 2
+    pop 5
+    pop 5
+    push 1073741825
+    read_mem 2
+    pop 1
+    dup 2
+    dup 2
+    dup 2
+    push 65536
+    split
+    pop 1
+    dup 0
+    dup 1
+    mul
+    dup 0
+    dup 5
+    add
+    dup 4
+    push -1
+    mul
+    add
+    dup 3
+    push -1
+    mul
+    add
+    dup 0
+    split
+    dup 1
+    push 1
+    split
+    pop 1
+    eq
+    push 0
+    split
+    pop 1
+    dup 2
+    dup 2
+    dup 2
+    dup 4
+    dup 4
+    dup 2
+    dup 6
+    dup 6
+    dup 2
+    dup 8
+    dup 8
+    dup 2
+    dup 10
+    dup 10
+    dup 2
+    dup 12
+    dup 12
+    dup 2
+    dup 14
+    swap 13
+    pop 1
+    dup 14
+    swap 13
+    dup 2
+    dup 14
+    swap 13
+    pop 1
+    dup 14
+    swap 13
+    dup 2
+    swap 13
+    pop 1
+    dup 0
+    swap 13
+    dup 0
+    swap 13
+    pop 1
+    dup 0
+    dup 12
+    dup 10
+    dup 8
+    dup 6
+    dup 4
+    swap 11
+    pop 5
+    pop 1
+    swap 3
+    swap 10
+    pop 3
+    swap 12
+    pop 5
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    swap 15
+    pop 5
+    pop 3
+    dup 0
+    swap 9
+    swap 8
+    swap 7
+    swap 6
+    swap 5
+    swap 4
+    swap 3
+    swap 2
+    pop 5
+    pop 3
+    push 0
+    split
+    pop 1
+    dup 2
+    dup 2
+    dup 2
+    dup 4
+    dup 4
+    dup 2
+    dup 6
+    dup 6
+    dup 2
+    dup 8
+    dup 8
+    dup 2
+    dup 10
+    dup 10
+    dup 2
+    dup 12
+    dup 12
+    dup 2
+    dup 14
+    swap 13
+    pop 1
+    dup 14
+    swap 13
+    dup 2
+    dup 14
+    swap 13
+    pop 1
+    dup 14
+    swap 13
+    dup 2
+    swap 13
+    pop 1
+    dup 0
+    swap 13
+    dup 0
+    swap 13
+    pop 1
+    dup 0
+    dup 12
+    dup 10
+    dup 8
+    dup 6
+    dup 4
+    swap 11
+    pop 5
+    pop 2
+    swap 15
+    pop 5
+    pop 5
+    pop 5
+    dup 1
+    dup 1
+    lt
+    swap 1
+    pop 1
+    dup 1
+    dup 1
+    eq
+    swap 1
+    pop 1
+    dup 0
+    push 0
+    split
+    pop 1
+    dup 3
+    dup 2
+    mul
+    dup 0
+    split
+    dup 6
+    dup 5
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    dup 9
+    dup 8
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    dup 12
+    dup 11
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    swap 14
+    pop 1
+    dup 15
+    swap 13
+    pop 1
+    dup 13
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    swap 12
+    pop 1
+    swap 12
+    dup 15
+    swap 13
+    pop 1
+    dup 13
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    swap 12
+    pop 1
+    swap 12
+    dup 15
+    swap 13
+    pop 1
+    dup 13
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    swap 12
+    pop 1
+    swap 12
+    dup 15
+    swap 13
+    pop 1
+    dup 13
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    swap 12
+    pop 1
+    swap 12
+    swap 13
+    pop 1
+    dup 0
+    swap 13
+    pop 1
+    dup 0
+    swap 12
+    dup 0
+    swap 13
+    pop 1
+    dup 0
+    swap 13
+    pop 1
+    dup 0
+    dup 11
+    dup 8
+    dup 5
+    swap 12
+    pop 5
+    pop 1
+    swap 6
+    swap 12
+    pop 5
+    pop 3
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    swap 15
+    pop 5
+    pop 3
+    dup 0
+    swap 9
+    swap 8
+    swap 7
+    swap 6
+    swap 5
+    swap 4
+    swap 3
+    swap 2
+    pop 5
+    pop 3
+    push 0
+    split
+    pop 1
+    dup 0
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    swap 9
+    pop 5
+    pop 4
+    push 0
+    split
+    pop 1
+    dup 1
+    push 0
+    split
+    pop 1
+    eq
+    swap 2
+    pop 2
+    dup 1
+    dup 1
+    pop 1
+    dup 0
+    dup 3
+    dup 3
+    pop 1
+    dup 0
+    push 1
+    split
+    pop 1
+    dup 2
+    dup 1
+    pop 1
+    dup 6
+    dup 6
+    pop 1
+    dup 0
+    push 2
+    split
+    pop 1
+    dup 2
+    dup 1
+    pop 1
+    dup 9
+    dup 9
+    pop 1
+    dup 0
+    push 3
+    split
+    pop 1
+    dup 2
+    dup 1
+    pop 1
+    dup 12
+    dup 12
+    pop 1
+    dup 0
+    push 4
+    split
+    pop 1
+    dup 2
+    swap 13
+    pop 1
+    dup 1
+    pop 1
+    dup 14
+    swap 12
+    pop 1
+    dup 14
+    pop 1
+    dup 0
+    swap 13
+    pop 1
+    push 5
+    split
+    pop 1
+    dup 2
+    swap 13
+    pop 1
+    dup 1
+    pop 1
+    dup 14
+    swap 12
+    pop 1
+    dup 14
+    pop 1
+    dup 0
+    swap 13
+    pop 1
+    push 6
+    split
+    pop 1
+    dup 2
+    swap 13
+    pop 1
+    dup 1
+    pop 1
+    dup 14
+    swap 12
+    pop 1
+    dup 14
+    pop 1
+    dup 0
+    swap 13
+    pop 1
+    push 7
+    split
+    pop 1
+    dup 2
+    swap 13
+    pop 1
+    dup 1
+    pop 1
+    dup 0
+    swap 15
+    pop 5
+    pop 5
+    pop 5
+    dup 1
+    dup 1
+    swap 1
+    pop 1
+    dup 2
+    dup 2
+    dup 1
+    dup 3
+    swap 5
+    pop 5
+    dup 2
+    dup 2
+    swap 2
+    pop 2
+    dup 2
+    dup 2
+    dup 0
+    dup 2
+    swap 4
+    pop 4
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    swap 9
+    pop 5
+    pop 4
+    dup 1
+    dup 1
+    xor
+    dup 1
+    dup 1
+    xor
+    dup 1
+    dup 1
+    xor
+    dup 1
+    dup 1
+    xor
+    dup 1
+    dup 1
+    xor
+    dup 1
+    dup 1
+    xor
+    dup 1
+    dup 1
+    xor
+    dup 1
+    dup 1
+    xor
+    swap 9
+    pop 5
+    pop 4
+    push 0
+    split
+    pop 1
+    dup 1
+    dup 1
+    eq
+    swap 1
+    pop 1

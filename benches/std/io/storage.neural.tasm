@@ -1,0 +1,8 @@
+    read_mem 1
+    pop 1
+    write_mem 1
+    pop 1
+    read_mem 5
+    pop 1
+    write_mem 5
+    pop 1

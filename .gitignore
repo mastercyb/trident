@@ -5,6 +5,7 @@ editor/zed/target/
 # Compiled TASM output (but keep hand-written baselines)
 *.tasm
 !*.baseline.tasm
+!*.neural.tasm
 
 # Compiled WASM grammars
 *.wasm
