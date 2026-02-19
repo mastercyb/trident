@@ -321,7 +321,7 @@
     swap 7
     swap 8
     swap 9
-xb_mul
+nop
     dup 0
     dup 5
     dup 5

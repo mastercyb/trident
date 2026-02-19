@@ -43,9 +43,8 @@
     push 2048
     split
     pop 1
-    push 8192
-    split
-    pop 1
+nop
+push 0
     push 131072
     split
     pop 1
@@ -88,9 +87,8 @@
     push 16384
     split
     pop 1
-    push 8192
-    split
-    pop 1
+nop
+push 0
     push 1024
     split
     pop 1

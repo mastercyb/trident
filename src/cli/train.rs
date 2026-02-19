@@ -339,9 +339,6 @@ fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
         }
 
         let lowering = trident::ir::tir::lower::create_stack_lowering(&options.target_config.name);
-        let baseline_tasm = lowering.lower(&ir);
-        let baseline_profile = trident::cost::scorer::profile_tasm_str(&baseline_tasm.join("\n"));
-        let baseline_cost = baseline_profile.cost();
 
         let mut per_block_baselines: Vec<u64> = Vec::new();
         let mut per_block_tasm: Vec<Vec<String>> = Vec::new();
@@ -364,6 +361,13 @@ fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
             per_block_baselines.push(profile.cost().max(1));
             per_block_tasm.push(block_tasm);
         }
+
+        // baseline_cost = sum of per-block baselines.
+        // NOT the full-file compiler output — that includes control flow,
+        // labels, and loop boilerplate that blocks never cover. Using the
+        // full-file cost as denominator would fake a permanent "win" for
+        // any file where blocks cover less than the full IR.
+        let baseline_cost: u64 = per_block_baselines.iter().sum();
 
         compiled.push(CompiledFile {
             path: short_path(file),

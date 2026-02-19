@@ -447,9 +447,7 @@
     push 0
     eq
     pop 1
-    dup 0
-    split
-    pop 3
+pop 1
     hash
     dup 0
     split

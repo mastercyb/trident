@@ -29,7 +29,20 @@
     swap 9
     pop 5
     pop 4
-xb_mul
+    push 0
+    split
+    pop 1
+    dup 1
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    swap 9
+    pop 5
+    pop 4
     dup 2
     dup 2
     dup 2
@@ -630,23 +643,7 @@ xb_mul
     dup 1
     swap 1
     pop 1
-    dup 0
-    write_io 1
-    dup 0
-    write_io 1
-    dup 0
-    write_io 1
-    dup 0
-    write_io 1
-    dup 0
-    write_io 1
-    dup 0
-    write_io 1
-    dup 0
-    write_io 1
-    dup 0
-    write_io 1
-    pop 1
+write_io 1
     dup 0
     dup 0
     pop 1

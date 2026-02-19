@@ -428,15 +428,4 @@
     push 0
     dup 2
     pop 1
-    dup 1
-    dup 1
-    push -1
-    mul
-    add
-    dup 0
-    split
-    pop 1
-    dup 1
-    write_io 1
-    pop 5
-    pop 1
+pop 4

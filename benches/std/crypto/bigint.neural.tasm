@@ -1,17 +1,4 @@
-    push 0
-    split
-    pop 1
-    dup 0
-    dup 0
-    dup 0
-    dup 0
-    dup 0
-    dup 0
-    dup 0
-    dup 0
-    swap 8
-    pop 5
-    pop 3
+push 0
     push 0
     split
     pop 1
@@ -29,7 +16,20 @@
     swap 9
     pop 5
     pop 4
-xb_mul
+    push 0
+    split
+    pop 1
+    dup 1
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    swap 9
+    pop 5
+    pop 4
     dup 2
     dup 2
     dup 2

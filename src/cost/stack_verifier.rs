@@ -414,6 +414,45 @@ pub fn generate_test_stack(seed: u64, size: usize) -> Vec<u64> {
 /// missing operations.
 /// Conservative: rejects candidates when baseline can't be simulated.
 pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], seed: u64) -> bool {
+    // Only allow instructions the verifier simulates with exact Goldilocks
+    // arithmetic. The neural optimizer exploits every dummy-value instruction
+    // (divine, hash, read_io, read_mem, sponge_*) and every nop-modeled
+    // instruction (xb_mul, merkle_step) to produce "equivalent" output that
+    // is actually wrong on real Triton VM.
+    const ALLOWED: &[&str] = &[
+        "push",
+        "pop",
+        "dup",
+        "swap",
+        "pick",
+        "place",
+        "add",
+        "mul",
+        "invert",
+        "eq",
+        "lt",
+        "and",
+        "xor",
+        "split",
+        "div_mod",
+        "pow",
+        "log_2_floor",
+        "pop_count",
+        "nop",
+        "halt",
+        "assert",
+        "write_io",
+    ];
+    for line in candidate_tasm {
+        let op = line.trim().split_whitespace().next().unwrap_or("");
+        if op.is_empty() || op.starts_with("//") || op.ends_with(':') {
+            continue;
+        }
+        if !ALLOWED.contains(&op) {
+            return false;
+        }
+    }
+
     const NUM_SEEDS: u64 = 8;
     for i in 0..NUM_SEEDS {
         let test_seed = seed.wrapping_mul(6364136223846793005).wrapping_add(i);
