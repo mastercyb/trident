@@ -170,73 +170,77 @@ impl StackLowering for SpeculativeLowering {
 
 /// Decode neural output codes to TASM instruction strings.
 /// Each code maps to a basic TASM instruction.
+///
+/// Every entry must be in the verifier's ALLOWED list. Codes that previously
+/// mapped to disallowed ops (hash, assert, read_io, divine, etc.) are remapped
+/// to useful allowed instructions so the model can never produce unverifiable
+/// output. The vocab size stays 64 to match the model architecture and GPU shader.
 pub fn decode_output(codes: &[u64]) -> Vec<String> {
-    // TASM instruction vocabulary (simplified)
     const VOCAB: &[&str] = &[
-        "",                  // 0: end of sequence
-        "push 0",            // 1
-        "push 1",            // 2
-        "push -1",           // 3
-        "pop 1",             // 4
-        "pop 2",             // 5
-        "pop 3",             // 6
-        "pop 4",             // 7
-        "pop 5",             // 8
-        "dup 0",             // 9
-        "dup 1",             // 10
-        "dup 2",             // 11
-        "dup 3",             // 12
-        "dup 4",             // 13
-        "dup 5",             // 14
-        "swap 1",            // 15
-        "swap 2",            // 16
-        "swap 3",            // 17
-        "swap 4",            // 18
-        "swap 5",            // 19
-        "add",               // 20
-        "mul",               // 21
-        "eq",                // 22
-        "lt",                // 23
-        "and",               // 24
-        "xor",               // 25
-        "invert",            // 26
-        "split",             // 27
-        "div_mod",           // 28
-        "pow",               // 29
-        "hash",              // 30
-        "assert",            // 31
-        "read_io 1",         // 32
-        "write_io 1",        // 33
-        "read_mem 1",        // 34
-        "write_mem 1",       // 35
-        "divine 1",          // 36
-        "sponge_init",       // 37
-        "sponge_absorb",     // 38
-        "sponge_squeeze",    // 39
-        "nop",               // 40
-        "skiz",              // 41
-        "return",            // 42
-        "halt",              // 43
-        "read_io 5",         // 44
-        "write_io 5",        // 45
-        "read_mem 5",        // 46
-        "write_mem 5",       // 47
-        "divine 5",          // 48
-        "pop_count",         // 49
-        "log_2_floor",       // 50
-        "merkle_step",       // 51
-        "sponge_absorb_mem", // 52
-        "xb_mul",            // 53
-        "x_invert",          // 54
-        "xx_dot_step",       // 55
-        "xb_dot_step",       // 56
-        "assert_vector",     // 57
-        "dup 6",             // 58
-        "dup 7",             // 59
-        "swap 6",            // 60
-        "swap 7",            // 61
-        "swap 8",            // 62
-        "swap 9",            // 63
+        "",            // 0: end of sequence
+        "push 0",      // 1
+        "push 1",      // 2
+        "push -1",     // 3
+        "pop 1",       // 4
+        "pop 2",       // 5
+        "pop 3",       // 6
+        "pop 4",       // 7
+        "pop 5",       // 8
+        "dup 0",       // 9
+        "dup 1",       // 10
+        "dup 2",       // 11
+        "dup 3",       // 12
+        "dup 4",       // 13
+        "dup 5",       // 14
+        "swap 1",      // 15
+        "swap 2",      // 16
+        "swap 3",      // 17
+        "swap 4",      // 18
+        "swap 5",      // 19
+        "add",         // 20
+        "mul",         // 21
+        "eq",          // 22
+        "lt",          // 23
+        "and",         // 24
+        "xor",         // 25
+        "div_mod",     // 26  (was: invert)
+        "pow",         // 27  (was: split)
+        "pop_count",   // 28  (was: div_mod at 28, now moved up)
+        "log_2_floor", // 29  (was: pow at 29, now moved up)
+        "nop",         // 30  (was: hash)
+        "dup 8",       // 31  (was: assert)
+        "dup 9",       // 32  (was: read_io 1)
+        "dup 10",      // 33  (was: write_io 1)
+        "dup 11",      // 34  (was: read_mem 1)
+        "dup 12",      // 35  (was: write_mem 1)
+        "dup 13",      // 36  (was: divine 1)
+        "dup 14",      // 37  (was: sponge_init)
+        "dup 15",      // 38  (was: sponge_absorb)
+        "swap 10",     // 39  (was: sponge_squeeze)
+        "swap 11",     // 40  (was: nop at 40, nop already at 30)
+        "swap 12",     // 41  (was: skiz)
+        "swap 13",     // 42  (was: return)
+        "swap 14",     // 43  (was: halt)
+        "swap 15",     // 44  (was: read_io 5)
+        "pick 1",      // 45  (was: write_io 5)
+        "pick 2",      // 46  (was: read_mem 5)
+        "pick 3",      // 47  (was: write_mem 5)
+        "pick 4",      // 48  (was: divine 5)
+        "pick 5",      // 49  (was: pop_count, moved to 28)
+        "place 1",     // 50  (was: log_2_floor, moved to 29)
+        "place 2",     // 51  (was: merkle_step)
+        "place 3",     // 52  (was: sponge_absorb_mem)
+        "place 4",     // 53  (was: xb_mul)
+        "place 5",     // 54  (was: x_invert)
+        "push 2",      // 55  (was: xx_dot_step)
+        "push 3",      // 56  (was: xb_dot_step)
+        "push 4",      // 57  (was: assert_vector)
+        "dup 6",       // 58
+        "dup 7",       // 59
+        "swap 6",      // 60
+        "swap 7",      // 61
+        "swap 8",      // 62
+        "swap 9",      // 63
     ];
 
     let mut out = Vec::new();

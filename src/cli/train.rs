@@ -22,6 +22,8 @@ struct CompiledFile {
     blocks: Vec<trident::ir::tir::encode::TIRBlock>,
     per_block_baselines: Vec<u64>,
     per_block_tasm: Vec<Vec<String>>,
+    /// Per-block: true if baseline uses only verifiable ops (no side effects).
+    per_block_verifiable: Vec<bool>,
     baseline_cost: u64,
     /// Full compiler output (with labels, control flow, subroutines).
     /// Neural blocks get spliced into this to produce a complete program.
@@ -54,11 +56,22 @@ pub fn cmd_train(args: TrainArgs) {
     let total_baseline: u64 = compiled.iter().map(|c| c.baseline_cost).sum();
     let total_gens = args.epochs * compiled.len() as u64 * args.generations;
 
+    let verifiable_blocks: usize = compiled
+        .iter()
+        .flat_map(|cf| &cf.per_block_verifiable)
+        .filter(|&&v| v)
+        .count();
+    let rejected_blocks = total_blocks - verifiable_blocks;
+
     eprintln!(
         "  corpus    {} files ({} trainable, {} blocks)",
         corpus.len(),
         compiled.len(),
         total_blocks
+    );
+    eprintln!(
+        "  blocks    {} verifiable, {} rejected (baseline uses side-effect ops)",
+        verifiable_blocks, rejected_blocks,
     );
     eprintln!("  baseline  {} total cost", total_baseline);
     eprintln!(
@@ -379,18 +392,34 @@ fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
             per_block_tasm.push(block_tasm);
         }
 
-        // baseline_cost = sum of per-block baselines.
-        // NOT the full-file compiler output — that includes control flow,
-        // labels, and loop boilerplate that blocks never cover. Using the
-        // full-file cost as denominator would fake a permanent "win" for
-        // any file where blocks cover less than the full IR.
         let baseline_cost: u64 = per_block_baselines.iter().sum();
+
+        // Mark blocks whose baselines use side-effecting ops as unverifiable
+        let disallowed = &[
+            "write_io",
+            "halt",
+            "assert",
+            "assert_vector",
+            "divine",
+            "split",
+        ];
+        let per_block_verifiable: Vec<bool> = per_block_tasm
+            .iter()
+            .map(|tasm| {
+                !tasm.is_empty()
+                    && !tasm.iter().any(|line| {
+                        let op = line.trim().split_whitespace().next().unwrap_or("");
+                        disallowed.contains(&op)
+                    })
+            })
+            .collect();
 
         compiled.push(CompiledFile {
             path: short_path(file),
             blocks,
             per_block_baselines,
             per_block_tasm,
+            per_block_verifiable,
             baseline_cost,
             compiled_tasm,
         });
@@ -487,7 +516,10 @@ fn train_one_compiled(
                     let handles: Vec<_> = gpu_outputs
                         .iter()
                         .map(|ind_outputs| {
-                            s.spawn(move || eval_individual_gpu(ind_outputs, baselines, block_tasm))
+                            let verifiable = &cf.per_block_verifiable;
+                            s.spawn(move || {
+                                eval_individual_gpu(ind_outputs, baselines, block_tasm, verifiable)
+                            })
                         })
                         .collect();
                     handles.into_iter().map(|h| h.join().unwrap()).collect()
@@ -684,6 +716,7 @@ fn eval_individual_gpu(
     ind_outputs: &[Vec<u32>],
     baselines: &[u64],
     block_tasm: &[Vec<String>],
+    verifiable: &[bool],
 ) -> (i64, Vec<Vec<String>>, u64, usize, usize, usize, u64) {
     use trident::cost::{scorer, stack_verifier};
     use trident::ir::tir::lower::decode_output;
@@ -699,6 +732,13 @@ fn eval_individual_gpu(
     for (b, block_out) in ind_outputs.iter().enumerate() {
         let baseline = baselines[b];
         let baseline_lines = &block_tasm[b];
+
+        // Skip blocks whose baseline uses side-effect ops — can't verify
+        if !verifiable.get(b).copied().unwrap_or(false) {
+            honest_cost += baseline;
+            per_block.push(baseline_lines.clone());
+            continue;
+        }
 
         let codes: Vec<u64> = block_out
             .iter()
@@ -763,6 +803,12 @@ fn eval_individual_cpu(
     for (i, block) in cf.blocks.iter().enumerate() {
         let baseline = cf.per_block_baselines[i];
         let baseline_tasm = &cf.per_block_tasm[i];
+
+        if !cf.per_block_verifiable.get(i).copied().unwrap_or(false) {
+            honest_cost += baseline;
+            per_block.push(baseline_tasm.clone());
+            continue;
+        }
 
         let output = model.forward(block);
         if !output.is_empty() {
