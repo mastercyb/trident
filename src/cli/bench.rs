@@ -280,32 +280,37 @@ fn fmt_ms(ms: Option<f64>) -> String {
         .unwrap_or_else(|| "-".into())
 }
 
-/// Format verify result for a dimension.
-fn fmt_verify(dim: &DimTiming) -> &'static str {
-    if dim.verify_ms.is_some() {
+/// Compact verify status for a row: shows PASS/FAIL based on best result across dimensions.
+fn fmt_verify_row(classic: &DimTiming, hand: &DimTiming, neural: &DimTiming) -> &'static str {
+    let any_pass =
+        classic.verify_ms.is_some() || hand.verify_ms.is_some() || neural.verify_ms.is_some();
+    let any_proof =
+        classic.proof_path.is_some() || hand.proof_path.is_some() || neural.proof_path.is_some();
+    if any_pass {
         "PASS"
-    } else if dim.proof_path.is_some() {
+    } else if any_proof {
         "FAIL"
     } else {
         "-"
     }
 }
 
-/// Render full 4D table: one row per file, all dimensions.
+/// Render full 4D table: grouped by step (Exec | Prove | Verify), sub-columns C/H/N.
 fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
+    // Header: Module  Compile  Rust | Exec (C H N) | Prove (C H N) | Verify (C H N) | Ratio
     eprintln!(
-        "{:<28} {:>7} {:>7}  | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>5}",
+        "{:<28} {:>7} {:>7}  | {:>5} {:>5} {:>5} | {:>7} {:>7} {:>7} | {:>5} {:>5} {:>5} {:>4} | {:>5}",
         "Module", "Compile", "Rust",
-        "Exec", "Prove", "Verif", "",
-        "Exec", "Prove", "Verif", "",
-        "Exec", "Prove", "Verif", "",
+        "C", "H", "N",
+        "C", "H", "N",
+        "C", "H", "N", "",
         "Ratio",
     );
     eprintln!(
-        "{:<28} {:>7} {:>7}  | {:<27} | {:<27} | {:<27} | {:>5}",
-        "", "", "", "Classic", "Hand", "Neural", "",
+        "{:<28} {:>7} {:>7}  | {:<17} | {:<23} | {:<22} | {:>5}",
+        "", "", "", "Exec", "Prove", "Verify", "",
     );
-    eprintln!("{}", "-".repeat(148));
+    eprintln!("{}", "-".repeat(132));
 
     for mb in modules {
         let ratio = if mb.hand_insn > 0 {
@@ -315,13 +320,14 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
         };
 
         eprintln!(
-            "{:<28} {:>7} {:>7}  | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>5}",
+            "{:<28} {:>7} {:>7}  | {:>5} {:>5} {:>5} | {:>7} {:>7} {:>7} | {:>5} {:>5} {:>5} {:>4} | {:>5}",
             mb.name,
             format!("{:.1}ms", mb.compile_ms),
             fmt_rust(mb.rust_ns),
-            fmt_ms(mb.classic.exec_ms), fmt_ms(mb.classic.prove_ms), fmt_ms(mb.classic.verify_ms), fmt_verify(&mb.classic),
-            fmt_ms(mb.hand.exec_ms), fmt_ms(mb.hand.prove_ms), fmt_ms(mb.hand.verify_ms), fmt_verify(&mb.hand),
-            fmt_ms(mb.neural.exec_ms), fmt_ms(mb.neural.prove_ms), fmt_ms(mb.neural.verify_ms), fmt_verify(&mb.neural),
+            fmt_ms(mb.classic.exec_ms), fmt_ms(mb.hand.exec_ms), fmt_ms(mb.neural.exec_ms),
+            fmt_ms(mb.classic.prove_ms), fmt_ms(mb.hand.prove_ms), fmt_ms(mb.neural.prove_ms),
+            fmt_ms(mb.classic.verify_ms), fmt_ms(mb.hand.verify_ms), fmt_ms(mb.neural.verify_ms),
+            fmt_verify_row(&mb.classic, &mb.hand, &mb.neural),
             ratio,
         );
 
@@ -350,7 +356,7 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
         }
     }
 
-    eprintln!("{}", "-".repeat(148));
+    eprintln!("{}", "-".repeat(132));
 
     // Summary row
     let sum_classic: usize = modules.iter().map(|m| m.classic_insn).sum();
@@ -371,43 +377,26 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
     let classic_exec: f64 = sum_dim_col(modules, |m| &m.classic, |d| d.exec_ms);
     let classic_prove: f64 = sum_dim_col(modules, |m| &m.classic, |d| d.prove_ms);
     let classic_verify: f64 = sum_dim_col(modules, |m| &m.classic, |d| d.verify_ms);
+    let hand_exec: f64 = sum_dim_col(modules, |m| &m.hand, |d| d.exec_ms);
+    let hand_prove: f64 = sum_dim_col(modules, |m| &m.hand, |d| d.prove_ms);
+    let hand_verify: f64 = sum_dim_col(modules, |m| &m.hand, |d| d.verify_ms);
+    let neural_exec: f64 = sum_dim_col(modules, |m| &m.neural, |d| d.exec_ms);
+    let neural_prove: f64 = sum_dim_col(modules, |m| &m.neural, |d| d.prove_ms);
+    let neural_verify: f64 = sum_dim_col(modules, |m| &m.neural, |d| d.verify_ms);
+
     let classic_verified = modules
         .iter()
         .filter(|m| m.classic.verify_ms.is_some())
         .count();
-
-    let hand_exec: f64 = sum_dim_col(modules, |m| &m.hand, |d| d.exec_ms);
-    let hand_prove: f64 = sum_dim_col(modules, |m| &m.hand, |d| d.prove_ms);
-    let hand_verify: f64 = sum_dim_col(modules, |m| &m.hand, |d| d.verify_ms);
     let hand_verified = modules
         .iter()
         .filter(|m| m.hand.verify_ms.is_some())
         .count();
-
-    let neural_exec: f64 = sum_dim_col(modules, |m| &m.neural, |d| d.exec_ms);
-    let neural_prove: f64 = sum_dim_col(modules, |m| &m.neural, |d| d.prove_ms);
-    let neural_verify: f64 = sum_dim_col(modules, |m| &m.neural, |d| d.verify_ms);
     let neural_verified = modules
         .iter()
         .filter(|m| m.neural.verify_ms.is_some())
         .count();
-
     let n = modules.len();
-
-    let fmt_total = |v: f64, count: usize, _total: usize| -> String {
-        if count > 0 {
-            format!("{:.0}ms", v)
-        } else {
-            "-".to_string()
-        }
-    };
-    let fmt_count = |count: usize, total: usize| -> String {
-        if count > 0 {
-            format!("{}/{}", count, total)
-        } else {
-            "-".to_string()
-        }
-    };
 
     let rust_total_str = if rust_count > 0 {
         fmt_rust(Some(total_rust_ns))
@@ -415,23 +404,31 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
         "-".into()
     };
 
+    let fmt_t = |v: f64, has: bool| -> String {
+        if has {
+            format!("{:.0}ms", v)
+        } else {
+            "-".into()
+        }
+    };
+
     eprintln!(
-        "{:<28} {:>7} {:>7}  | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>5}",
+        "{:<28} {:>7} {:>7}  | {:>5} {:>5} {:>5} | {:>7} {:>7} {:>7} | {:>5} {:>5} {:>5} {:>4} | {:>5}",
         format!("TOTAL ({} modules)", n),
         format!("{:.0}ms", total_compile),
         rust_total_str,
-        fmt_total(classic_exec, classic_verified, n), fmt_total(classic_prove, classic_verified, n), fmt_total(classic_verify, classic_verified, n), fmt_count(classic_verified, n),
-        fmt_total(hand_exec, hand_verified, n), fmt_total(hand_prove, hand_verified, n), fmt_total(hand_verify, hand_verified, n), fmt_count(hand_verified, n),
-        fmt_total(neural_exec, neural_verified, n), fmt_total(neural_prove, neural_verified, n), fmt_total(neural_verify, neural_verified, n), fmt_count(neural_verified, n),
+        fmt_t(classic_exec, classic_verified > 0), fmt_t(hand_exec, hand_verified > 0), fmt_t(neural_exec, neural_verified > 0),
+        fmt_t(classic_prove, classic_verified > 0), fmt_t(hand_prove, hand_verified > 0), fmt_t(neural_prove, neural_verified > 0),
+        fmt_t(classic_verify, classic_verified > 0), fmt_t(hand_verify, hand_verified > 0), fmt_t(neural_verify, neural_verified > 0),
+        format!("{}/{}", classic_verified, n),
         avg_ratio,
     );
     eprintln!(
-        "{:<28} {:>7} {:>7}  | insn: {:<21} | insn: {:<21} |",
+        "{:<28} {:>7} {:>7}  | insn: {:<11} |",
         "",
         "",
         "",
-        format!("{}", sum_classic),
-        format!("{}", sum_hand),
+        format!("{}C / {}H", sum_classic, sum_hand),
     );
 }
 
