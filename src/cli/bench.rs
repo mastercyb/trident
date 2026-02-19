@@ -175,6 +175,13 @@ pub fn cmd_bench(args: BenchArgs) {
             )
         );
     }
+    // --- Rust reference: compilation timing ---
+    if do_verify || do_exec || do_prove || do_check {
+        eprintln!();
+        eprintln!("Compilation (Rust native):");
+        run_compile_pass(&bench_dir, project_root, &baselines, &options);
+    }
+
     // --- 4D Verification: --verify ---
     if do_verify {
         eprintln!();
@@ -190,20 +197,86 @@ pub fn cmd_bench(args: BenchArgs) {
     }
 
     // --- Proving time: --prove ---
-    if do_prove {
+    let proof_files = if do_prove {
         eprintln!();
         eprintln!("Proving (trisha prove --tasm):");
-        run_prove_pass(&bench_dir, project_root, &baselines, &options);
-    }
+        run_prove_pass(&bench_dir, project_root, &baselines, &options)
+    } else {
+        Vec::new()
+    };
 
     // --- Verification time: --check ---
     if do_check {
         eprintln!();
-        eprintln!("Verification time:");
-        eprintln!("  requires proof files from --prove pass");
+        if proof_files.is_empty() {
+            eprintln!("Verification time:");
+            eprintln!("  no proof files — run with --prove or --full first");
+        } else {
+            eprintln!("Verification (trisha verify):");
+            run_check_pass(&proof_files);
+        }
+    }
+    // Clean up proof files
+    for (_, path) in &proof_files {
+        let _ = std::fs::remove_file(path);
     }
 
     eprintln!();
+}
+
+/// Run compilation timing: measure how long trident takes to compile each module.
+fn run_compile_pass(
+    bench_dir: &std::path::Path,
+    project_root: &std::path::Path,
+    baselines: &[PathBuf],
+    options: &trident::CompileOptions,
+) {
+    let mut total_ms = 0.0f64;
+    let mut count = 0;
+
+    for baseline_path in baselines {
+        let rel = baseline_path
+            .strip_prefix(bench_dir)
+            .unwrap_or(baseline_path);
+        let rel_str = rel.to_string_lossy();
+        let source_rel = rel_str.replace(".baseline.tasm", ".tri");
+        let source_path = project_root.join(&source_rel);
+        let module_name = source_rel.trim_end_matches(".tri").replace('/', "::");
+
+        if !source_path.exists() {
+            continue;
+        }
+
+        let start = std::time::Instant::now();
+        let _guard = trident::diagnostic::suppress_warnings();
+        let result = trident::compile_project_with_options(&source_path, options);
+        drop(_guard);
+        let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(tasm) => {
+                let lines = tasm.lines().count();
+                eprintln!(
+                    "  {:<45} {:>6.1}ms  {} lines TASM",
+                    module_name, elapsed_ms, lines,
+                );
+                total_ms += elapsed_ms;
+                count += 1;
+            }
+            Err(_) => {
+                eprintln!("  {:<45} SKIP (compilation error)", module_name);
+            }
+        }
+    }
+
+    if count > 0 {
+        eprintln!(
+            "  total: {:.1}ms ({} modules, {:.1}ms avg)",
+            total_ms,
+            count,
+            total_ms / count as f64,
+        );
+    }
 }
 
 /// Run correctness verification: for each baseline function, compare
@@ -422,16 +495,18 @@ fn run_exec_pass(
     }
 }
 
-/// Run proving pass: compile, execute + prove via trisha.
+/// Run proving pass: compile, prove via trisha. Returns (module_name, proof_path) pairs.
 fn run_prove_pass(
     bench_dir: &std::path::Path,
     project_root: &std::path::Path,
     baselines: &[PathBuf],
     options: &trident::CompileOptions,
-) {
+) -> Vec<(String, PathBuf)> {
+    let mut proof_files: Vec<(String, PathBuf)> = Vec::new();
+
     if !trisha_available() {
         eprintln!("  trisha not found in PATH — install trisha first");
-        return;
+        return proof_files;
     }
 
     for baseline_path in baselines {
@@ -479,6 +554,9 @@ fn run_prove_pass(
                     "  {:<45} prove {:>8.1}ms",
                     module_name, trisha_result.elapsed_ms,
                 );
+                if proof_path.exists() {
+                    proof_files.push((module_name.clone(), proof_path));
+                }
             }
             Err(e) => {
                 eprintln!("  {:<45} ERROR: {}", module_name, e);
@@ -486,7 +564,46 @@ fn run_prove_pass(
         }
 
         let _ = std::fs::remove_file(&tmp_path);
-        let _ = std::fs::remove_file(&proof_path);
+    }
+
+    proof_files
+}
+
+/// Run verification pass: verify each proof file via trisha verify.
+fn run_check_pass(proof_files: &[(String, PathBuf)]) {
+    if !trisha_available() {
+        eprintln!("  trisha not found in PATH — install trisha first");
+        return;
+    }
+
+    let mut pass = 0;
+    let mut fail = 0;
+
+    for (module_name, proof_path) in proof_files {
+        match run_trisha(&["verify", &proof_path.to_string_lossy()]) {
+            Ok(trisha_result) => {
+                eprintln!(
+                    "  {:<45} PASS  {:>8.1}ms",
+                    module_name, trisha_result.elapsed_ms,
+                );
+                pass += 1;
+            }
+            Err(e) => {
+                if e.contains("FAIL") {
+                    eprintln!("  {:<45} FAIL", module_name);
+                } else {
+                    eprintln!("  {:<45} ERROR: {}", module_name, e);
+                }
+                fail += 1;
+            }
+        }
+    }
+
+    eprintln!();
+    if fail > 0 {
+        eprintln!("  RESULT: {} passed, {} FAILED", pass, fail);
+    } else {
+        eprintln!("  RESULT: {} passed (all verified)", pass);
     }
 }
 
