@@ -3,7 +3,7 @@ use std::process;
 
 use clap::Args;
 
-use super::trisha::{run_trisha, trisha_available, wrap_baseline_tasm};
+use super::trisha::{generate_test_harness, run_trisha, trisha_available};
 
 #[derive(Args)]
 pub struct BenchArgs {
@@ -149,17 +149,18 @@ pub fn cmd_bench(args: BenchArgs) {
 
         // Run trisha passes for --full
         if has_trisha {
-            // Classic: compile full program (with entry + halt)
+            // Classic: compile module, generate test harness
             let _guard2 = trident::diagnostic::suppress_warnings();
-            let full_tasm = trident::compile_project_with_options(&source_path, &options).ok();
+            let module_tasm = trident::compile_module(&source_path, &options).ok();
             drop(_guard2);
 
-            if let Some(tasm) = full_tasm {
-                run_dimension(&mut mb.classic, &module_name, "classic", &tasm);
+            if let Some(tasm) = module_tasm {
+                let classic_harness = generate_test_harness(&tasm);
+                run_dimension(&mut mb.classic, &module_name, "classic", &classic_harness);
             }
 
-            // Hand: wrap baseline as standalone program
-            let hand_tasm = wrap_baseline_tasm(&baseline_tasm);
+            // Hand: generate test harness from baseline
+            let hand_tasm = generate_test_harness(&baseline_tasm);
             run_dimension(&mut mb.hand, &module_name, "hand", &hand_tasm);
 
             // Neural: not available in bench context yet

@@ -3,7 +3,7 @@ use std::process;
 
 use clap::Args;
 
-use super::trisha::{run_trisha, trisha_available, wrap_baseline_tasm};
+use super::trisha::{generate_test_harness, run_trisha, trisha_available};
 use super::{load_and_parse, resolve_input};
 
 #[derive(Args)]
@@ -135,12 +135,13 @@ fn cmd_audit_exec() {
 
         // ── Classic dimension ──
         let _guard = trident::diagnostic::suppress_warnings();
-        let full_tasm = trident::compile_project_with_options(&source_path, &options);
+        let module_tasm = trident::compile_module(&source_path, &options);
         drop(_guard);
 
-        if let Ok(tasm) = full_tasm {
+        if let Ok(tasm) = module_tasm {
             audit.classic.compile = AuditStatus::Ok;
-            audit_run_pipeline(&mut audit.classic, &module_name, "classic", &tasm);
+            let harness = generate_test_harness(&tasm);
+            audit_run_pipeline(&mut audit.classic, &module_name, "classic", &harness);
         } else {
             audit.classic.compile = AuditStatus::Fail("compilation failed".into());
         }
@@ -149,8 +150,8 @@ fn cmd_audit_exec() {
         let baseline_tasm = std::fs::read_to_string(baseline_path).unwrap_or_default();
         if !baseline_tasm.is_empty() {
             audit.hand.compile = AuditStatus::Ok;
-            let wrapped = wrap_baseline_tasm(&baseline_tasm);
-            audit_run_pipeline(&mut audit.hand, &module_name, "hand", &wrapped);
+            let harness = generate_test_harness(&baseline_tasm);
+            audit_run_pipeline(&mut audit.hand, &module_name, "hand", &harness);
         }
 
         results.push(audit);
