@@ -36,3 +36,31 @@ path = "src/main.rs"
 [[bin]]
 name = "trident-lsp"
 path = "src/bin/trident-lsp.rs"
+
+[[example]]
+name = "ref_std_crypto_poseidon2"
+path = "benches/std/crypto/poseidon2.reference.rs"
+
+[[example]]
+name = "ref_std_crypto_poseidon"
+path = "benches/std/crypto/poseidon.reference.rs"
+
+[[example]]
+name = "ref_std_crypto_bigint"
+path = "benches/std/crypto/bigint.reference.rs"
+
+[[example]]
+name = "ref_std_crypto_merkle"
+path = "benches/std/crypto/merkle.reference.rs"
+
+[[example]]
+name = "ref_std_quantum_gates"
+path = "benches/std/quantum/gates.reference.rs"
+
+[[example]]
+name = "ref_std_nn_tensor"
+path = "benches/std/nn/tensor.reference.rs"
+
+[[example]]
+name = "ref_std_private_poly"
+path = "benches/std/private/poly.reference.rs"

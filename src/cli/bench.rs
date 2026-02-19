@@ -35,6 +35,8 @@ struct ModuleBench {
     hand_insn: usize,
     /// Rust-native compilation time (ms)
     compile_ms: f64,
+    /// Rust reference execution time (nanoseconds per op), if available
+    rust_ns: Option<u64>,
     /// Per-dimension timing
     classic: DimTiming,
     hand: DimTiming,
@@ -118,11 +120,27 @@ pub fn cmd_bench(args: BenchArgs) {
             }
         }
 
+        // Run Rust reference benchmark if available
+        let ref_rs = baseline_path.with_file_name(
+            baseline_path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .replace(".baseline.tasm", ".reference.rs"),
+        );
+        let rust_ns = if args.full && ref_rs.exists() {
+            let rel = ref_rs.strip_prefix(project_root).unwrap_or(&ref_rs);
+            run_rust_reference(&rel.to_string_lossy())
+        } else {
+            None
+        };
+
         let mut mb = ModuleBench {
             name: module_name.clone(),
             classic_insn: total_compiled,
             hand_insn: total_baseline,
             compile_ms,
+            rust_ns,
             classic: DimTiming::default(),
             hand: DimTiming::default(),
             neural: DimTiming::default(),
@@ -268,20 +286,19 @@ fn fmt_verify(dim: &DimTiming) -> &'static str {
 
 /// Render full 4D table: one row per file, all dimensions.
 fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
-    //                                  Compile  | Classic (Exec/Prove/Verify)  | Hand (Exec/Prove/Verify)  | Neural (Exec/Prove/Verify)  | Ratio
     eprintln!(
-        "{:<28} {:>7}  | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>5}",
-        "Module", "Compile",
+        "{:<28} {:>7} {:>7}  | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>5}",
+        "Module", "Compile", "Rust",
         "Exec", "Prove", "Verif", "",
         "Exec", "Prove", "Verif", "",
         "Exec", "Prove", "Verif", "",
         "Ratio",
     );
     eprintln!(
-        "{:<28} {:>7}  | {:<27} | {:<27} | {:<27} | {:>5}",
-        "", "", "Classic", "Hand", "Neural", "",
+        "{:<28} {:>7} {:>7}  | {:<27} | {:<27} | {:<27} | {:>5}",
+        "", "", "", "Classic", "Hand", "Neural", "",
     );
-    eprintln!("{}", "-".repeat(140));
+    eprintln!("{}", "-".repeat(148));
 
     for mb in modules {
         let ratio = if mb.hand_insn > 0 {
@@ -291,9 +308,10 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
         };
 
         eprintln!(
-            "{:<28} {:>7}  | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>5}",
+            "{:<28} {:>7} {:>7}  | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>5}",
             mb.name,
             format!("{:.1}ms", mb.compile_ms),
+            fmt_rust(mb.rust_ns),
             fmt_ms(mb.classic.exec_ms), fmt_ms(mb.classic.prove_ms), fmt_ms(mb.classic.verify_ms), fmt_verify(&mb.classic),
             fmt_ms(mb.hand.exec_ms), fmt_ms(mb.hand.prove_ms), fmt_ms(mb.hand.verify_ms), fmt_verify(&mb.hand),
             fmt_ms(mb.neural.exec_ms), fmt_ms(mb.neural.prove_ms), fmt_ms(mb.neural.verify_ms), fmt_verify(&mb.neural),
@@ -325,7 +343,7 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
         }
     }
 
-    eprintln!("{}", "-".repeat(140));
+    eprintln!("{}", "-".repeat(148));
 
     // Summary row
     let sum_classic: usize = modules.iter().map(|m| m.classic_insn).sum();
@@ -337,6 +355,8 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
     };
 
     let total_compile: f64 = modules.iter().map(|m| m.compile_ms).sum();
+    let total_rust_ns: u64 = modules.iter().filter_map(|m| m.rust_ns).sum();
+    let rust_count = modules.iter().filter(|m| m.rust_ns.is_some()).count();
     let sum_dim_col = |modules: &[ModuleBench],
                        dim: fn(&ModuleBench) -> &DimTiming,
                        get: fn(&DimTiming) -> Option<f64>|
@@ -382,17 +402,25 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
         }
     };
 
+    let rust_total_str = if rust_count > 0 {
+        fmt_rust(Some(total_rust_ns))
+    } else {
+        "-".into()
+    };
+
     eprintln!(
-        "{:<28} {:>7}  | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>5}",
+        "{:<28} {:>7} {:>7}  | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>6} {:>6} {:>6} {:>4} | {:>5}",
         format!("TOTAL ({} modules)", n),
         format!("{:.0}ms", total_compile),
+        rust_total_str,
         fmt_total(classic_exec, classic_verified, n), fmt_total(classic_prove, classic_verified, n), fmt_total(classic_verify, classic_verified, n), fmt_count(classic_verified, n),
         fmt_total(hand_exec, hand_verified, n), fmt_total(hand_prove, hand_verified, n), fmt_total(hand_verify, hand_verified, n), fmt_count(hand_verified, n),
         fmt_total(neural_exec, neural_verified, n), fmt_total(neural_prove, neural_verified, n), fmt_total(neural_verify, neural_verified, n), fmt_count(neural_verified, n),
         avg_ratio,
     );
     eprintln!(
-        "{:<28} {:>7}  | insn: {:<21} | insn: {:<21} |",
+        "{:<28} {:>7} {:>7}  | insn: {:<21} | insn: {:<21} |",
+        "",
         "",
         "",
         format!("{}", sum_classic),
@@ -442,6 +470,55 @@ fn verify_dimension(dim: &mut DimTiming) {
             dim.verify_ms = Some(r.elapsed_ms);
         }
     }
+}
+
+/// Format nanoseconds for display: µs for >= 1000ns, ns otherwise, "-" if None.
+fn fmt_rust(ns: Option<u64>) -> String {
+    match ns {
+        None => "-".into(),
+        Some(n) if n >= 1_000_000 => format!("{:.1}ms", n as f64 / 1_000_000.0),
+        Some(n) if n >= 1_000 => format!("{:.1}µs", n as f64 / 1_000.0),
+        Some(n) => format!("{}ns", n),
+    }
+}
+
+/// Run a Rust reference benchmark. Expects a `.reference.rs` file that is
+/// registered as a cargo example. Builds with --release, runs, parses
+/// `rust_ns: <N>` from stdout.
+fn run_rust_reference(ref_path: &str) -> Option<u64> {
+    // Derive example name from path: benches/std/crypto/poseidon2.reference.rs -> ref_std_crypto_poseidon2
+    let name = ref_path
+        .trim_start_matches("benches/")
+        .trim_end_matches(".reference.rs")
+        .replace('/', "_");
+    let example_name = format!("ref_{}", name);
+
+    // Build (should be near-instant if already built)
+    let build = std::process::Command::new("cargo")
+        .args(["build", "--example", &example_name, "--release", "--quiet"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .ok()?;
+    if !build.success() {
+        return None;
+    }
+
+    // Run
+    let output = std::process::Command::new("cargo")
+        .args(["run", "--example", &example_name, "--release", "--quiet"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    // Parse "rust_ns: <N>" from stdout
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout.lines().find_map(|l| {
+        l.strip_prefix("rust_ns: ")
+            .and_then(|v| v.trim().parse().ok())
+    })
 }
 
 /// Recursively find all .baseline.tasm files in a directory (depth-limited).
