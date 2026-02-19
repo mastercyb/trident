@@ -19,6 +19,7 @@ pub struct TrainArgs {
 /// Pre-compiled file data — TIR + blocks + baselines, computed once.
 struct CompiledFile {
     path: String,
+    source_path: std::path::PathBuf,
     blocks: Vec<trident::ir::tir::encode::TIRBlock>,
     per_block_baselines: Vec<u64>,
     per_block_tasm: Vec<Vec<String>>,
@@ -250,6 +251,51 @@ pub fn cmd_train(args: TrainArgs) {
         let _ = weights::save_meta(&new_meta, &weights::meta_path(dummy_root));
     }
 
+    // Save neural TASM files for modules where the model found improvements
+    {
+        let options = super::resolve_options("triton", "debug", None);
+        let repo_root = find_repo_root();
+        let benches_dir = repo_root.join("benches");
+        let mut saved_count = 0usize;
+
+        for cf in &compiled {
+            // Compile classical TASM for this module
+            let _guard = trident::diagnostic::suppress_warnings();
+            let classical = trident::compile_module(&cf.source_path, &options);
+            drop(_guard);
+            let classical_tasm = match classical {
+                Ok(tasm) => tasm,
+                Err(_) => continue,
+            };
+
+            // Run neural forward pass + substitution
+            if let Some(neural_tasm) =
+                super::bench::compile_neural_tasm(&cf.source_path, &classical_tasm, &options)
+            {
+                // Map source path to benches/ path
+                // e.g. "std/crypto/poseidon2.tri" → "benches/std/crypto/poseidon2.neural.tasm"
+                let neural_path = benches_dir.join(cf.path.replace(".tri", ".neural.tasm"));
+                if let Some(parent) = neural_path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if std::fs::write(&neural_path, &neural_tasm).is_ok() {
+                    eprintln!(
+                        "  wrote {}",
+                        neural_path
+                            .strip_prefix(&repo_root)
+                            .unwrap_or(&neural_path)
+                            .display()
+                    );
+                    saved_count += 1;
+                }
+            }
+        }
+
+        if saved_count > 0 {
+            eprintln!("  saved {} neural TASM file(s)", saved_count);
+        }
+    }
+
     eprintln!("done");
     eprintln!(
         "  generations  {} -> {} (+{})",
@@ -353,6 +399,7 @@ fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
 
         compiled.push(CompiledFile {
             path: short_path(file),
+            source_path: file.clone(),
             blocks,
             per_block_baselines,
             per_block_tasm,

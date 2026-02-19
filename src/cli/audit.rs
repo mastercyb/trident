@@ -158,14 +158,15 @@ fn cmd_audit_exec() {
             audit_run_pipeline(&mut audit.hand, &module_name, "hand", &harness);
         }
 
-        // ── Neural dimension ──
-        let _guard = trident::diagnostic::suppress_warnings();
-        let compiled_for_neural = trident::compile_module(&source_path, &options).ok();
-        drop(_guard);
-        if let Some(ref compiled) = compiled_for_neural {
-            if let Some(neural_tasm) =
-                super::bench::compile_neural_tasm(&source_path, compiled, &options)
-            {
+        // ── Neural dimension (load from .neural.tasm file) ──
+        let neural_path = PathBuf::from(
+            baseline_path
+                .to_string_lossy()
+                .replace(".baseline.tasm", ".neural.tasm"),
+        );
+        if neural_path.exists() {
+            let neural_tasm = std::fs::read_to_string(&neural_path).unwrap_or_default();
+            if !neural_tasm.is_empty() {
                 audit.neural.compile = AuditStatus::Ok;
                 let harness = generate_test_harness(&neural_tasm);
                 audit_run_pipeline(&mut audit.neural, &module_name, "neural", &harness);
