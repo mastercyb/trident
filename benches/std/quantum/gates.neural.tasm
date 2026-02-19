@@ -71,12 +71,7 @@ __complex_scale:
     return
     
 __complex_conj:
-    dup 0
-    dup 0
-    push -1
-    mul
-    swap 2
-    pop 2
+invert
     return
     
 __complex_norm_sq:
@@ -199,7 +194,17 @@ __cnot:
     return
     
 __cz:
-halt
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    push -1
+    mul
+    dup 0
+    push -1
+    mul
+    swap 5
+    pop 5
     return
     
 __swap:

@@ -433,16 +433,35 @@ pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], se
         "lt",
         "and",
         "xor",
-        "split",
+        // split is NOT allowed — split(push_const) produces deterministic
+        // hi/lo that make test stacks irrelevant for that branch.
         "div_mod",
         "pow",
         "log_2_floor",
         "pop_count",
         "nop",
-        "halt",
-        "assert",
-        "write_io",
+        // halt is NOT allowed — it terminates the program mid-block,
+        // preventing all subsequent code from running.
+        // write_io is NOT allowed — it has I/O side effects that
+        // the verifier ignores (only checks stack state). Removing
+        // write_io operations changes program output.
+        // assert is NOT allowed — the neural model can insert asserts
+        // that crash on inputs the test stacks don't cover.
     ];
+    // Reject blocks whose baselines use side-effecting or dummy-value ops.
+    // - write_io/halt/assert: side effects the verifier can't check
+    // - divine: pushes dummy zeros in verifier, real values on Triton VM
+    // - split: hi part depends on value magnitude; split(small) always gives
+    //   hi=0 which makes the verifier path-dependent on test values
+    for line in baseline_tasm {
+        let op = line.trim().split_whitespace().next().unwrap_or("");
+        if matches!(
+            op,
+            "write_io" | "halt" | "assert" | "assert_vector" | "divine" | "split"
+        ) {
+            return false;
+        }
+    }
     for line in candidate_tasm {
         let op = line.trim().split_whitespace().next().unwrap_or("");
         if op.is_empty() || op.starts_with("//") || op.ends_with(':') {
@@ -453,11 +472,72 @@ pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], se
         }
     }
 
-    const NUM_SEEDS: u64 = 8;
-    for i in 0..NUM_SEEDS {
-        let test_seed = seed.wrapping_mul(6364136223846793005).wrapping_add(i);
-        let test_stack = generate_test_stack(test_seed, 16);
+    // Test stacks must include structured values, not just random ones.
+    // Random Goldilocks values make eq/lt comparisons near-deterministic:
+    //   P(random a == random b) ≈ 2^-64 → "push 0" fakes "dup 1 | dup 1 | eq"
+    // Structured stacks expose these exploits by including zeros, duplicates,
+    // and ordered values where comparisons actually produce different results.
+    let test_stacks: Vec<Vec<u64>> = {
+        let mut stacks = Vec::with_capacity(12);
+        // 4 random seeds (catch arithmetic/stack depth errors)
+        for i in 0..4u64 {
+            let s = seed.wrapping_mul(6364136223846793005).wrapping_add(i);
+            stacks.push(generate_test_stack(s, 16));
+        }
+        // All zeros (eq always returns 1, catches "push 0" faking eq)
+        stacks.push(vec![0; 16]);
+        // All ones
+        stacks.push(vec![1; 16]);
+        // Adjacent pairs equal: [5,5,3,3,7,7,...] (catches dup+eq exploits)
+        stacks.push(vec![5, 5, 3, 3, 7, 7, 2, 2, 9, 9, 1, 1, 4, 4, 8, 8]);
+        // Same value everywhere (catches any eq/dup combination)
+        stacks.push(vec![42; 16]);
+        // Ascending small values (catches lt/comparison order exploits)
+        stacks.push((0..16).collect());
+        // Descending (opposite lt behavior)
+        stacks.push((0..16).rev().collect());
+        // Mixed: zeros and large values (catches split/div_mod edge cases)
+        stacks.push(vec![
+            0,
+            MODULUS - 1,
+            0,
+            1,
+            0,
+            MODULUS - 1,
+            0,
+            1,
+            0,
+            MODULUS - 1,
+            0,
+            1,
+            0,
+            MODULUS - 1,
+            0,
+            1,
+        ]);
+        // Powers of 2 (catches pop_count, log_2_floor, split edge cases)
+        stacks.push(vec![
+            1,
+            2,
+            4,
+            8,
+            16,
+            32,
+            64,
+            128,
+            256,
+            512,
+            1024,
+            2048,
+            1u64 << 32,
+            1u64 << 33,
+            1u64 << 48,
+            1u64 << 63,
+        ]);
+        stacks
+    };
 
+    for test_stack in &test_stacks {
         let mut baseline_state = StackState::new(test_stack.clone());
         baseline_state.execute(baseline_tasm);
 
@@ -466,7 +546,7 @@ pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], se
             return false;
         }
 
-        let mut candidate_state = StackState::new(test_stack);
+        let mut candidate_state = StackState::new(test_stack.clone());
         candidate_state.execute(candidate_tasm);
 
         if candidate_state.error {

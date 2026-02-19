@@ -649,7 +649,11 @@ __verify_commitment:
     
 __parse_claim:
     call @os_neptune_recursive__read_claim
-dup 0
+    dup 0
+    dup 0
+    dup 0
+    swap 2
+    pop 2
     return
     
 __hash_public_io:
@@ -1164,16 +1168,7 @@ __verify_timestamp:
     dup 4
     dup 4
     call @os_neptune_kernel__authenticate_timestamp
-    dup 4
-    dup 4
-    dup 4
-    dup 4
-    dup 4
-    pop 4
-    dup 0
-    swap 6
-    pop 5
-    pop 1
+pop 4
     return
     
 __verify_mutator_set:
