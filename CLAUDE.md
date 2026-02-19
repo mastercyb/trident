@@ -39,6 +39,34 @@ Never generate placeholder data to fill a gap.
 If you catch yourself making something "look right" instead of
 "be right" — stop and delete it.
 
+## Literal Interpretation
+
+When the user says something, they mean it literally. Do not
+reinterpret. Do not find the closest thing you think they might
+mean. Do not iterate on your interpretation 13 times.
+
+Known failure mode: the user says "show real numbers" and the agent
+reformats display labels, adds tags, restructures output — everything
+except showing the actual data the user asked for. This is the
+**masquerading instinct** — optimizing for "looks correct" instead
+of "is correct." It wastes the user's time because they have to
+catch each evasion, reframe the question, and ask again.
+
+Rules:
+
+1. If the user asks to show data, show the raw value from the source
+   before any fallback, gating, or cleanup. If there's a pipeline
+   (model → decode → verify → fallback), show every stage.
+2. If you're unsure what the user means, ask once. Don't guess and
+   iterate.
+3. If your first instinct is to format/present/clean — stop. Ask
+   "what is the raw data the user hasn't seen yet?" Show that first.
+4. Never hide failure behind technically-accurate-but-misleading
+   numbers. `883/883 (1.00x)` when the model contributed nothing
+   is a lie. `0 verified out of 1439 decoded` is the truth.
+5. The user knows what they are saying. Trust their words over your
+   interpretation of their intent.
+
 ## Source of Truth
 
 `reference/` is canonical. If reference/ and code disagree, resolve in
