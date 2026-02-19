@@ -436,7 +436,7 @@ fn train_one_compiled(
                         s.spawn(move || {
                             let mut total = 0i64;
                             for (b, block_out) in ind_outputs.iter().enumerate() {
-                                total -= score_neural_output(
+                                total += score_neural_improvement(
                                     block_out,
                                     baselines[b],
                                     &block_tasm[b],
@@ -468,16 +468,12 @@ fn train_one_compiled(
                                 let baseline = cf.per_block_baselines[i];
                                 let output = model.forward(block);
                                 if output.is_empty() {
-                                    total -= baseline as i64;
                                     continue;
                                 }
                                 let candidate_lines = decode_output(&output);
                                 if candidate_lines.is_empty() {
-                                    total -= baseline as i64;
                                     continue;
                                 }
-                                // Correctness: must match baseline stack.
-                                // No baseline = nothing to verify = reject.
                                 let baseline_tasm = &cf.per_block_tasm[i];
                                 if baseline_tasm.is_empty()
                                     || !stack_verifier::verify_equivalent(
@@ -486,7 +482,6 @@ fn train_one_compiled(
                                         i as u64,
                                     )
                                 {
-                                    total -= baseline as i64;
                                     continue;
                                 }
                                 let profile = trident::cost::scorer::profile_tasm(
@@ -495,7 +490,8 @@ fn train_one_compiled(
                                         .map(|s| s.as_str())
                                         .collect::<Vec<_>>(),
                                 );
-                                total -= profile.cost().min(baseline) as i64;
+                                let cost = profile.cost().min(baseline);
+                                total += (baseline as i64) - (cost as i64);
                             }
                             total
                         })
@@ -525,8 +521,9 @@ fn train_one_compiled(
     }
 
     let best = pop.best_weights();
-    let score_after = if best_seen > i64::MIN {
-        (-best_seen) as u64
+    // best_seen = total improvement (baseline - cost). Cost = baseline - improvement.
+    let score_after = if best_seen > 0 {
+        cf.baseline_cost.saturating_sub(best_seen as u64)
     } else {
         cf.baseline_cost
     };
@@ -598,13 +595,13 @@ fn short_path(path: &Path) -> String {
     s.to_string()
 }
 
-fn score_neural_output(
+fn score_neural_improvement(
     raw_codes: &[u32],
     block_baseline: u64,
     baseline_tasm: &[String],
     block_seed: u64,
 ) -> u64 {
-    trident::cost::stack_verifier::score_neural_output(
+    trident::cost::stack_verifier::score_neural_improvement(
         raw_codes,
         block_baseline,
         baseline_tasm,

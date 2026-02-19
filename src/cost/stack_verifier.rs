@@ -477,6 +477,19 @@ pub fn score_neural_output(
     profile.cost().min(block_baseline)
 }
 
+/// Score improvement of a neural candidate over baseline.
+/// Returns 0 for failures or equal/worse cost, positive value for genuine wins.
+/// Used by training to reward only actual improvement (not negated cost).
+pub fn score_neural_improvement(
+    raw_codes: &[u32],
+    block_baseline: u64,
+    baseline_tasm: &[String],
+    block_seed: u64,
+) -> u64 {
+    let cost = score_neural_output(raw_codes, block_baseline, baseline_tasm, block_seed);
+    block_baseline.saturating_sub(cost)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
