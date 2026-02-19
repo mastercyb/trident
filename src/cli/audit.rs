@@ -3,7 +3,7 @@ use std::process;
 
 use clap::Args;
 
-use super::trisha::{run_trisha, trisha_available};
+use super::trisha::{run_trisha, trisha_available, wrap_baseline_tasm};
 use super::{load_and_parse, resolve_input};
 
 #[derive(Args)]
@@ -36,13 +36,30 @@ pub fn cmd_audit(args: AuditArgs) {
 
 // ── Execution correctness audit (default, no args) ─────────────────
 
-/// Per-module audit result.
-struct ModuleAudit {
-    name: String,
+/// Audit results for a single dimension (classic or hand).
+struct DimAudit {
     compile: AuditStatus,
     execute: AuditStatus,
     prove: AuditStatus,
     verify: AuditStatus,
+}
+
+impl Default for DimAudit {
+    fn default() -> Self {
+        DimAudit {
+            compile: AuditStatus::Skip,
+            execute: AuditStatus::Skip,
+            prove: AuditStatus::Skip,
+            verify: AuditStatus::Skip,
+        }
+    }
+}
+
+/// Per-module audit result.
+struct ModuleAudit {
+    name: String,
+    classic: DimAudit,
+    hand: DimAudit,
 }
 
 enum AuditStatus {
@@ -54,10 +71,6 @@ enum AuditStatus {
 impl AuditStatus {
     fn is_ok(&self) -> bool {
         matches!(self, AuditStatus::Ok)
-    }
-
-    fn is_fail(&self) -> bool {
-        matches!(self, AuditStatus::Fail(_))
     }
 
     fn label(&self) -> &str {
@@ -116,78 +129,29 @@ fn cmd_audit_exec() {
 
         let mut audit = ModuleAudit {
             name: module_name.clone(),
-            compile: AuditStatus::Skip,
-            execute: AuditStatus::Skip,
-            prove: AuditStatus::Skip,
-            verify: AuditStatus::Skip,
+            classic: DimAudit::default(),
+            hand: DimAudit::default(),
         };
 
-        // Compile
+        // ── Classic dimension ──
         let _guard = trident::diagnostic::suppress_warnings();
         let full_tasm = trident::compile_project_with_options(&source_path, &options);
         drop(_guard);
 
-        let tasm = match full_tasm {
-            Ok(t) => {
-                audit.compile = AuditStatus::Ok;
-                t
-            }
-            Err(_) => {
-                audit.compile = AuditStatus::Fail("compilation failed".into());
-                results.push(audit);
-                continue;
-            }
-        };
-
-        // Write temp file
-        let tmp_path = std::env::temp_dir().join(format!(
-            "trident_audit_{}.tasm",
-            module_name.replace("::", "_")
-        ));
-        if std::fs::write(&tmp_path, &tasm).is_err() {
-            audit.compile = AuditStatus::Fail("cannot write temp file".into());
-            results.push(audit);
-            continue;
-        }
-        let tmp_str = tmp_path.to_string_lossy().to_string();
-
-        // Execute
-        match run_trisha(&["run", "--tasm", &tmp_str]) {
-            Ok(_) => audit.execute = AuditStatus::Ok,
-            Err(e) => {
-                audit.execute = AuditStatus::Fail(e);
-                let _ = std::fs::remove_file(&tmp_path);
-                results.push(audit);
-                continue;
-            }
+        if let Ok(tasm) = full_tasm {
+            audit.classic.compile = AuditStatus::Ok;
+            audit_run_pipeline(&mut audit.classic, &module_name, "classic", &tasm);
+        } else {
+            audit.classic.compile = AuditStatus::Fail("compilation failed".into());
         }
 
-        // Prove
-        let proof_path = std::env::temp_dir().join(format!(
-            "trident_audit_{}.proof.toml",
-            module_name.replace("::", "_")
-        ));
-        let proof_str = proof_path.to_string_lossy().to_string();
-        match run_trisha(&["prove", "--tasm", &tmp_str, "--output", &proof_str]) {
-            Ok(_) if proof_path.exists() => audit.prove = AuditStatus::Ok,
-            Ok(_) => audit.prove = AuditStatus::Fail("no proof file produced".into()),
-            Err(e) => {
-                audit.prove = AuditStatus::Fail(e);
-                let _ = std::fs::remove_file(&tmp_path);
-                results.push(audit);
-                continue;
-            }
+        // ── Hand dimension ──
+        let baseline_tasm = std::fs::read_to_string(baseline_path).unwrap_or_default();
+        if !baseline_tasm.is_empty() {
+            audit.hand.compile = AuditStatus::Ok;
+            let wrapped = wrap_baseline_tasm(&baseline_tasm);
+            audit_run_pipeline(&mut audit.hand, &module_name, "hand", &wrapped);
         }
-
-        let _ = std::fs::remove_file(&tmp_path);
-
-        // Verify
-        match run_trisha(&["verify", &proof_str]) {
-            Ok(_) => audit.verify = AuditStatus::Ok,
-            Err(e) => audit.verify = AuditStatus::Fail(e),
-        }
-
-        let _ = std::fs::remove_file(&proof_path);
 
         results.push(audit);
     }
@@ -203,63 +167,137 @@ fn cmd_audit_exec() {
     // Render table
     eprintln!();
     eprintln!(
-        "{:<38} {:>8} {:>8} {:>8} {:>8}",
-        "Module", "Compile", "Execute", "Prove", "Verify"
+        "{:<32} | {:>4} {:>4} {:>4} {:>4} | {:>4} {:>4} {:>4} {:>4}",
+        "Module", "Comp", "Exec", "Prov", "Vrfy", "Comp", "Exec", "Prov", "Vrfy"
     );
-    eprintln!("{}", "-".repeat(74));
+    eprintln!("{:<32} | {:<19} | {:<19}", "", "Classic", "Hand");
+    eprintln!("{}", "-".repeat(76));
 
     let mut any_fail = false;
     for r in &results {
         eprintln!(
-            "{:<38} {:>8} {:>8} {:>8} {:>8}",
+            "{:<32} | {:>4} {:>4} {:>4} {:>4} | {:>4} {:>4} {:>4} {:>4}",
             r.name,
-            r.compile.label(),
-            r.execute.label(),
-            r.prove.label(),
-            r.verify.label(),
+            r.classic.compile.label(),
+            r.classic.execute.label(),
+            r.classic.prove.label(),
+            r.classic.verify.label(),
+            r.hand.compile.label(),
+            r.hand.execute.label(),
+            r.hand.prove.label(),
+            r.hand.verify.label(),
         );
-        // Print failure details
-        if let AuditStatus::Fail(ref e) = r.compile {
-            eprintln!("  compile: {}", first_line(e));
-            any_fail = true;
-        }
-        if let AuditStatus::Fail(ref e) = r.execute {
-            eprintln!("  execute: {}", first_line(e));
-            any_fail = true;
-        }
-        if let AuditStatus::Fail(ref e) = r.prove {
-            eprintln!("  prove: {}", first_line(e));
-            any_fail = true;
-        }
-        if let AuditStatus::Fail(ref e) = r.verify {
-            eprintln!("  verify: {}", first_line(e));
-            any_fail = true;
-        }
+        any_fail |= print_dim_failures("classic", &r.classic);
+        any_fail |= print_dim_failures("hand", &r.hand);
     }
 
-    eprintln!("{}", "-".repeat(74));
+    eprintln!("{}", "-".repeat(76));
 
     let n = results.len();
-    let compile_ok = results.iter().filter(|r| r.compile.is_ok()).count();
-    let execute_ok = results.iter().filter(|r| r.execute.is_ok()).count();
-    let prove_ok = results.iter().filter(|r| r.prove.is_ok()).count();
-    let verify_ok = results.iter().filter(|r| r.verify.is_ok()).count();
-
+    let count = |f: fn(&ModuleAudit) -> &AuditStatus| -> usize {
+        results.iter().filter(|r| f(r).is_ok()).count()
+    };
     eprintln!(
-        "{}/{} compile  {}/{} execute  {}/{} prove  {}/{} verify",
-        compile_ok, n, execute_ok, n, prove_ok, n, verify_ok, n,
+        "Classic: {}/{} compile  {}/{} execute  {}/{} prove  {}/{} verify",
+        count(|r| &r.classic.compile),
+        n,
+        count(|r| &r.classic.execute),
+        n,
+        count(|r| &r.classic.prove),
+        n,
+        count(|r| &r.classic.verify),
+        n,
+    );
+    eprintln!(
+        "Hand:    {}/{} compile  {}/{} execute  {}/{} prove  {}/{} verify",
+        count(|r| &r.hand.compile),
+        n,
+        count(|r| &r.hand.execute),
+        n,
+        count(|r| &r.hand.prove),
+        n,
+        count(|r| &r.hand.verify),
+        n,
     );
 
-    if any_fail
-        || results.iter().any(|r| {
-            r.compile.is_fail() || r.execute.is_fail() || r.prove.is_fail() || r.verify.is_fail()
-        })
-    {
+    if any_fail {
         eprintln!();
         process::exit(1);
     }
 
     eprintln!("\nAll modules pass.");
+}
+
+/// Run execute -> prove -> verify pipeline for one dimension.
+fn audit_run_pipeline(dim: &mut DimAudit, module_name: &str, label: &str, tasm: &str) {
+    let tmp_path = std::env::temp_dir().join(format!(
+        "trident_audit_{}_{}.tasm",
+        module_name.replace("::", "_"),
+        label,
+    ));
+    if std::fs::write(&tmp_path, tasm).is_err() {
+        dim.execute = AuditStatus::Fail("cannot write temp file".into());
+        return;
+    }
+    let tmp_str = tmp_path.to_string_lossy().to_string();
+
+    // Execute
+    match run_trisha(&["run", "--tasm", &tmp_str]) {
+        Ok(_) => dim.execute = AuditStatus::Ok,
+        Err(e) => {
+            dim.execute = AuditStatus::Fail(e);
+            let _ = std::fs::remove_file(&tmp_path);
+            return;
+        }
+    }
+
+    // Prove
+    let proof_path = std::env::temp_dir().join(format!(
+        "trident_audit_{}_{}.proof.toml",
+        module_name.replace("::", "_"),
+        label,
+    ));
+    let proof_str = proof_path.to_string_lossy().to_string();
+    match run_trisha(&["prove", "--tasm", &tmp_str, "--output", &proof_str]) {
+        Ok(_) if proof_path.exists() => dim.prove = AuditStatus::Ok,
+        Ok(_) => {
+            dim.prove = AuditStatus::Fail("no proof file produced".into());
+            let _ = std::fs::remove_file(&tmp_path);
+            return;
+        }
+        Err(e) => {
+            dim.prove = AuditStatus::Fail(e);
+            let _ = std::fs::remove_file(&tmp_path);
+            return;
+        }
+    }
+
+    let _ = std::fs::remove_file(&tmp_path);
+
+    // Verify
+    match run_trisha(&["verify", &proof_str]) {
+        Ok(_) => dim.verify = AuditStatus::Ok,
+        Err(e) => dim.verify = AuditStatus::Fail(e),
+    }
+
+    let _ = std::fs::remove_file(&proof_path);
+}
+
+/// Print failure details for a dimension, return true if any failures.
+fn print_dim_failures(label: &str, dim: &DimAudit) -> bool {
+    let mut failed = false;
+    for (stage, status) in [
+        ("compile", &dim.compile),
+        ("execute", &dim.execute),
+        ("prove", &dim.prove),
+        ("verify", &dim.verify),
+    ] {
+        if let AuditStatus::Fail(ref e) = status {
+            eprintln!("  {} {}: {}", label, stage, first_line(e));
+            failed = true;
+        }
+    }
+    failed
 }
 
 fn first_line(s: &str) -> &str {

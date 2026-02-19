@@ -3,7 +3,7 @@ use std::process;
 
 use clap::Args;
 
-use super::trisha::{run_trisha, trisha_available};
+use super::trisha::{run_trisha, trisha_available, wrap_baseline_tasm};
 
 #[derive(Args)]
 pub struct BenchArgs {
@@ -140,11 +140,11 @@ pub fn cmd_bench(args: BenchArgs) {
                 run_dimension(&mut mb.classic, &module_name, "classic", &tasm);
             }
 
-            // Hand: baseline .tasm (library functions, not standalone — skip for now)
-            // TODO: wrap baseline functions with entry+halt harness for execution
+            // Hand: wrap baseline as standalone program
+            let hand_tasm = wrap_baseline_tasm(&baseline_tasm);
+            run_dimension(&mut mb.hand, &module_name, "hand", &hand_tasm);
 
             // Neural: not available in bench context yet
-            // TODO: wire neural optimizer output here
         }
 
         // Show progress
