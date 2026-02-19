@@ -166,7 +166,7 @@ pub fn cmd_bench(args: BenchArgs) {
             run_dimension(&mut mb.hand, &module_name, "hand", &hand_harness);
 
             // Neural: compile with neural model, substitute winning blocks
-            if let Some(neural_tasm) = compile_neural_tasm(&source_path, &options) {
+            if let Some(neural_tasm) = compile_neural_tasm(&source_path, &compiled_tasm, &options) {
                 let neural_harness = generate_test_harness(&neural_tasm);
                 run_dimension(&mut mb.neural, &module_name, "neural", &neural_harness);
             }
@@ -435,6 +435,51 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
     );
 }
 
+/// Run trisha prove with a timeout. Spawns the process and kills it if it
+/// exceeds the deadline. Returns Err on timeout or failure.
+fn run_trisha_prove_with_timeout(
+    base_args: &[&str],
+    harness: &Harness,
+    timeout: std::time::Duration,
+) -> Result<super::trisha::TrishaResult, String> {
+    use super::trisha::trisha_args_with_inputs;
+
+    let args = trisha_args_with_inputs(base_args, harness);
+    let start = std::time::Instant::now();
+    let mut child = std::process::Command::new("trisha")
+        .args(&args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to spawn trisha: {}", e))?;
+
+    // Poll until completion or timeout
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+                if !status.success() {
+                    return Err("prove failed".to_string());
+                }
+                return Ok(super::trisha::TrishaResult {
+                    output: Vec::new(),
+                    cycle_count: 0,
+                    elapsed_ms,
+                });
+            }
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err("prove timed out".to_string());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            Err(e) => return Err(format!("wait error: {}", e)),
+        }
+    }
+}
+
 /// Run execute + prove for a single dimension, writing results into DimTiming.
 fn run_dimension(dim: &mut DimTiming, module_name: &str, label: &str, harness: &Harness) {
     let tmp_path = std::env::temp_dir().join(format!(
@@ -450,16 +495,17 @@ fn run_dimension(dim: &mut DimTiming, module_name: &str, label: &str, harness: &
     if let Ok(r) = run_trisha_with_inputs(&["run", "--tasm", &tmp_str], harness) {
         dim.exec_ms = Some(r.elapsed_ms);
     }
-    // Prove
+    // Prove (with 2-minute timeout — large modules can take forever)
     let proof_path = std::env::temp_dir().join(format!(
         "trident_bench_{}_{}.proof.toml",
         module_name.replace("::", "_"),
         label,
     ));
     let proof_str = proof_path.to_string_lossy().to_string();
-    if let Ok(r) = run_trisha_with_inputs(
+    if let Ok(r) = run_trisha_prove_with_timeout(
         &["prove", "--tasm", &tmp_str, "--output", &proof_str],
         harness,
+        std::time::Duration::from_secs(120),
     ) {
         dim.prove_ms = Some(r.elapsed_ms);
         if proof_path.exists() {
@@ -530,7 +576,11 @@ fn run_rust_reference(ref_path: &str) -> Option<u64> {
 /// Compile a module with neural optimization: build TIR, run neural model
 /// on each block, substitute candidates that pass stack verification and
 /// have lower cost than classical lowering.
-fn compile_neural_tasm(source_path: &Path, options: &trident::CompileOptions) -> Option<String> {
+fn compile_neural_tasm(
+    source_path: &Path,
+    classical_tasm: &str,
+    options: &trident::CompileOptions,
+) -> Option<String> {
     use trident::cost::{scorer, stack_verifier};
     use trident::ir::tir::encode::encode_blocks;
     use trident::ir::tir::lower::{create_stack_lowering, decode_output};
@@ -549,14 +599,12 @@ fn compile_neural_tasm(source_path: &Path, options: &trident::CompileOptions) ->
     let ir = trident::build_tir_project(source_path, options).ok()?;
     drop(_guard);
 
-    // Classical lowering (baseline for comparison + structure)
     let lowering = create_stack_lowering(&options.target_config.name);
-    let classical_lines = lowering.lower(&ir);
 
     // Encode blocks for neural inference
     let blocks = encode_blocks(&ir);
     if blocks.is_empty() {
-        return Some(classical_lines.join("\n"));
+        return Some(classical_tasm.to_string());
     }
 
     // For each block, try neural substitution
@@ -613,14 +661,12 @@ fn compile_neural_tasm(source_path: &Path, options: &trident::CompileOptions) ->
     }
 
     if substitutions.is_empty() {
-        // No neural wins — return classical output
-        return Some(classical_lines.join("\n"));
+        // No neural wins — return same TASM as Classic (from compile_module)
+        return Some(classical_tasm.to_string());
     }
 
     // Splice neural blocks into classical TASM by text matching.
-    // For each winning block, find its classical lowering in the full
-    // classical output and replace with neural instructions.
-    let mut result = classical_lines.join("\n");
+    let mut result = classical_tasm.to_string();
     for (start, end, neural_lines) in &substitutions {
         let block_ops = &ir[*start..*end];
         let block_classical = lowering.lower(block_ops);
