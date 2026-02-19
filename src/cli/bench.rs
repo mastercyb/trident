@@ -604,7 +604,7 @@ fn compile_neural_tasm(
     // Encode blocks for neural inference
     let blocks = encode_blocks(&ir);
     if blocks.is_empty() {
-        return Some(classical_tasm.to_string());
+        return None;
     }
 
     // For each block, try neural substitution
@@ -661,8 +661,7 @@ fn compile_neural_tasm(
     }
 
     if substitutions.is_empty() {
-        // No neural wins — return same TASM as Classic (from compile_module)
-        return Some(classical_tasm.to_string());
+        return None;
     }
 
     // Splice neural blocks into classical TASM by text matching.
