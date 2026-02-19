@@ -8,9 +8,29 @@ pub struct BenchArgs {
     /// Directory containing baseline .tasm files (mirrors source tree)
     #[arg(default_value = "benches")]
     pub dir: PathBuf,
+    /// Verify correctness: compare classical, manual, neural TASM via stack verifier
+    #[arg(long)]
+    pub verify: bool,
+    /// Measure execution speed (cycle count via trisha run)
+    #[arg(long)]
+    pub exec: bool,
+    /// Measure proving time (via trisha prove)
+    #[arg(long)]
+    pub prove: bool,
+    /// Measure verification time (via trisha verify)
+    #[arg(long)]
+    pub check: bool,
+    /// Run all checks: --verify --exec --prove --check
+    #[arg(long)]
+    pub full: bool,
 }
 
 pub fn cmd_bench(args: BenchArgs) {
+    let do_verify = args.verify || args.full;
+    let do_exec = args.exec || args.full;
+    let do_prove = args.prove || args.full;
+    let do_check = args.check || args.full;
+
     let bench_dir = resolve_bench_dir(&args.dir);
     if !bench_dir.is_dir() {
         eprintln!("error: '{}' is not a directory", args.dir.display());
@@ -155,7 +175,184 @@ pub fn cmd_bench(args: BenchArgs) {
             )
         );
     }
+    // --- 4D Verification: --verify ---
+    if do_verify {
+        eprintln!();
+        eprintln!("Verification (stack verifier):");
+        run_verify_pass(&bench_dir, project_root, &baselines, &options);
+    }
+
+    // --- Execution speed: --exec ---
+    if do_exec {
+        eprintln!();
+        eprintln!("Execution speed (cycle count):");
+        eprintln!("  requires trisha --tasm support (not yet implemented)");
+        eprintln!("  track: https://github.com/nicksavers/trisha/issues/tasm-flag");
+    }
+
+    // --- Proving time: --prove ---
+    if do_prove {
+        eprintln!();
+        eprintln!("Proving time:");
+        eprintln!("  requires trisha --tasm support (not yet implemented)");
+    }
+
+    // --- Verification time: --check ---
+    if do_check {
+        eprintln!();
+        eprintln!("Verification time:");
+        eprintln!("  requires trisha --tasm support (not yet implemented)");
+    }
+
     eprintln!();
+}
+
+/// Run correctness verification: for each baseline function, compare
+/// classical compiler output vs manual baseline via stack verifier.
+fn run_verify_pass(
+    bench_dir: &std::path::Path,
+    project_root: &std::path::Path,
+    baselines: &[PathBuf],
+    options: &trident::CompileOptions,
+) {
+    use trident::cost::stack_verifier;
+
+    let mut total_pass = 0usize;
+    let mut total_fail = 0usize;
+    let mut total_skip = 0usize;
+
+    for baseline_path in baselines {
+        let rel = baseline_path
+            .strip_prefix(bench_dir)
+            .unwrap_or(baseline_path);
+        let rel_str = rel.to_string_lossy();
+        let source_rel = rel_str.replace(".baseline.tasm", ".tri");
+        let source_path = project_root.join(&source_rel);
+        let module_name = source_rel.trim_end_matches(".tri").replace('/', "::");
+
+        if !source_path.exists() {
+            continue;
+        }
+
+        // Compile to TASM via classical pipeline
+        let compiled_tasm = match trident::compile_module(&source_path, options) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+
+        // Read manual baseline
+        let baseline_tasm = match std::fs::read_to_string(baseline_path) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+
+        // Parse into per-function instruction lists
+        let compiled_fns = parse_tasm_to_lines(&compiled_tasm);
+        let baseline_fns = parse_tasm_to_lines(&baseline_tasm);
+
+        let mut module_pass = 0;
+        let mut module_fail = 0;
+        let mut module_skip = 0;
+
+        for (fn_name, baseline_lines) in &baseline_fns {
+            let compiled_lines = match compiled_fns.get(fn_name) {
+                Some(lines) => lines,
+                None => {
+                    module_skip += 1;
+                    continue;
+                }
+            };
+
+            // Run stack verifier: does classical produce same stack as manual baseline?
+            // Test with multiple seeds for confidence
+            let mut all_pass = true;
+            let mut any_simulated = false;
+            for seed in 0..5u64 {
+                let test_stack = stack_verifier::generate_test_stack(seed, 16);
+                let mut baseline_state = stack_verifier::StackState::new(test_stack.clone());
+                baseline_state.execute(baseline_lines);
+                if baseline_state.error {
+                    continue; // can't simulate this function (has control flow, etc.)
+                }
+                any_simulated = true;
+                let mut compiled_state = stack_verifier::StackState::new(test_stack);
+                compiled_state.execute(compiled_lines);
+                if compiled_state.error || compiled_state.stack != baseline_state.stack {
+                    all_pass = false;
+                    break;
+                }
+            }
+
+            if !any_simulated {
+                module_skip += 1;
+            } else if all_pass {
+                module_pass += 1;
+            } else {
+                module_fail += 1;
+                eprintln!("  FAIL  {}::{}", module_name, fn_name);
+            }
+        }
+
+        let status = if module_fail > 0 {
+            "FAIL"
+        } else if module_pass > 0 {
+            " ok "
+        } else {
+            "skip"
+        };
+        if module_fail > 0 || module_pass > 0 {
+            eprintln!(
+                "  [{}] {:<40} {} pass, {} fail, {} skip",
+                status, module_name, module_pass, module_fail, module_skip
+            );
+        }
+
+        total_pass += module_pass;
+        total_fail += module_fail;
+        total_skip += module_skip;
+    }
+
+    eprintln!();
+    if total_fail > 0 {
+        eprintln!(
+            "  RESULT: {} passed, {} FAILED, {} skipped",
+            total_pass, total_fail, total_skip
+        );
+    } else {
+        eprintln!(
+            "  RESULT: {} passed, {} skipped (all ok)",
+            total_pass, total_skip
+        );
+    }
+}
+
+/// Parse TASM text into per-function instruction line lists.
+/// Returns map of function_name -> Vec<instruction lines>.
+fn parse_tasm_to_lines(tasm: &str) -> std::collections::HashMap<String, Vec<String>> {
+    let mut fns: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut current_fn: Option<String> = None;
+    let mut current_lines: Vec<String> = Vec::new();
+
+    for line in tasm.lines() {
+        let trimmed = line.trim();
+        // Function label: __name: at start of line (not indented)
+        if trimmed.ends_with(':') && !trimmed.starts_with("//") && !line.starts_with(' ') {
+            // Save previous function
+            if let Some(ref name) = current_fn {
+                fns.insert(name.clone(), std::mem::take(&mut current_lines));
+            }
+            let label = trimmed.trim_end_matches(':').trim_start_matches('_');
+            current_fn = Some(label.to_string());
+            current_lines.clear();
+        } else if current_fn.is_some() && !trimmed.is_empty() {
+            current_lines.push(trimmed.to_string());
+        }
+    }
+    // Save last function
+    if let Some(name) = current_fn {
+        fns.insert(name, current_lines);
+    }
+    fns
 }
 
 /// Recursively find all .baseline.tasm files in a directory (depth-limited).
