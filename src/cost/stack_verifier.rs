@@ -376,9 +376,8 @@ impl StackState {
             // --- Extension field (modeled as nops for stack) ---
             "xb_mul" | "x_invert" | "xx_dot_step" | "xb_dot_step" => {}
 
-            // --- Control flow (should NOT appear in straight-line blocks) ---
+            // --- Control flow — can't simulate branches, mark unsimulable ---
             "call" | "return" | "recurse" | "recurse_or_return" | "skiz" => {
-                // Block boundary violation — mark as error for verification
                 self.error = true;
             }
 
@@ -409,22 +408,27 @@ pub fn generate_test_stack(seed: u64, size: usize) -> Vec<u64> {
 }
 
 /// Verify that candidate TASM produces the same stack as baseline TASM.
-/// Returns true if stacks match (or both error in the same way).
+/// Returns true only if both execute successfully and produce identical stacks.
+/// Conservative: rejects candidates when baseline can't be simulated.
 pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], seed: u64) -> bool {
-    let test_stack = generate_test_stack(seed, 8);
+    // Use 16 elements — enough for hash (10), assert_vector (10), etc.
+    let test_stack = generate_test_stack(seed, 16);
 
     let mut baseline_state = StackState::new(test_stack.clone());
     baseline_state.execute(baseline_tasm);
 
+    // If baseline can't be simulated, we can't verify — reject candidate.
+    // No free passes: the candidate must prove itself correct.
+    if baseline_state.error {
+        return false;
+    }
+
     let mut candidate_state = StackState::new(test_stack);
     candidate_state.execute(candidate_tasm);
 
-    // Both must be valid and produce identical stacks
-    if baseline_state.error && candidate_state.error {
-        return true; // both failed — consider equivalent
-    }
-    if baseline_state.error != candidate_state.error {
-        return false; // one failed, other didn't
+    // Candidate must execute without error and match baseline stack exactly
+    if candidate_state.error {
+        return false;
     }
     baseline_state.stack == candidate_state.stack
 }
@@ -577,6 +581,31 @@ mod tests {
         assert!(s.is_valid());
         // 7^5 = 16807
         assert_eq!(s.stack, vec![16807]);
+    }
+
+    #[test]
+    fn verify_rejects_when_baseline_errors() {
+        // Baseline has control flow (can't simulate) — candidate must be rejected
+        let baseline = lines(&["push 1", "call some_fn", "add"]);
+        let candidate = lines(&["push 42"]);
+        assert!(!verify_equivalent(&baseline, &candidate, 42));
+    }
+
+    #[test]
+    fn verify_rejects_when_candidate_errors() {
+        let baseline = lines(&["push 1", "push 2", "add"]);
+        let candidate = lines(&["add"]); // underflow on empty-ish stack (after 16 elements, add pops 2 and pushes 1 — actually this succeeds)
+                                         // Use a candidate that definitely errors
+        let bad_candidate = lines(&["pop 100"]); // underflow
+        assert!(!verify_equivalent(&baseline, &bad_candidate, 42));
+    }
+
+    #[test]
+    fn verify_rejects_both_error() {
+        // Both error — conservative: reject (no free passes)
+        let baseline = lines(&["call foo"]); // errors
+        let candidate = lines(&["call bar"]); // also errors
+        assert!(!verify_equivalent(&baseline, &candidate, 42));
     }
 
     #[test]
