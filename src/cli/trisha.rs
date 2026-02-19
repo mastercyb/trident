@@ -69,11 +69,9 @@ pub fn generate_test_harness(tasm: &str) -> Harness {
     }
 
     // Count external input instructions across entire TASM.
-    // divine N → N values from secret input
-    // read_io N → N values from public input
+    // divine N → N values from secret input (read_io replaced in body)
     // merkle_step → 1 digest (5 field elements) from nondeterminism
     let mut divine_count: usize = 0;
-    let mut read_io_count: usize = 0;
     let mut merkle_count: usize = 0;
 
     for line in clean.lines() {
@@ -86,14 +84,6 @@ pub fn generate_test_harness(tasm: &str) -> Harness {
             }
         } else if t == "divine" {
             divine_count += 1;
-        } else if let Some(rest) = t.strip_prefix("read_io ") {
-            if let Ok(n) = rest.trim().parse::<usize>() {
-                read_io_count += n;
-            } else {
-                read_io_count += 1;
-            }
-        } else if t == "read_io" {
-            read_io_count += 1;
         } else if t == "merkle_step" {
             merkle_count += 1;
         }
@@ -118,6 +108,16 @@ pub fn generate_test_harness(tasm: &str) -> Harness {
         } else if t == "recurse" {
             // recurse re-enters current function — replace with return
             body.push_str("    return\n");
+        } else if let Some(rest) = t.strip_prefix("read_io ") {
+            // read_io N consumes N public inputs — replace with push 0 × N
+            // Excess public inputs cause STARK verify to fail, so we
+            // eliminate them entirely and push dummy values instead.
+            let n: usize = rest.trim().parse().unwrap_or(1);
+            for _ in 0..n {
+                body.push_str("    push 0\n");
+            }
+        } else if t == "read_io" {
+            body.push_str("    push 0\n");
         } else {
             body.push_str(line);
             body.push('\n');
@@ -141,7 +141,7 @@ pub fn generate_test_harness(tasm: &str) -> Harness {
     Harness {
         tasm: harness,
         n_funcs,
-        read_io_count,
+        read_io_count: 0, // read_io replaced with push 0 in body
         divine_count,
         merkle_count,
     }
@@ -195,16 +195,17 @@ pub fn run_trisha(args: &[&str]) -> Result<TrishaResult, String> {
 
 /// Build trisha CLI args with external input flags.
 ///
-/// Over-provisions inputs generously: each divine/read_io instruction may
-/// be reached multiple times due to transitive calls from the harness,
-/// so we multiply the static count by the number of functions as an upper bound.
+/// Provides divine (secret) and digest inputs for harness execution.
+/// read_io is replaced with push 0 in the harness body (excess public
+/// inputs cause STARK verify to fail). Divine inputs over-provision
+/// by n_funcs multiplier for nested calls.
 pub fn trisha_args_with_inputs(base_args: &[&str], harness: &Harness) -> Vec<String> {
     let mut args: Vec<String> = base_args.iter().map(|s| s.to_string()).collect();
 
-    // Over-provision generously: deep call chains can multiply consumption
-    // well beyond n_funcs * static_count. Use n_funcs² as a safe upper bound.
-    let n = harness.n_funcs.max(1);
-    let multiplier = n * n;
+    // Over-provision for nested calls: each function might call others,
+    // so divine/digest consumption can exceed static count. n_funcs is a
+    // reasonable upper bound (read_io is already replaced with push 0).
+    let multiplier = harness.n_funcs.max(1);
 
     if harness.read_io_count > 0 {
         args.push("--input-values".into());
