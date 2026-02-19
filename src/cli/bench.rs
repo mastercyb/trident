@@ -3,9 +3,7 @@ use std::process;
 
 use clap::Args;
 
-use super::trisha::{
-    generate_test_harness, run_trisha, run_trisha_with_inputs, trisha_available, Harness,
-};
+use super::trisha::{generate_test_harness, run_trisha, trisha_available, Harness};
 
 #[derive(Args)]
 pub struct BenchArgs {
@@ -432,9 +430,8 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
     );
 }
 
-/// Run trisha prove with a timeout. Spawns the process and kills it if it
-/// exceeds the deadline. Returns Err on timeout or failure.
-fn run_trisha_prove_with_timeout(
+/// Run trisha with a timeout. Kills the process if it exceeds the deadline.
+fn run_trisha_timed(
     base_args: &[&str],
     harness: &Harness,
     timeout: std::time::Duration,
@@ -450,13 +447,12 @@ fn run_trisha_prove_with_timeout(
         .spawn()
         .map_err(|e| format!("failed to spawn trisha: {}", e))?;
 
-    // Poll until completion or timeout
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
                 let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
                 if !status.success() {
-                    return Err("prove failed".to_string());
+                    return Err("failed".to_string());
                 }
                 return Ok(super::trisha::TrishaResult {
                     output: Vec::new(),
@@ -468,7 +464,7 @@ fn run_trisha_prove_with_timeout(
                 if start.elapsed() > timeout {
                     let _ = child.kill();
                     let _ = child.wait();
-                    return Err("prove timed out".to_string());
+                    return Err("timed out".to_string());
                 }
                 std::thread::sleep(std::time::Duration::from_millis(500));
             }
@@ -488,18 +484,22 @@ fn run_dimension(dim: &mut DimTiming, module_name: &str, label: &str, harness: &
         return;
     }
     let tmp_str = tmp_path.to_string_lossy().to_string();
-    // Execute
-    if let Ok(r) = run_trisha_with_inputs(&["run", "--tasm", &tmp_str], harness) {
+    // Execute (30s timeout)
+    if let Ok(r) = run_trisha_timed(
+        &["run", "--tasm", &tmp_str],
+        harness,
+        std::time::Duration::from_secs(30),
+    ) {
         dim.exec_ms = Some(r.elapsed_ms);
     }
-    // Prove (with 2-minute timeout — large modules can take forever)
+    // Prove (2min timeout)
     let proof_path = std::env::temp_dir().join(format!(
         "trident_bench_{}_{}.proof.toml",
         module_name.replace("::", "_"),
         label,
     ));
     let proof_str = proof_path.to_string_lossy().to_string();
-    if let Ok(r) = run_trisha_prove_with_timeout(
+    if let Ok(r) = run_trisha_timed(
         &["prove", "--tasm", &tmp_str, "--output", &proof_str],
         harness,
         std::time::Duration::from_secs(120),
