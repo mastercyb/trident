@@ -85,6 +85,10 @@ pub fn cmd_train(args: TrainArgs) {
     let start = std::time::Instant::now();
     let mut total_trained = 0u64;
     let mut prev_epoch_avg = 0u64;
+    let mut epoch_history: Vec<u64> = Vec::new();
+    // EMA of per-epoch improvement rate (alpha=0.3 — smooths over ~3 epochs)
+    let mut ema_rate: f64 = 0.0;
+    const EMA_ALPHA: f64 = 0.3;
 
     for epoch in 0..args.epochs {
         // Shuffle file indices each epoch
@@ -129,10 +133,33 @@ pub fn cmd_train(args: TrainArgs) {
             " (=)".into()
         };
         prev_epoch_avg = avg_cost;
+        epoch_history.push(epoch_cost);
 
         let ratio = epoch_cost as f64 / total_baseline.max(1) as f64;
+
+        // EMA convergence: track smoothed improvement rate
+        let conv_info = if epoch_history.len() >= 2 {
+            let prev = epoch_history[epoch_history.len() - 2];
+            let curr = epoch_history[epoch_history.len() - 1];
+            let instant_rate = if prev > 0 {
+                (prev as f64 - curr as f64) / prev as f64
+            } else {
+                0.0
+            };
+            ema_rate = EMA_ALPHA * instant_rate + (1.0 - EMA_ALPHA) * ema_rate;
+            if ema_rate < 0.001 {
+                " | converged".to_string()
+            } else if ema_rate < 0.005 {
+                format!(" | plateau ({:.2}%/ep)", ema_rate * 100.0)
+            } else {
+                format!(" | improving ({:.1}%/ep)", ema_rate * 100.0)
+            }
+        } else {
+            String::new()
+        };
+
         eprintln!(
-            "\r  epoch {}/{} | {} blocks | cost {} / baseline {} ({:.2}x) | avg {} | {:.1}s{}",
+            "\r  epoch {}/{} | {} blocks | cost {} / baseline {} ({:.2}x) | avg {} | {:.1}s{}{}",
             epoch + 1,
             args.epochs,
             total_blocks,
@@ -142,6 +169,7 @@ pub fn cmd_train(args: TrainArgs) {
             avg_cost,
             epoch_elapsed.as_secs_f64(),
             trend,
+            conv_info,
         );
 
         // Per-file breakdown on first and last epoch
@@ -222,6 +250,21 @@ pub fn cmd_train(args: TrainArgs) {
         final_ratio,
         (1.0 - final_ratio) * 100.0,
     );
+    if epoch_history.len() >= 2 {
+        let (label, hint) = if ema_rate < 0.001 {
+            ("converged", "further training unlikely to help")
+        } else if ema_rate < 0.005 {
+            ("plateau", "diminishing returns, may stop soon")
+        } else {
+            ("improving", "model still learning, keep training")
+        };
+        eprintln!(
+            "  convergence  {} ({:.2}%/ep) — {}",
+            label,
+            ema_rate * 100.0,
+            hint,
+        );
+    }
     if let Some(meta) = meta {
         eprintln!("  weights      {}", meta.weight_hash);
     }
