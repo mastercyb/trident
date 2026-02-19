@@ -150,3 +150,24 @@ results to `.cortex/`, prepare a fix plan before applying.
 3. Main session reads `.cortex/`, summarizes, and prepares a fix plan.
 4. User confirms the fix plan before any changes are applied.
 5. Fixes applied as atomic commits. `.cortex/` cleaned of stale entries.
+
+## Four-Dimensional Verification
+
+Every function that compiles to TASM is verified across four dimensions:
+
+| Dimension | Source | Role |
+|-----------|--------|------|
+| Reference | `benches/*/reference.rs` (Rust) | Ground truth: generates inputs, computes expected outputs |
+| Classic | `trident build` | Default compiler pipeline |
+| Manual | `benches/*/*.baseline.tasm` | Hand-optimized expert TASM |
+| Neural | Neural optimizer | ML-optimized TASM |
+
+Four metrics compared across all dimensions:
+
+1. **Correctness** — output must match Rust reference on all test inputs
+2. **Execution speed** — Triton VM cycle count (via `trisha run`)
+3. **Proving time** — STARK proof generation wall-clock (via `trisha prove`)
+4. **Verification time** — STARK proof verification wall-clock (via `trisha verify`)
+
+Slow code is a bug. Incorrect code is a soundness hole.
+`trident bench --full` is the scoreboard.

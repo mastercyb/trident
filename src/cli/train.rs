@@ -21,6 +21,7 @@ struct CompiledFile {
     path: String,
     blocks: Vec<trident::ir::tir::encode::TIRBlock>,
     per_block_baselines: Vec<u64>,
+    per_block_tasm: Vec<Vec<String>>,
     baseline_cost: u64,
 }
 
@@ -328,28 +329,33 @@ fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
         let baseline_profile = trident::cost::scorer::profile_tasm_str(&baseline_tasm.join("\n"));
         let baseline_cost = baseline_profile.cost();
 
-        let per_block_baselines: Vec<u64> = blocks
-            .iter()
-            .map(|block| {
-                let block_ops = &ir[block.start_idx..block.end_idx];
-                if block_ops.is_empty() {
-                    return 1;
-                }
-                let block_tasm = lowering.lower(block_ops);
-                if block_tasm.is_empty() {
-                    return 1;
-                }
-                let profile = trident::cost::scorer::profile_tasm(
-                    &block_tasm.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
-                );
-                profile.cost().max(1)
-            })
-            .collect();
+        let mut per_block_baselines: Vec<u64> = Vec::new();
+        let mut per_block_tasm: Vec<Vec<String>> = Vec::new();
+        for block in &blocks {
+            let block_ops = &ir[block.start_idx..block.end_idx];
+            if block_ops.is_empty() {
+                per_block_baselines.push(1);
+                per_block_tasm.push(Vec::new());
+                continue;
+            }
+            let block_tasm = lowering.lower(block_ops);
+            if block_tasm.is_empty() {
+                per_block_baselines.push(1);
+                per_block_tasm.push(Vec::new());
+                continue;
+            }
+            let profile = trident::cost::scorer::profile_tasm(
+                &block_tasm.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            );
+            per_block_baselines.push(profile.cost().max(1));
+            per_block_tasm.push(block_tasm);
+        }
 
         compiled.push(CompiledFile {
             path: short_path(file),
             blocks,
             per_block_baselines,
+            per_block_tasm,
             baseline_cost,
         });
     }
@@ -422,6 +428,7 @@ fn train_one_compiled(
             let gpu_outputs = accel.batch_forward(&weight_vecs);
             // Score in parallel — one thread per individual
             let baselines = &cf.per_block_baselines;
+            let block_tasm = &cf.per_block_tasm;
             let fitnesses: Vec<i64> = std::thread::scope(|s| {
                 let handles: Vec<_> = gpu_outputs
                     .iter()
@@ -429,7 +436,12 @@ fn train_one_compiled(
                         s.spawn(move || {
                             let mut total = 0i64;
                             for (b, block_out) in ind_outputs.iter().enumerate() {
-                                total -= score_neural_output(block_out, baselines[b]) as i64;
+                                total -= score_neural_output(
+                                    block_out,
+                                    baselines[b],
+                                    &block_tasm[b],
+                                    b as u64,
+                                ) as i64;
                             }
                             total
                         })
@@ -449,6 +461,7 @@ fn train_one_compiled(
                     .iter()
                     .map(|individual| {
                         s.spawn(move || {
+                            use trident::cost::stack_verifier;
                             let mut model = NeuralModel::from_weight_vec(&individual.weights);
                             let mut total = 0i64;
                             for (i, block) in cf.blocks.iter().enumerate() {
@@ -460,6 +473,18 @@ fn train_one_compiled(
                                 }
                                 let candidate_lines = decode_output(&output);
                                 if candidate_lines.is_empty() {
+                                    total -= baseline as i64;
+                                    continue;
+                                }
+                                // Correctness check
+                                let baseline_tasm = &cf.per_block_tasm[i];
+                                if !baseline_tasm.is_empty()
+                                    && !stack_verifier::verify_equivalent(
+                                        baseline_tasm,
+                                        &candidate_lines,
+                                        i as u64,
+                                    )
+                                {
                                     total -= baseline as i64;
                                     continue;
                                 }
@@ -572,7 +597,13 @@ fn short_path(path: &Path) -> String {
     s.to_string()
 }
 
-fn score_neural_output(raw_codes: &[u32], block_baseline: u64) -> u64 {
+fn score_neural_output(
+    raw_codes: &[u32],
+    block_baseline: u64,
+    baseline_tasm: &[String],
+    block_seed: u64,
+) -> u64 {
+    use trident::cost::stack_verifier;
     use trident::ir::tir::lower::decode_output;
     let codes: Vec<u64> = raw_codes
         .iter()
@@ -585,6 +616,12 @@ fn score_neural_output(raw_codes: &[u32], block_baseline: u64) -> u64 {
     let candidate_lines = decode_output(&codes);
     if candidate_lines.is_empty() {
         return block_baseline;
+    }
+    // Correctness check: candidate must produce same stack as baseline
+    if !baseline_tasm.is_empty()
+        && !stack_verifier::verify_equivalent(baseline_tasm, &candidate_lines, block_seed)
+    {
+        return block_baseline; // incorrect — reject
     }
     let profile = trident::cost::scorer::profile_tasm(
         &candidate_lines

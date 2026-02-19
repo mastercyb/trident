@@ -8,6 +8,7 @@ mod json;
 pub mod model;
 pub mod report;
 pub mod scorer;
+pub mod stack_verifier;
 mod visit;
 
 // Public re-exports

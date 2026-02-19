@@ -221,6 +221,22 @@ Every commit:
 - `trident audit` — formal properties still hold
 - If anything fails, fix before reporting done.
 
+## Verification Framework
+
+Four ways to produce TASM: Rust reference, classic compiler, manual
+baseline, neural optimizer. All must agree on correctness.
+`trident bench --full` is the scoreboard.
+
+- `benches/*/reference.rs` — Rust ground truth (generates inputs, expected outputs)
+- `benches/*/*.baseline.tasm` — hand-optimized TASM (expert floor)
+- Classic TASM — `trident build` output
+- Neural TASM — neural optimizer output
+
+Four metrics: correctness (`trisha run` vs reference), execution speed
+(cycle count), proving time (`trisha prove`), verification time
+(`trisha verify`). Block-level training uses inline stack verifier
+(`src/cost/stack_verifier.rs`) for fast feedback.
+
 ## Compaction Survival
 
 When context compacts, preserve: modified file paths, failing test

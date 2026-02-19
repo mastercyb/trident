@@ -243,22 +243,26 @@ fn run_neural_analysis(
             baseline_cost
         };
 
-        // Compute per-block baselines by lowering each block's TIR ops independently.
-        let per_block_baselines: Vec<u64> = blocks
+        // Compute per-block baselines and TASM by lowering each block independently.
+        let mut per_block_baselines: Vec<u64> = Vec::new();
+        let per_block_tasm: Vec<Vec<String>> = blocks
             .iter()
             .map(|block| {
                 let block_ops = &ir[block.start_idx..block.end_idx];
                 if block_ops.is_empty() {
-                    return 1;
+                    per_block_baselines.push(1);
+                    return Vec::new();
                 }
                 let block_tasm = lowering.lower(block_ops);
                 if block_tasm.is_empty() {
-                    return 1;
+                    per_block_baselines.push(1);
+                    return Vec::new();
                 }
                 let profile = trident::cost::scorer::profile_tasm(
                     &block_tasm.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
                 );
-                profile.cost().max(1)
+                per_block_baselines.push(profile.cost().max(1));
+                block_tasm
             })
             .collect();
         let total_block_baseline: u64 = per_block_baselines.iter().sum();
@@ -296,6 +300,7 @@ fn run_neural_analysis(
                 let gpu_outputs = accel.batch_forward(&weight_vecs);
 
                 let baselines = &per_block_baselines;
+                let btasm = &per_block_tasm;
                 let fitnesses: Vec<i64> = std::thread::scope(|s| {
                     let handles: Vec<_> = gpu_outputs
                         .iter()
@@ -303,7 +308,12 @@ fn run_neural_analysis(
                             s.spawn(move || {
                                 let mut total = 0i64;
                                 for (b, block_out) in ind_outputs.iter().enumerate() {
-                                    total -= score_neural_output(block_out, baselines[b]) as i64;
+                                    total -= score_neural_output(
+                                        block_out,
+                                        baselines[b],
+                                        &btasm[b],
+                                        b as u64,
+                                    ) as i64;
                                 }
                                 total
                             })
@@ -319,12 +329,14 @@ fn run_neural_analysis(
                 // CPU fallback
                 let blk_ref = &blocks;
                 let baselines = &per_block_baselines;
+                let btasm = &per_block_tasm;
                 let fitnesses: Vec<i64> = std::thread::scope(|s| {
                     let handles: Vec<_> = pop
                         .individuals
                         .iter()
                         .map(|individual| {
                             s.spawn(move || {
+                                use trident::cost::stack_verifier;
                                 let mut model = NeuralModel::from_weight_vec(&individual.weights);
                                 let mut total = 0i64;
                                 for (i, block) in blk_ref.iter().enumerate() {
@@ -336,6 +348,18 @@ fn run_neural_analysis(
                                     }
                                     let candidate_lines = decode_output(&output);
                                     if candidate_lines.is_empty() {
+                                        total -= baseline as i64;
+                                        continue;
+                                    }
+                                    // Correctness check
+                                    let baseline_tasm = &btasm[i];
+                                    if !baseline_tasm.is_empty()
+                                        && !stack_verifier::verify_equivalent(
+                                            baseline_tasm,
+                                            &candidate_lines,
+                                            i as u64,
+                                        )
+                                    {
                                         total -= baseline as i64;
                                         continue;
                                     }
@@ -495,7 +519,13 @@ fn build_tir(
 
 /// Score a neural output against a per-block baseline.
 /// Returns the cost to subtract from fitness (lower is better for the model).
-fn score_neural_output(raw_codes: &[u32], block_baseline: u64) -> u64 {
+fn score_neural_output(
+    raw_codes: &[u32],
+    block_baseline: u64,
+    baseline_tasm: &[String],
+    block_seed: u64,
+) -> u64 {
+    use trident::cost::stack_verifier;
     use trident::ir::tir::lower::decode_output;
 
     let codes: Vec<u64> = raw_codes
@@ -508,6 +538,12 @@ fn score_neural_output(raw_codes: &[u32], block_baseline: u64) -> u64 {
     }
     let candidate_lines = decode_output(&codes);
     if candidate_lines.is_empty() {
+        return block_baseline;
+    }
+    // Correctness check: candidate must produce same stack as baseline
+    if !baseline_tasm.is_empty()
+        && !stack_verifier::verify_equivalent(baseline_tasm, &candidate_lines, block_seed)
+    {
         return block_baseline;
     }
     let profile = trident::cost::scorer::profile_tasm(
