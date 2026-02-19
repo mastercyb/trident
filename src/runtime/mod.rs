@@ -52,6 +52,8 @@ pub struct ProgramInput {
     pub public: Vec<u64>,
     /// Secret/divine input field elements (read via `divine`).
     pub secret: Vec<u64>,
+    /// Nondeterministic digests for `merkle_step` (each is 5 field elements).
+    pub digests: Vec<[u64; 5]>,
 }
 
 // ─── Warrior Traits ────────────────────────────────────────────────

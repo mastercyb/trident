@@ -3,7 +3,9 @@ use std::process;
 
 use clap::Args;
 
-use super::trisha::{generate_test_harness, run_trisha, trisha_available};
+use super::trisha::{
+    generate_test_harness, run_trisha, run_trisha_with_inputs, trisha_available, Harness,
+};
 use super::{load_and_parse, resolve_input};
 
 #[derive(Args)]
@@ -230,20 +232,20 @@ fn cmd_audit_exec() {
 }
 
 /// Run execute -> prove -> verify pipeline for one dimension.
-fn audit_run_pipeline(dim: &mut DimAudit, module_name: &str, label: &str, tasm: &str) {
+fn audit_run_pipeline(dim: &mut DimAudit, module_name: &str, label: &str, harness: &Harness) {
     let tmp_path = std::env::temp_dir().join(format!(
         "trident_audit_{}_{}.tasm",
         module_name.replace("::", "_"),
         label,
     ));
-    if std::fs::write(&tmp_path, tasm).is_err() {
+    if std::fs::write(&tmp_path, &harness.tasm).is_err() {
         dim.execute = AuditStatus::Fail("cannot write temp file".into());
         return;
     }
     let tmp_str = tmp_path.to_string_lossy().to_string();
 
     // Execute
-    match run_trisha(&["run", "--tasm", &tmp_str]) {
+    match run_trisha_with_inputs(&["run", "--tasm", &tmp_str], harness) {
         Ok(_) => dim.execute = AuditStatus::Ok,
         Err(e) => {
             dim.execute = AuditStatus::Fail(e);
@@ -259,7 +261,10 @@ fn audit_run_pipeline(dim: &mut DimAudit, module_name: &str, label: &str, tasm: 
         label,
     ));
     let proof_str = proof_path.to_string_lossy().to_string();
-    match run_trisha(&["prove", "--tasm", &tmp_str, "--output", &proof_str]) {
+    match run_trisha_with_inputs(
+        &["prove", "--tasm", &tmp_str, "--output", &proof_str],
+        harness,
+    ) {
         Ok(_) if proof_path.exists() => dim.prove = AuditStatus::Ok,
         Ok(_) => {
             dim.prove = AuditStatus::Fail("no proof file produced".into());
@@ -275,7 +280,7 @@ fn audit_run_pipeline(dim: &mut DimAudit, module_name: &str, label: &str, tasm: 
 
     let _ = std::fs::remove_file(&tmp_path);
 
-    // Verify
+    // Verify (no inputs needed — verification uses the proof file)
     match run_trisha(&["verify", &proof_str]) {
         Ok(_) => dim.verify = AuditStatus::Ok,
         Err(e) => dim.verify = AuditStatus::Fail(e),

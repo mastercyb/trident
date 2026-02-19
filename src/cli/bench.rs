@@ -3,7 +3,9 @@ use std::process;
 
 use clap::Args;
 
-use super::trisha::{generate_test_harness, run_trisha, trisha_available};
+use super::trisha::{
+    generate_test_harness, run_trisha, run_trisha_with_inputs, trisha_available, Harness,
+};
 
 #[derive(Args)]
 pub struct BenchArgs {
@@ -160,8 +162,8 @@ pub fn cmd_bench(args: BenchArgs) {
             }
 
             // Hand: generate test harness from baseline
-            let hand_tasm = generate_test_harness(&baseline_tasm);
-            run_dimension(&mut mb.hand, &module_name, "hand", &hand_tasm);
+            let hand_harness = generate_test_harness(&baseline_tasm);
+            run_dimension(&mut mb.hand, &module_name, "hand", &hand_harness);
 
             // Neural: not available in bench context yet
         }
@@ -430,17 +432,18 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
 }
 
 /// Run execute + prove for a single dimension, writing results into DimTiming.
-fn run_dimension(dim: &mut DimTiming, module_name: &str, label: &str, tasm: &str) {
+fn run_dimension(dim: &mut DimTiming, module_name: &str, label: &str, harness: &Harness) {
     let tmp_path = std::env::temp_dir().join(format!(
         "trident_bench_{}_{}.tasm",
         module_name.replace("::", "_"),
         label,
     ));
-    if std::fs::write(&tmp_path, tasm).is_err() {
+    if std::fs::write(&tmp_path, &harness.tasm).is_err() {
         return;
     }
+    let tmp_str = tmp_path.to_string_lossy().to_string();
     // Execute
-    if let Ok(r) = run_trisha(&["run", "--tasm", &tmp_path.to_string_lossy()]) {
+    if let Ok(r) = run_trisha_with_inputs(&["run", "--tasm", &tmp_str], harness) {
         dim.exec_ms = Some(r.elapsed_ms);
     }
     // Prove
@@ -449,13 +452,11 @@ fn run_dimension(dim: &mut DimTiming, module_name: &str, label: &str, tasm: &str
         module_name.replace("::", "_"),
         label,
     ));
-    if let Ok(r) = run_trisha(&[
-        "prove",
-        "--tasm",
-        &tmp_path.to_string_lossy(),
-        "--output",
-        &proof_path.to_string_lossy(),
-    ]) {
+    let proof_str = proof_path.to_string_lossy().to_string();
+    if let Ok(r) = run_trisha_with_inputs(
+        &["prove", "--tasm", &tmp_str, "--output", &proof_str],
+        harness,
+    ) {
         dim.prove_ms = Some(r.elapsed_ms);
         if proof_path.exists() {
             dim.proof_path = Some(proof_path);
