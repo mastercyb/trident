@@ -248,14 +248,16 @@ pub fn cmd_train(args: TrainArgs) {
             format!(" | verified 0 | won 0")
         };
         // Build per-file table
-        // (path, blocks, dec_cost, dec_bl, ver_cost, ver_bl, decoded, verified, wins)
+        // (path, total_blocks, trainable, dec_cost, dec_bl, ver_cost, ver_bl, decoded, verified, wins)
         let mut sorted: Vec<_> = epoch_costs
             .iter()
             .map(|e| {
                 let cf = &compiled[e.0];
+                let trainable = cf.per_block_verifiable.iter().filter(|&&v| v).count();
                 (
                     cf.path.as_str(),
                     cf.blocks.len(),
+                    trainable,
                     e.6, // decoded_cost
                     e.7, // decoded_baseline
                     e.8, // verified_cost
@@ -268,9 +270,9 @@ pub fn cmd_train(args: TrainArgs) {
             .collect();
         // Sort by verified wins (most first), then verified count, then decoded count
         sorted.sort_by(|a, b| {
-            b.8.cmp(&a.8) // wins descending
-                .then(b.7.cmp(&a.7)) // verified descending
-                .then(b.6.cmp(&a.6)) // decoded descending
+            b.9.cmp(&a.9) // wins descending
+                .then(b.8.cmp(&a.8)) // verified descending
+                .then(b.7.cmp(&a.7)) // decoded descending
         });
         let total_blk: usize = sorted.iter().map(|s| s.1).sum();
 
@@ -296,12 +298,13 @@ pub fn cmd_train(args: TrainArgs) {
 
         // Table header
         eprintln!(
-            "  {:<60} | {:>6} | {:>7} {:>8} {:>5} | {:>15}\x1B[K",
+            "  {:<60} | {:>9} | {:>7} {:>8} {:>5} | {:>15}\x1B[K",
             "Module", "Blocks", "Decoded", "Verified", "Won", "Cost (ratio)"
         );
-        eprintln!("  {}\x1B[K", "-".repeat(110));
+        eprintln!("  {}\x1B[K", "-".repeat(113));
 
-        for &(path, blocks, _dc, _db, vc, vb, decoded, verified, wins) in &sorted {
+        for &(path, total, trainable, _dc, _db, vc, vb, decoded, verified, wins) in &sorted {
+            let blocks_col = format!("{}/{}", trainable, total);
             let cost_col = if verified > 0 {
                 let vr = vc as f64 / vb.max(1) as f64;
                 format!("{}/{} ({:.2}x)", vc, vb, vr)
@@ -309,11 +312,11 @@ pub fn cmd_train(args: TrainArgs) {
                 "\u{2013}".to_string()
             };
             eprintln!(
-                "  {:<60} | {:>6} | {:>7} {:>8} {:>5} | {:>15}\x1B[K",
-                path, blocks, decoded, verified, wins, cost_col,
+                "  {:<60} | {:>9} | {:>7} {:>8} {:>5} | {:>15}\x1B[K",
+                path, blocks_col, decoded, verified, wins, cost_col,
             );
         }
-        eprintln!("  {}\x1B[K", "-".repeat(110));
+        eprintln!("  {}\x1B[K", "-".repeat(113));
         prev_table_lines = table_lines;
     }
 
