@@ -506,25 +506,11 @@ fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
 
         let baseline_cost: u64 = per_block_baselines.iter().sum();
 
-        // Mark blocks whose baselines use side-effecting ops as unverifiable
-        let disallowed = &[
-            "write_io",
-            "halt",
-            "assert",
-            "assert_vector",
-            "divine",
-            "split",
-        ];
-        let per_block_verifiable: Vec<bool> = per_block_tasm
-            .iter()
-            .map(|tasm| {
-                !tasm.is_empty()
-                    && !tasm.iter().any(|line| {
-                        let op = line.trim().split_whitespace().next().unwrap_or("");
-                        disallowed.contains(&op)
-                    })
-            })
-            .collect();
+        // All non-empty blocks are trainable — the verifier now handles
+        // side-effect ops (write_io, halt, assert, divine, split) via
+        // side-channel comparison.
+        let per_block_verifiable: Vec<bool> =
+            per_block_tasm.iter().map(|tasm| !tasm.is_empty()).collect();
 
         compiled.push(CompiledFile {
             path: short_path(file),
