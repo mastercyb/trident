@@ -12,7 +12,6 @@ use crate::neural::data::pairs::TrainingPair;
 use crate::neural::data::tir_graph::NODE_FEATURE_DIM;
 use crate::neural::model::composite::NeuralCompilerV2;
 use crate::neural::model::grammar::precompute_sequence_state;
-use crate::neural::model::vocab::VOCAB_SIZE;
 
 /// Supervised training configuration.
 pub struct SupervisedConfig {
@@ -148,14 +147,13 @@ pub fn train_epoch<B: burn::tensor::backend::AutodiffBackend>(
         );
         // logits: [1, seq_len, VOCAB_SIZE]
 
-        // 5. Apply grammar mask penalties
-        let mask_data: Vec<f32> = state.masks.into_iter().flatten().collect();
-        let grammar_mask =
-            Tensor::<B, 3>::from_data(TensorData::new(mask_data, [1, seq_len, VOCAB_SIZE]), device);
-        let masked_logits = logits + grammar_mask;
-
-        // 6. Cross-entropy loss
-        // Target: [1, seq_len]
+        // 5. Cross-entropy loss (no grammar mask during teacher forcing)
+        //
+        // Grammar masks are for inference-time beam search. During supervised
+        // training with teacher forcing, the target tokens ARE correct — applying
+        // -1e9 penalties to them causes loss explosion (~1e8). The stack depth
+        // and type state features above already provide grammar awareness to the
+        // decoder as input conditioning.
         let targets = Tensor::<B, 2, Int>::from_data(
             TensorData::new(
                 tokens.iter().map(|&t| t as i32).collect::<Vec<_>>(),
@@ -164,7 +162,7 @@ pub fn train_epoch<B: burn::tensor::backend::AutodiffBackend>(
             device,
         );
 
-        let loss = cross_entropy_loss(masked_logits, targets);
+        let loss = cross_entropy_loss(logits, targets);
         let loss_val: f32 = loss.clone().into_data().to_vec::<f32>().unwrap()[0];
         total_loss += loss_val;
 
