@@ -192,7 +192,7 @@ fn cross_entropy_loss<B: Backend>(
 }
 
 /// Convert TirGraph nodes to a feature tensor.
-fn graph_to_features<B: Backend>(
+pub fn graph_to_features<B: Backend>(
     graph: &crate::neural::data::tir_graph::TirGraph,
     device: &B::Device,
 ) -> Tensor<B, 2> {
@@ -206,7 +206,7 @@ fn graph_to_features<B: Backend>(
 }
 
 /// Convert TirGraph edges to index tensors.
-fn graph_to_edges<B: Backend>(
+pub fn graph_to_edges<B: Backend>(
     graph: &crate::neural::data::tir_graph::TirGraph,
     device: &B::Device,
 ) -> (Tensor<B, 1, Int>, Tensor<B, 1, Int>, Tensor<B, 1, Int>) {
