@@ -13,10 +13,17 @@ use crate::field::goldilocks::{Goldilocks, MODULUS};
 use crate::field::PrimeField;
 
 /// Stack state after executing a TASM sequence.
+/// Tracks side-channel logs alongside the stack so verification can
+/// detect removal/substitution of I/O, assertion, and divine ops.
 #[derive(Clone, Debug)]
 pub struct StackState {
     pub stack: Vec<u64>,
     pub error: bool,
+    pub halted: bool,
+    pub io_output: Vec<u64>,
+    pub divine_log: Vec<usize>,
+    pub assert_log: Vec<u64>,
+    pub assert_vector_log: Vec<Vec<u64>>,
 }
 
 impl StackState {
@@ -24,13 +31,18 @@ impl StackState {
         Self {
             stack: initial,
             error: false,
+            halted: false,
+            io_output: Vec::new(),
+            divine_log: Vec::new(),
+            assert_log: Vec::new(),
+            assert_vector_log: Vec::new(),
         }
     }
 
     /// Execute a sequence of TASM lines. Stops on error or halt.
     pub fn execute(&mut self, lines: &[String]) {
         for line in lines {
-            if self.error {
+            if self.error || self.halted {
                 return;
             }
             self.execute_line(line);
@@ -261,6 +273,7 @@ impl StackState {
             // --- Control (straight-line only) ---
             "nop" => {}
             "halt" => {
+                self.halted = true;
                 return;
             }
             "assert" => {
@@ -269,6 +282,7 @@ impl StackState {
                     return;
                 }
                 let v = self.stack.pop().unwrap();
+                self.assert_log.push(v);
                 if v != 1 {
                     self.error = true;
                 }
@@ -280,6 +294,8 @@ impl StackState {
                     return;
                 }
                 let len = self.stack.len();
+                let asserted: Vec<u64> = (0..5).map(|i| self.stack[len - 1 - i]).collect();
+                self.assert_vector_log.push(asserted);
                 for i in 0..5 {
                     if self.stack[len - 1 - i] != self.stack[len - 6 - i] {
                         self.error = true;
@@ -303,10 +319,16 @@ impl StackState {
                     self.error = true;
                     return;
                 }
-                self.stack.truncate(self.stack.len() - n);
+                // Log values being written (TOS first = reverse of slice order)
+                let start = self.stack.len() - n;
+                for i in (start..self.stack.len()).rev() {
+                    self.io_output.push(self.stack[i]);
+                }
+                self.stack.truncate(start);
             }
             "divine" => {
                 let n = arg_u.unwrap_or(1) as usize;
+                self.divine_log.push(n);
                 for _ in 0..n {
                     self.stack.push(0);
                 }
