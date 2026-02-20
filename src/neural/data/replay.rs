@@ -4,6 +4,7 @@
 //! Persistence via rkyv zero-copy archives.
 
 use rkyv::{Archive, Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 /// Result of a neural compilation attempt.
 #[derive(Archive, Serialize, Deserialize, Clone, Debug)]
@@ -25,6 +26,18 @@ pub struct BuildResult {
     pub timestamp: u64,
     /// Model checkpoint version.
     pub model_version: u32,
+}
+
+/// Serializable wrapper for the replay buffer entries.
+#[derive(Archive, Serialize, Deserialize, Clone, Debug)]
+#[rkyv(derive(Debug))]
+struct ReplayArchive {
+    entries: Vec<BuildResult>,
+}
+
+/// Default path for replay buffer persistence.
+fn default_replay_path() -> PathBuf {
+    PathBuf::from("data/neural/v2/replay.rkyv")
 }
 
 /// Priority-based replay buffer.
@@ -99,6 +112,43 @@ impl ReplayBuffer {
         }
         1.0 + (improvement as f64 / result.compiler_cycles as f64)
     }
+
+    /// Save replay buffer to disk as rkyv archive.
+    pub fn save(&self, path: Option<&Path>) -> Result<(), String> {
+        let path = path.map(PathBuf::from).unwrap_or_else(default_replay_path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("mkdir {}: {}", parent.display(), e))?;
+        }
+
+        let archive = ReplayArchive {
+            entries: self.entries.iter().map(|(_, r)| r.clone()).collect(),
+        };
+
+        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&archive)
+            .map_err(|e| format!("rkyv serialize: {}", e))?;
+        std::fs::write(&path, &bytes).map_err(|e| format!("write {}: {}", path.display(), e))?;
+
+        Ok(())
+    }
+
+    /// Load replay buffer from disk. Returns empty buffer if file doesn't exist.
+    pub fn load(capacity: usize, path: Option<&Path>) -> Result<Self, String> {
+        let path = path.map(PathBuf::from).unwrap_or_else(default_replay_path);
+        if !path.exists() {
+            return Ok(Self::new(capacity));
+        }
+
+        let bytes = std::fs::read(&path).map_err(|e| format!("read {}: {}", path.display(), e))?;
+        let archive = rkyv::from_bytes::<ReplayArchive, rkyv::rancor::Error>(&bytes)
+            .map_err(|e| format!("rkyv deserialize: {}", e))?;
+
+        let mut buf = Self::new(capacity);
+        for result in archive.entries {
+            buf.push(result);
+        }
+        Ok(buf)
+    }
 }
 
 #[cfg(test)]
@@ -134,6 +184,33 @@ mod tests {
         buf.push(make_result(false, None, 10));
         buf.push(make_result(true, Some(8), 10));
         assert_eq!(buf.valid_count(), 2);
+    }
+
+    #[test]
+    fn replay_buffer_save_load_roundtrip() {
+        let dir = std::env::temp_dir().join("trident_test_replay");
+        let path = dir.join("test_replay.rkyv");
+        let _ = std::fs::remove_file(&path);
+
+        let mut buf = ReplayBuffer::new(10);
+        buf.push(make_result(true, Some(5), 10));
+        buf.push(make_result(false, None, 10));
+        buf.push(make_result(true, Some(8), 10));
+        buf.save(Some(&path)).unwrap();
+
+        let loaded = ReplayBuffer::load(10, Some(&path)).unwrap();
+        assert_eq!(loaded.len(), 3);
+        assert_eq!(loaded.valid_count(), 2);
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn replay_buffer_load_missing_file() {
+        let path = std::env::temp_dir().join("trident_nonexistent_replay.rkyv");
+        let loaded = ReplayBuffer::load(10, Some(&path)).unwrap();
+        assert_eq!(loaded.len(), 0);
     }
 
     #[test]
