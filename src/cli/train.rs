@@ -259,8 +259,8 @@ pub fn cmd_train(args: TrainArgs) {
             conv_info,
         );
 
-        // Per-file breakdown on first and last epoch
-        if epoch == 0 || epoch + 1 == args.epochs {
+        // Per-file breakdown every epoch
+        {
             // (path, blocks, dec_cost, dec_bl, ver_cost, ver_bl, decoded, verified, wins)
             let mut sorted: Vec<_> = epoch_costs
                 .iter()
@@ -285,14 +285,13 @@ pub fn cmd_train(args: TrainArgs) {
                     .then(b.7.cmp(&a.7)) // verified descending
                     .then(b.6.cmp(&a.6)) // decoded descending
             });
-            let label = if epoch == 0 { "initial" } else { "final" };
             let total_dec: usize = sorted.iter().map(|s| s.6).sum();
             let total_ver: usize = sorted.iter().map(|s| s.7).sum();
             let total_wins: usize = sorted.iter().map(|s| s.8).sum();
             let total_blk: usize = sorted.iter().map(|s| s.1).sum();
             eprintln!(
-                "    {} per-file (decoded {}, verified {}, won {} / {} blocks):",
-                label, total_dec, total_ver, total_wins, total_blk,
+                "    per-file (decoded {}, verified {}, won {} / {} blocks):",
+                total_dec, total_ver, total_wins, total_blk,
             );
             for &(path, blocks, _dc, _db, vc, vb, decoded, verified, wins) in &sorted {
                 if decoded > 0 {
