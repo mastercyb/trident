@@ -296,10 +296,10 @@ pub fn cmd_train(args: TrainArgs) {
 
         // Table header
         eprintln!(
-            "  {:<48} | {:>4} | {:>4} {:>4} {:>4} | {:>13}\x1B[K",
+            "  {:<60} | {:>4} | {:>4} {:>4} {:>4} | {:>13}\x1B[K",
             "Module", "Blk", "Dec", "Vrfy", "Won", "Cost (ratio)"
         );
-        eprintln!("  {}\x1B[K", "-".repeat(86));
+        eprintln!("  {}\x1B[K", "-".repeat(98));
 
         for &(path, blocks, _dc, _db, vc, vb, decoded, verified, wins) in &sorted {
             let cost_col = if verified > 0 {
@@ -309,11 +309,11 @@ pub fn cmd_train(args: TrainArgs) {
                 "\u{2013}".to_string()
             };
             eprintln!(
-                "  {:<48} | {:>4} | {:>4} {:>4} {:>4} | {:>13}\x1B[K",
+                "  {:<60} | {:>4} | {:>4} {:>4} {:>4} | {:>13}\x1B[K",
                 path, blocks, decoded, verified, wins, cost_col,
             );
         }
-        eprintln!("  {}\x1B[K", "-".repeat(86));
+        eprintln!("  {}\x1B[K", "-".repeat(98));
         prev_table_lines = table_lines;
     }
 
