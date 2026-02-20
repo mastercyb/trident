@@ -133,6 +133,7 @@ pub fn cmd_train(args: TrainArgs) {
         //  decoded_cost, decoded_baseline, verified_cost, verified_baseline)
         let mut epoch_costs: Vec<(usize, u64, usize, usize, usize, usize, u64, u64, u64, u64)> =
             Vec::new();
+        let mut epoch_diagnostics: Vec<(String, Vec<BlockDiagnostic>)> = Vec::new();
 
         for (i, &file_idx) in indices.iter().enumerate() {
             let cf = &compiled[file_idx];
@@ -151,6 +152,9 @@ pub fn cmd_train(args: TrainArgs) {
             let _ = std::io::stderr().flush();
 
             let result = train_one_compiled(cf, args.generations, &mut gpu_accel);
+            if !result.diagnostics.is_empty() {
+                epoch_diagnostics.push((cf.path.clone(), result.diagnostics));
+            }
             epoch_costs.push((
                 file_idx,
                 result.cost,
@@ -317,7 +321,37 @@ pub fn cmd_train(args: TrainArgs) {
             );
         }
         eprintln!("  {}\x1B[K", "-".repeat(113));
-        prev_table_lines = table_lines;
+
+        // Print diagnostics: first few decoded-but-not-verified blocks
+        let mut diag_lines = 0;
+        let max_diag_files = 2;
+        let max_diag_blocks = 2;
+        for (path, diags) in epoch_diagnostics.iter().take(max_diag_files) {
+            eprintln!("  diag: {}\x1B[K", path);
+            diag_lines += 1;
+            for d in diags.iter().take(max_diag_blocks) {
+                eprintln!("    block {} | {}\x1B[K", d.block_idx, d.reason);
+                diag_lines += 1;
+                let bl_summary: Vec<&str> = d.baseline.iter().take(5).map(|s| s.as_str()).collect();
+                let cd_summary: Vec<&str> =
+                    d.candidate.iter().take(5).map(|s| s.as_str()).collect();
+                eprintln!(
+                    "      baseline({}): {}{}\x1B[K",
+                    d.baseline.len(),
+                    bl_summary.join(" | "),
+                    if d.baseline.len() > 5 { " ..." } else { "" },
+                );
+                eprintln!(
+                    "      candidate({}): {}{}\x1B[K",
+                    d.candidate.len(),
+                    cd_summary.join(" | "),
+                    if d.candidate.len() > 5 { " ..." } else { "" },
+                );
+                diag_lines += 2;
+            }
+        }
+
+        prev_table_lines = table_lines + diag_lines;
     }
 
     let elapsed = start.elapsed();
@@ -547,6 +581,16 @@ struct TrainResult {
     verified_baseline: u64,
     /// Total number of blocks in this file.
     total_blocks: usize,
+    /// Diagnostic examples: decoded-but-not-verified blocks (up to 3 per file).
+    diagnostics: Vec<BlockDiagnostic>,
+}
+
+/// Diagnostic info for a single block that decoded but failed verification.
+struct BlockDiagnostic {
+    block_idx: usize,
+    baseline: Vec<String>,
+    candidate: Vec<String>,
+    reason: String,
 }
 
 /// Train on a pre-compiled file. Returns cost + captured neural TASM.
@@ -711,10 +755,32 @@ fn train_one_compiled(
         d_bl,
         v_cost,
         v_bl,
+        diagnostics,
     ) = if let Some((tasm, cost, wins, ver, dec, dc, db, vc, vb)) = best_captured {
+        // Collect diagnostics: decoded-but-not-verified blocks (up to 3)
+        use trident::cost::stack_verifier;
+        let mut diag = Vec::new();
+        for (i, neural_block) in tasm.iter().enumerate() {
+            if diag.len() >= 3 {
+                break;
+            }
+            let baseline_block = &cf.per_block_tasm[i];
+            if baseline_block.is_empty() || neural_block == baseline_block {
+                continue;
+            }
+            if !stack_verifier::verify_equivalent(baseline_block, neural_block, i as u64) {
+                let reason =
+                    stack_verifier::diagnose_failure(baseline_block, neural_block, i as u64);
+                diag.push(BlockDiagnostic {
+                    block_idx: i,
+                    baseline: baseline_block.clone(),
+                    candidate: neural_block.clone(),
+                    reason,
+                });
+            }
+        }
         (
             cost,
-            // Only save neural TASM when at least one block is verified (stack-equivalent)
             if ver > 0 { Some(tasm) } else { None },
             wins,
             ver,
@@ -723,9 +789,10 @@ fn train_one_compiled(
             db,
             vc,
             vb,
+            diag,
         )
     } else {
-        (cf.baseline_cost, None, 0, 0, 0, 0, 0, 0, 0)
+        (cf.baseline_cost, None, 0, 0, 0, 0, 0, 0, 0, Vec::new())
     };
 
     TrainResult {
@@ -739,6 +806,7 @@ fn train_one_compiled(
         verified_cost: v_cost,
         verified_baseline: v_bl,
         total_blocks: cf.blocks.len(),
+        diagnostics,
     }
 }
 

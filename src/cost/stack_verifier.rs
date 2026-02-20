@@ -602,6 +602,69 @@ pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], se
     true
 }
 
+/// Diagnose why verification failed for a candidate vs baseline.
+/// Runs both on the first test stack and reports what differs.
+/// Returns a short human-readable reason string.
+pub fn diagnose_failure(baseline_tasm: &[String], candidate_tasm: &[String], seed: u64) -> String {
+    let test_stack = generate_test_stack(seed.wrapping_mul(6364136223846793005), 16);
+
+    let mut bl = StackState::new(test_stack.clone());
+    bl.execute(baseline_tasm);
+    if bl.error {
+        return "baseline errors on test stack".into();
+    }
+
+    let mut cd = StackState::new(test_stack);
+    cd.execute(candidate_tasm);
+    if cd.error {
+        return "candidate errors on test stack".into();
+    }
+
+    if bl.stack != cd.stack {
+        let bl_len = bl.stack.len();
+        let cd_len = cd.stack.len();
+        if bl_len != cd_len {
+            return format!("stack depth: baseline={} candidate={}", bl_len, cd_len);
+        }
+        for i in 0..bl_len {
+            if bl.stack[i] != cd.stack[i] {
+                return format!(
+                    "stack[{}]: baseline={} candidate={} (depth {})",
+                    i, bl.stack[i], cd.stack[i], bl_len
+                );
+            }
+        }
+    }
+    if bl.halted != cd.halted {
+        return format!("halted: baseline={} candidate={}", bl.halted, cd.halted);
+    }
+    if bl.io_output != cd.io_output {
+        return format!(
+            "io_output: baseline={:?} candidate={:?}",
+            &bl.io_output[..bl.io_output.len().min(5)],
+            &cd.io_output[..cd.io_output.len().min(5)]
+        );
+    }
+    if bl.divine_log != cd.divine_log {
+        return format!(
+            "divine_log: baseline={:?} candidate={:?}",
+            bl.divine_log, cd.divine_log
+        );
+    }
+    if bl.assert_log != cd.assert_log {
+        return format!(
+            "assert_log: baseline={:?} candidate={:?}",
+            &bl.assert_log[..bl.assert_log.len().min(5)],
+            &cd.assert_log[..cd.assert_log.len().min(5)]
+        );
+    }
+    if bl.assert_vector_log != cd.assert_vector_log {
+        return "assert_vector_log differs".into();
+    }
+    // Passed on this test stack but fails on others
+    "passes first stack, fails on structured stacks".into()
+}
+
 /// Score a neural model's raw output against a baseline block.
 /// Decodes the output, verifies equivalence, and returns the lower cost
 /// (or baseline cost if candidate is invalid/worse).
