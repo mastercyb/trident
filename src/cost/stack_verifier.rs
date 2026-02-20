@@ -602,6 +602,66 @@ pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], se
     true
 }
 
+/// Score how close a candidate is to matching the baseline.
+/// Runs both on one test stack and returns a shaped fitness score:
+///   0   = candidate crashes
+///   100 = doesn't crash
+///   200 = stack depth matches
+///   400 = 50%+ of stack values match
+///   600 = 90%+ of stack values match
+///   800 = all stack values match
+///   900 = stack + all side-channels match on this stack
+pub fn score_candidate(baseline_tasm: &[String], candidate_tasm: &[String], seed: u64) -> i64 {
+    let test_stack = generate_test_stack(seed.wrapping_mul(6364136223846793005), 16);
+
+    let mut bl = StackState::new(test_stack.clone());
+    bl.execute(baseline_tasm);
+    if bl.error {
+        return 0;
+    }
+
+    let mut cd = StackState::new(test_stack);
+    cd.execute(candidate_tasm);
+
+    if cd.error {
+        return 0;
+    }
+    let mut score: i64 = 100;
+
+    if bl.stack.len() == cd.stack.len() {
+        score = 200;
+        let matches = bl
+            .stack
+            .iter()
+            .zip(&cd.stack)
+            .filter(|(a, b)| a == b)
+            .count();
+        let total = bl.stack.len().max(1);
+        let ratio = matches as f64 / total as f64;
+        if ratio >= 0.5 {
+            score = 400;
+        }
+        if ratio >= 0.9 {
+            score = 600;
+        }
+        if matches == total {
+            score = 800;
+        }
+    }
+
+    if score >= 800
+        && bl.halted == cd.halted
+        && bl.io_output == cd.io_output
+        && bl.divine_log == cd.divine_log
+        && bl.assert_log == cd.assert_log
+        && bl.assert_vector_log == cd.assert_vector_log
+    {
+        score = 900;
+    }
+
+    score
+}
+
 /// Diagnose why verification failed for a candidate vs baseline.
 /// Runs both on the first test stack and reports what differs.
 /// Returns a short human-readable reason string.
@@ -1009,5 +1069,49 @@ mod tests {
             "push 4", "push 5", "pop 5",
         ]);
         assert!(!verify_equivalent(&baseline, &candidate, 66));
+    }
+
+    #[test]
+    fn score_candidate_crash_returns_zero() {
+        let baseline = lines(&["push 1", "push 2", "add"]);
+        // Pop everything (16 initial + 0 pushed), then pop again → underflow
+        let candidate = lines(&["pop 5", "pop 5", "pop 5", "pop 5", "pop 1"]);
+        assert_eq!(score_candidate(&baseline, &candidate, 42), 0);
+    }
+
+    #[test]
+    fn score_candidate_no_crash_wrong_depth() {
+        let baseline = lines(&["push 1", "push 2", "add"]); // depth +1
+        let candidate = lines(&["push 1", "push 2"]); // depth +2
+        let score = score_candidate(&baseline, &candidate, 42);
+        assert_eq!(score, 100); // doesn't crash, but wrong depth
+    }
+
+    #[test]
+    fn score_candidate_right_depth_wrong_values() {
+        let baseline = lines(&["push 1"]); // pushes 1
+        let candidate = lines(&["push 2"]); // pushes 2, same depth
+        let score = score_candidate(&baseline, &candidate, 42);
+        assert!(
+            score >= 200,
+            "right depth should score >= 200, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn score_candidate_identical_scores_900() {
+        let baseline = lines(&["push 1", "push 2", "add"]);
+        let candidate = lines(&["push 1", "push 2", "add"]);
+        let score = score_candidate(&baseline, &candidate, 42);
+        assert_eq!(score, 900);
+    }
+
+    #[test]
+    fn score_candidate_nop_equivalent_scores_900() {
+        let baseline = lines(&["push 5"]);
+        let candidate = lines(&["push 5", "nop"]);
+        let score = score_candidate(&baseline, &candidate, 42);
+        assert_eq!(score, 900);
     }
 }

@@ -924,19 +924,27 @@ fn eval_individual_gpu(
                 decoded_cost += cost;
                 decoded_bl += baseline;
 
-                if stack_verifier::verify_equivalent(baseline_lines, &candidate, b as u64) {
+                let shape = stack_verifier::score_candidate(baseline_lines, &candidate, b as u64);
+                if shape >= 900
+                    && stack_verifier::verify_equivalent(baseline_lines, &candidate, b as u64)
+                {
                     verified += 1;
                     verified_cost += cost;
                     verified_bl += baseline;
                     honest_cost += cost;
-                    if cost < baseline {
-                        fitness += (baseline as i64) - (cost as i64);
-                        wins += 1;
-                    }
+                    fitness += 1000
+                        + if cost < baseline {
+                            wins += 1;
+                            (baseline as i64) - (cost as i64)
+                        } else {
+                            0
+                        };
                     per_block.push(candidate);
                     continue;
                 }
-                // Decoded but failed verification — collect diagnostic
+                // Partial credit from shaped fitness
+                fitness += shape;
+                // Collect diagnostic for decoded-but-not-verified
                 if diagnostics.len() < 3 {
                     let reason =
                         stack_verifier::diagnose_failure(baseline_lines, &candidate, b as u64);
@@ -1010,18 +1018,25 @@ fn eval_individual_cpu(
                 decoded_cost += cost;
                 decoded_bl += baseline;
 
-                if stack_verifier::verify_equivalent(baseline_tasm, &candidate, i as u64) {
+                let shape = stack_verifier::score_candidate(baseline_tasm, &candidate, i as u64);
+                if shape >= 900
+                    && stack_verifier::verify_equivalent(baseline_tasm, &candidate, i as u64)
+                {
                     verified += 1;
                     verified_cost += cost;
                     verified_bl += baseline;
                     honest_cost += cost;
-                    if cost < baseline {
-                        fitness += (baseline as i64) - (cost as i64);
-                        wins += 1;
-                    }
+                    fitness += 1000
+                        + if cost < baseline {
+                            wins += 1;
+                            (baseline as i64) - (cost as i64)
+                        } else {
+                            0
+                        };
                     per_block.push(candidate);
                     continue;
                 }
+                fitness += shape;
                 if diagnostics.len() < 3 {
                     let reason =
                         stack_verifier::diagnose_failure(baseline_tasm, &candidate, i as u64);
