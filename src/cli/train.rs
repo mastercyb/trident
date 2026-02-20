@@ -593,6 +593,21 @@ struct BlockDiagnostic {
     reason: String,
 }
 
+/// Result of evaluating one individual across all blocks.
+struct EvalResult {
+    fitness: i64,
+    per_block: Vec<Vec<String>>,
+    honest_cost: u64,
+    wins: usize,
+    verified: usize,
+    decoded: usize,
+    decoded_cost: u64,
+    decoded_bl: u64,
+    verified_cost: u64,
+    verified_bl: u64,
+    diagnostics: Vec<BlockDiagnostic>,
+}
+
 /// Train on a pre-compiled file. Returns cost + captured neural TASM.
 fn train_one_compiled(
     cf: &CompiledFile,
@@ -647,31 +662,9 @@ fn train_one_compiled(
     }
 
     let mut best_seen = i64::MIN;
-    // (per_block_tasm, honest_cost, wins, verified, decoded, dec_cost, dec_bl, ver_cost, ver_bl)
-    let mut best_captured: Option<(
-        Vec<Vec<String>>,
-        u64,
-        usize,
-        usize,
-        usize,
-        u64,
-        u64,
-        u64,
-        u64,
-    )> = None;
+    let mut best_captured: Option<EvalResult> = None;
     for gen in 0..generations {
-        let evals: Vec<(
-            i64,
-            Vec<Vec<String>>,
-            u64,
-            usize,
-            usize,
-            usize,
-            u64,
-            u64,
-            u64,
-            u64,
-        )> = if let Some(ref accel) = gpu_accel {
+        let evals: Vec<EvalResult> = if let Some(ref accel) = gpu_accel {
             let weight_vecs: Vec<Vec<trident::field::fixed::Fixed>> = pop
                 .individuals
                 .iter()
@@ -707,15 +700,14 @@ fn train_one_compiled(
         };
 
         for (i, eval) in evals.iter().enumerate() {
-            pop.individuals[i].fitness = eval.0;
+            pop.individuals[i].fitness = eval.fitness;
         }
         pop.update_best();
 
-        if let Some((idx, best)) = evals.iter().enumerate().max_by_key(|(_, e)| e.0) {
-            if best.0 > best_seen {
-                best_seen = best.0;
-                let (_, tasm, cost, w, v, d, dc, db, vc, vb) = evals.into_iter().nth(idx).unwrap();
-                best_captured = Some((tasm, cost, w, v, d, dc, db, vc, vb));
+        if let Some((idx, best)) = evals.iter().enumerate().max_by_key(|(_, e)| e.fitness) {
+            if best.fitness > best_seen {
+                best_seen = best.fitness;
+                best_captured = Some(evals.into_iter().nth(idx).unwrap());
             }
         }
         pop.evolve(gen_start.wrapping_add(gen));
@@ -745,68 +737,38 @@ fn train_one_compiled(
     };
     let _ = weights::save_meta(&new_meta, &weights::meta_path(dummy_root));
 
-    let (
-        honest_cost,
-        neural_tasm,
-        neural_wins,
-        neural_verified,
-        neural_decoded,
-        d_cost,
-        d_bl,
-        v_cost,
-        v_bl,
-        diagnostics,
-    ) = if let Some((tasm, cost, wins, ver, dec, dc, db, vc, vb)) = best_captured {
-        // Collect diagnostics: decoded-but-not-verified blocks (up to 3)
-        use trident::cost::stack_verifier;
-        let mut diag = Vec::new();
-        for (i, neural_block) in tasm.iter().enumerate() {
-            if diag.len() >= 3 {
-                break;
-            }
-            let baseline_block = &cf.per_block_tasm[i];
-            if baseline_block.is_empty() || neural_block == baseline_block {
-                continue;
-            }
-            if !stack_verifier::verify_equivalent(baseline_block, neural_block, i as u64) {
-                let reason =
-                    stack_verifier::diagnose_failure(baseline_block, neural_block, i as u64);
-                diag.push(BlockDiagnostic {
-                    block_idx: i,
-                    baseline: baseline_block.clone(),
-                    candidate: neural_block.clone(),
-                    reason,
-                });
-            }
+    if let Some(ev) = best_captured {
+        TrainResult {
+            cost: ev.honest_cost,
+            neural_tasm: if ev.verified > 0 {
+                Some(ev.per_block)
+            } else {
+                None
+            },
+            neural_wins: ev.wins,
+            neural_verified: ev.verified,
+            neural_decoded: ev.decoded,
+            decoded_cost: ev.decoded_cost,
+            decoded_baseline: ev.decoded_bl,
+            verified_cost: ev.verified_cost,
+            verified_baseline: ev.verified_bl,
+            total_blocks: cf.blocks.len(),
+            diagnostics: ev.diagnostics,
         }
-        (
-            cost,
-            if ver > 0 { Some(tasm) } else { None },
-            wins,
-            ver,
-            dec,
-            dc,
-            db,
-            vc,
-            vb,
-            diag,
-        )
     } else {
-        (cf.baseline_cost, None, 0, 0, 0, 0, 0, 0, 0, Vec::new())
-    };
-
-    TrainResult {
-        cost: honest_cost,
-        neural_tasm,
-        neural_wins,
-        neural_verified,
-        neural_decoded,
-        decoded_cost: d_cost,
-        decoded_baseline: d_bl,
-        verified_cost: v_cost,
-        verified_baseline: v_bl,
-        total_blocks: cf.blocks.len(),
-        diagnostics,
+        TrainResult {
+            cost: cf.baseline_cost,
+            neural_tasm: None,
+            neural_wins: 0,
+            neural_verified: 0,
+            neural_decoded: 0,
+            decoded_cost: 0,
+            decoded_baseline: 0,
+            verified_cost: 0,
+            verified_baseline: 0,
+            total_blocks: cf.blocks.len(),
+            diagnostics: Vec::new(),
+        }
     }
 }
 
@@ -921,18 +883,7 @@ fn eval_individual_gpu(
     baselines: &[u64],
     block_tasm: &[Vec<String>],
     verifiable: &[bool],
-) -> (
-    i64,
-    Vec<Vec<String>>,
-    u64,
-    usize,
-    usize,
-    usize,
-    u64,
-    u64,
-    u64,
-    u64,
-) {
+) -> EvalResult {
     use trident::cost::{scorer, stack_verifier};
     use trident::ir::tir::lower::decode_output;
 
@@ -946,6 +897,7 @@ fn eval_individual_gpu(
     let mut decoded_bl = 0u64;
     let mut verified_cost = 0u64;
     let mut verified_bl = 0u64;
+    let mut diagnostics = Vec::new();
 
     for (b, block_out) in ind_outputs.iter().enumerate() {
         let baseline = baselines[b];
@@ -984,13 +936,24 @@ fn eval_individual_gpu(
                     per_block.push(candidate);
                     continue;
                 }
+                // Decoded but failed verification — collect diagnostic
+                if diagnostics.len() < 3 {
+                    let reason =
+                        stack_verifier::diagnose_failure(baseline_lines, &candidate, b as u64);
+                    diagnostics.push(BlockDiagnostic {
+                        block_idx: b,
+                        baseline: baseline_lines.clone(),
+                        candidate,
+                        reason,
+                    });
+                }
             }
         }
         honest_cost += baseline;
         per_block.push(baseline_lines.clone());
     }
 
-    (
+    EvalResult {
         fitness,
         per_block,
         honest_cost,
@@ -1001,27 +964,14 @@ fn eval_individual_gpu(
         decoded_bl,
         verified_cost,
         verified_bl,
-    )
+        diagnostics,
+    }
 }
 
-/// Evaluate one individual on CPU.
-/// Returns (fitness, per_block_tasm, honest_cost, wins, verified, decoded,
-///          decoded_cost, decoded_baseline, verified_cost, verified_baseline).
 fn eval_individual_cpu(
     individual: &trident::ir::tir::neural::evolve::Individual,
     cf: &CompiledFile,
-) -> (
-    i64,
-    Vec<Vec<String>>,
-    u64,
-    usize,
-    usize,
-    usize,
-    u64,
-    u64,
-    u64,
-    u64,
-) {
+) -> EvalResult {
     use trident::cost::{scorer, stack_verifier};
     use trident::ir::tir::lower::decode_output;
     use trident::ir::tir::neural::model::NeuralModel;
@@ -1037,6 +987,7 @@ fn eval_individual_cpu(
     let mut decoded_bl = 0u64;
     let mut verified_cost = 0u64;
     let mut verified_bl = 0u64;
+    let mut diagnostics = Vec::new();
 
     for (i, block) in cf.blocks.iter().enumerate() {
         let baseline = cf.per_block_baselines[i];
@@ -1071,13 +1022,23 @@ fn eval_individual_cpu(
                     per_block.push(candidate);
                     continue;
                 }
+                if diagnostics.len() < 3 {
+                    let reason =
+                        stack_verifier::diagnose_failure(baseline_tasm, &candidate, i as u64);
+                    diagnostics.push(BlockDiagnostic {
+                        block_idx: i,
+                        baseline: baseline_tasm.clone(),
+                        candidate,
+                        reason,
+                    });
+                }
             }
         }
         honest_cost += baseline;
         per_block.push(baseline_tasm.clone());
     }
 
-    (
+    EvalResult {
         fitness,
         per_block,
         honest_cost,
@@ -1088,5 +1049,6 @@ fn eval_individual_cpu(
         decoded_bl,
         verified_cost,
         verified_bl,
-    )
+        diagnostics,
+    }
 }
