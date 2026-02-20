@@ -373,7 +373,7 @@ fn cmd_train_reset() {
     let repo_root = find_repo_root();
     let mut deleted = 0usize;
 
-    // Delete user-local weights (~/.trident/neural/)
+    // Delete weights (data/neural/)
     let weights_dir = weights::weights_path(Path::new("."))
         .parent()
         .unwrap()
@@ -383,18 +383,13 @@ fn cmd_train_reset() {
             eprintln!("error: failed to delete {}: {}", weights_dir.display(), e);
             process::exit(1);
         }
-        eprintln!("  deleted {}", weights_dir.display());
-        deleted += 1;
-    }
-
-    // Delete bundled weights (data/neural/)
-    let bundled_dir = repo_root.join("data").join("neural");
-    if bundled_dir.exists() {
-        if let Err(e) = std::fs::remove_dir_all(&bundled_dir) {
-            eprintln!("error: failed to delete {}: {}", bundled_dir.display(), e);
-            process::exit(1);
-        }
-        eprintln!("  deleted {}", bundled_dir.display());
+        eprintln!(
+            "  deleted {}",
+            weights_dir
+                .strip_prefix(&repo_root)
+                .unwrap_or(&weights_dir)
+                .display()
+        );
         deleted += 1;
     }
 

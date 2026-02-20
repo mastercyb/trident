@@ -227,49 +227,29 @@ pub fn load_meta(path: &Path) -> std::io::Result<OptimizerMeta> {
     })
 }
 
-/// User-local neural weights directory: ~/.trident/neural/
-/// Training writes here. Takes priority over bundled weights.
-fn local_neural_dir() -> PathBuf {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".trident").join("neural")
-}
-
-/// Bundled weights shipped with the compiler: data/neural/
-fn bundled_neural_dir() -> PathBuf {
+/// Neural weights directory: data/neural/ inside the repo.
+/// Single source of truth — no user-local storage.
+fn neural_dir() -> PathBuf {
     let manifest = env!("CARGO_MANIFEST_DIR");
     PathBuf::from(manifest).join("data").join("neural")
 }
 
-/// Weights path for saving (always writes to user-local).
+/// Weights path (reads and writes go to the same place).
 pub fn weights_path(_project_root: &Path) -> PathBuf {
-    local_neural_dir().join("weights_lite.bin")
+    neural_dir().join("weights_lite.bin")
 }
 
-/// Meta path for saving (always writes to user-local).
+/// Meta path (reads and writes go to the same place).
 pub fn meta_path(_project_root: &Path) -> PathBuf {
-    local_neural_dir().join("meta_lite.toml")
+    neural_dir().join("meta_lite.toml")
 }
 
-/// Load weights: user-local first, then bundled.
 pub fn load_best_weights() -> std::io::Result<Vec<Fixed>> {
-    let local = local_neural_dir().join("weights_lite.bin");
-    if local.exists() {
-        return load_weights(&local);
-    }
-    let bundled = bundled_neural_dir().join("weights_lite.bin");
-    load_weights(&bundled)
+    load_weights(&neural_dir().join("weights_lite.bin"))
 }
 
-/// Load meta: user-local first, then bundled.
 pub fn load_best_meta() -> std::io::Result<OptimizerMeta> {
-    let local = local_neural_dir().join("meta_lite.toml");
-    if local.exists() {
-        return load_meta(&local);
-    }
-    let bundled = bundled_neural_dir().join("meta_lite.toml");
-    load_meta(&bundled)
+    load_meta(&neural_dir().join("meta_lite.toml"))
 }
 
 #[cfg(test)]
