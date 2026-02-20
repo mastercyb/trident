@@ -272,50 +272,48 @@ pub fn cmd_train(args: TrainArgs) {
                 .then(b.7.cmp(&a.7)) // verified descending
                 .then(b.6.cmp(&a.6)) // decoded descending
         });
-        let total_dec: usize = sorted.iter().map(|s| s.6).sum();
-        let total_ver: usize = sorted.iter().map(|s| s.7).sum();
-        let total_wins: usize = sorted.iter().map(|s| s.8).sum();
         let total_blk: usize = sorted.iter().map(|s| s.1).sum();
 
         // Move cursor up to overwrite previous table (epoch > 0)
-        // table_lines = 1 (epoch) + 1 (header) + file_count + 1 (blank)
-        let table_lines = 1 + 1 + sorted.len() + 1;
+        // table_lines = 1 (epoch) + 1 (header) + 1 (separator) + file_count + 1 (separator)
+        let table_lines = 1 + 1 + 1 + sorted.len() + 1;
         if epoch > 0 && prev_table_lines > 0 {
             eprint!("\x1B[{}A", prev_table_lines);
         }
 
         eprintln!(
-            "\r  epoch {}/{} | decoded {}/{}{} | {:.1}s{}{}\x1B[K",
+            "\r  epoch {}/{} | decoded {}/{} | verified {}{} | {:.1}s{}{}\x1B[K",
             epoch + 1,
             args.epochs,
             epoch_decoded,
             total_blk,
+            epoch_verified,
             ver_info,
             epoch_elapsed.as_secs_f64(),
             trend,
             conv_info,
         );
+
+        // Table header
         eprintln!(
-            "    per-file (decoded {}, verified {}, won {} / {} blocks):\x1B[K",
-            total_dec, total_ver, total_wins, total_blk,
+            "  {:<40} | {:>4} | {:>4} {:>4} {:>4} | {:>13}\x1B[K",
+            "Module", "Blk", "Dec", "Vrfy", "Won", "Cost (ratio)"
         );
+        eprintln!("  {}\x1B[K", "-".repeat(78));
+
         for &(path, blocks, _dc, _db, vc, vb, decoded, verified, wins) in &sorted {
-            if decoded > 0 {
-                let ver_tag = if verified > 0 {
-                    let vr = vc as f64 / vb.max(1) as f64;
-                    format!(" | {}/{} ({:.2}x)", vc, vb, vr)
-                } else {
-                    String::new()
-                };
-                eprintln!(
-                    "      {:<42} {:>3} blk  d:{:<4} v:{:<4} w:{}{}\x1B[K",
-                    path, blocks, decoded, verified, wins, ver_tag,
-                );
+            let cost_col = if verified > 0 {
+                let vr = vc as f64 / vb.max(1) as f64;
+                format!("{}/{} ({:.2}x)", vc, vb, vr)
             } else {
-                eprintln!("      {:<42} {:>3} blk  d:0\x1B[K", path, blocks);
-            }
+                "\u{2013}".to_string()
+            };
+            eprintln!(
+                "  {:<40} | {:>4} | {:>4} {:>4} {:>4} | {:>13}\x1B[K",
+                path, blocks, decoded, verified, wins, cost_col,
+            );
         }
-        eprintln!("\x1B[K");
+        eprintln!("  {}\x1B[K", "-".repeat(78));
         prev_table_lines = table_lines;
     }
 
