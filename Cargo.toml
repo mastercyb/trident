@@ -34,6 +34,7 @@ statrs = "0.18"
 [dev-dependencies]
 insta = "1"
 tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
 
 [[bin]]
 name = "trident"
@@ -42,6 +43,10 @@ path = "src/main.rs"
 [[bin]]
 name = "trident-lsp"
 path = "src/bin/trident-lsp.rs"
+
+[[bench]]
+name = "end_to_end"
+harness = false
 
 [[example]]
 name = "ref_std_crypto_poseidon2"
