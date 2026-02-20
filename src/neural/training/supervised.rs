@@ -79,14 +79,21 @@ pub fn train_epoch<B: burn::tensor::backend::AutodiffBackend>(
         let memory = node_emb.unsqueeze_dim::<3>(0);
 
         // 3. Prepare decoder inputs (teacher forcing)
-        let seq_len = pair.target_tokens.len();
+        // Truncate to max_seq=256 to fit position embedding table
+        const MAX_SEQ: usize = 256;
+        let tokens = if pair.target_tokens.len() > MAX_SEQ {
+            &pair.target_tokens[..MAX_SEQ]
+        } else {
+            &pair.target_tokens
+        };
+        let seq_len = tokens.len();
         if seq_len < 2 {
             continue; // Need at least input + one target
         }
 
         // Input tokens: [0, t0, t1, ..., t_{n-2}] (shifted right, prepend EOS=0)
         let mut input_tokens = vec![0i32]; // Start with EOS
-        for &t in &pair.target_tokens[..seq_len - 1] {
+        for &t in &tokens[..seq_len - 1] {
             input_tokens.push(t as i32);
         }
         let token_ids =
@@ -98,12 +105,16 @@ pub fn train_epoch<B: burn::tensor::backend::AutodiffBackend>(
             device,
         );
 
-        // Precompute grammar state for the target sequence
-        let state = precompute_sequence_state(&pair.target_tokens, 0);
+        // Precompute grammar state for the (truncated) target sequence
+        let state = precompute_sequence_state(tokens, 0);
 
         let stack_depths = Tensor::<B, 2, Int>::from_data(
             TensorData::new(
-                state.depths.iter().map(|&d| d as i32).collect::<Vec<_>>(),
+                state
+                    .depths
+                    .iter()
+                    .map(|&d| (d as i32).min(64))
+                    .collect::<Vec<_>>(),
                 [1, seq_len],
             ),
             device,
@@ -134,10 +145,7 @@ pub fn train_epoch<B: burn::tensor::backend::AutodiffBackend>(
         // Target: [1, seq_len]
         let targets = Tensor::<B, 2, Int>::from_data(
             TensorData::new(
-                pair.target_tokens
-                    .iter()
-                    .map(|&t| t as i32)
-                    .collect::<Vec<_>>(),
+                tokens.iter().map(|&t| t as i32).collect::<Vec<_>>(),
                 [1, seq_len],
             ),
             device,
