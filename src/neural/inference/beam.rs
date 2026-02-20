@@ -21,6 +21,11 @@ pub struct BeamConfig {
     /// Length normalization exponent (0=none, 1=full). Prevents short sequences
     /// from dominating by normalizing log-prob by `length^alpha`.
     pub length_alpha: f32,
+    /// Repetition penalty applied to tokens seen in the last `rep_window` steps.
+    /// 1.0 = no penalty, >1.0 = penalize (logit divided by this value).
+    pub rep_penalty: f32,
+    /// Window size for repetition penalty.
+    pub rep_window: usize,
 }
 
 impl Default for BeamConfig {
@@ -30,6 +35,8 @@ impl Default for BeamConfig {
             max_steps: 256,
             min_tokens: 5,
             length_alpha: 0.7,
+            rep_penalty: 1.5,
+            rep_window: 16,
         }
     }
 }
@@ -193,18 +200,46 @@ pub fn beam_search<B: Backend>(
 
             let beam_offset = b * VOCAB_SIZE;
 
-            // Log-softmax for normalized scores
-            let raw: &[f32] = &logits_flat[beam_offset..beam_offset + VOCAB_SIZE];
-            let max_logit = raw.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-            let log_sum_exp: f32 =
-                raw.iter().map(|&l| (l - max_logit).exp()).sum::<f32>().ln() + max_logit;
+            // Build repetition set: tokens in last rep_window steps
+            let seq = &beam_sequences[b];
+            let rep_start = seq.len().saturating_sub(config.rep_window);
+            let mut recent = [false; VOCAB_SIZE];
+            for &tok in &seq[rep_start..] {
+                if (tok as usize) < VOCAB_SIZE {
+                    recent[tok as usize] = true;
+                }
+            }
+
+            // Apply repetition penalty to raw logits, then log-softmax
+            let mut adjusted = Vec::with_capacity(VOCAB_SIZE);
+            for t in 0..VOCAB_SIZE {
+                let logit = logits_flat[beam_offset + t];
+                if recent[t] && config.rep_penalty > 1.0 {
+                    // Penalize: divide positive logits, multiply negative ones
+                    if logit > 0.0 {
+                        adjusted.push(logit / config.rep_penalty);
+                    } else {
+                        adjusted.push(logit * config.rep_penalty);
+                    }
+                } else {
+                    adjusted.push(logit);
+                }
+            }
+
+            let max_logit = adjusted.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let log_sum_exp: f32 = adjusted
+                .iter()
+                .map(|&l| (l - max_logit).exp())
+                .sum::<f32>()
+                .ln()
+                + max_logit;
 
             for t in 0..VOCAB_SIZE {
                 // Block EOS until we've generated min_tokens
                 if t == 0 && step < config.min_tokens {
                     continue;
                 }
-                let log_prob = raw[t] - log_sum_exp;
+                let log_prob = adjusted[t] - log_sum_exp;
                 let cumulative = beam_log_probs[b] + log_prob;
                 candidates.push((b, t as u32, cumulative));
             }
