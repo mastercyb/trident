@@ -16,6 +16,11 @@ pub struct BeamConfig {
     pub k: usize,
     /// Maximum output sequence length.
     pub max_steps: usize,
+    /// Minimum tokens before EOS is allowed.
+    pub min_tokens: usize,
+    /// Length normalization exponent (0=none, 1=full). Prevents short sequences
+    /// from dominating by normalizing log-prob by `length^alpha`.
+    pub length_alpha: f32,
 }
 
 impl Default for BeamConfig {
@@ -23,6 +28,8 @@ impl Default for BeamConfig {
         Self {
             k: 32,
             max_steps: 256,
+            min_tokens: 5,
+            length_alpha: 0.7,
         }
     }
 }
@@ -193,17 +200,28 @@ pub fn beam_search<B: Backend>(
                 raw.iter().map(|&l| (l - max_logit).exp()).sum::<f32>().ln() + max_logit;
 
             for t in 0..VOCAB_SIZE {
-                // Don't allow EOS in the first 3 steps — force at least some output
-                if t == 0 && step < 3 {
+                // Block EOS until we've generated min_tokens
+                if t == 0 && step < config.min_tokens {
                     continue;
                 }
                 let log_prob = raw[t] - log_sum_exp;
-                candidates.push((b, t as u32, beam_log_probs[b] + log_prob));
+                let cumulative = beam_log_probs[b] + log_prob;
+                candidates.push((b, t as u32, cumulative));
             }
         }
 
-        // Sort candidates by score (descending) and keep top K
-        candidates.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        // Sort by length-normalized score (descending), keep top K.
+        // Length normalization prevents short sequences from dominating.
+        let alpha = config.length_alpha;
+        candidates.sort_by(|a, b| {
+            let len_a = (beam_sequences[a.0].len() + if a.1 == 0 { 0 } else { 1 }).max(1) as f32;
+            let len_b = (beam_sequences[b.0].len() + if b.1 == 0 { 0 } else { 1 }).max(1) as f32;
+            let score_a = a.2 / len_a.powf(alpha);
+            let score_b = b.2 / len_b.powf(alpha);
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         candidates.truncate(k);
 
         // 5. Update beams
@@ -236,8 +254,16 @@ pub fn beam_search<B: Backend>(
         beam_finished = new_finished;
     }
 
-    // Sort final results by log-prob
-    let mut indexed: Vec<(usize, f32)> = beam_log_probs.iter().copied().enumerate().collect();
+    // Sort final results by length-normalized log-prob
+    let alpha = config.length_alpha;
+    let mut indexed: Vec<(usize, f32)> = beam_log_probs
+        .iter()
+        .enumerate()
+        .map(|(i, &lp)| {
+            let len = beam_sequences[i].len().max(1) as f32;
+            (i, lp / len.powf(alpha))
+        })
+        .collect();
     indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     let sequences: Vec<Vec<u32>> = indexed
@@ -294,6 +320,8 @@ mod tests {
         let config = BeamConfig {
             k: 4, // Small K for test speed
             max_steps: 5,
+            min_tokens: 1,
+            ..Default::default()
         };
 
         let result = beam_search(

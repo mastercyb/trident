@@ -276,10 +276,7 @@ fn run_neural_analysis(
     let (edge_src, edge_dst, edge_types) =
         supervised::graph_to_edges::<InferBackend>(&graph, &device);
 
-    let beam_config = BeamConfig {
-        k: 32,
-        max_steps: 256,
-    };
+    let beam_config = BeamConfig::default();
     let result = beam_search(
         &model.encoder,
         &model.decoder,

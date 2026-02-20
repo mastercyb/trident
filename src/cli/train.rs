@@ -1,7 +1,13 @@
 use std::path::Path;
 use std::process;
 
+use std::cell::RefCell;
+
 use clap::{Args, Subcommand};
+
+thread_local! {
+    static BEAM_DIAGNOSTIC: RefCell<Option<String>> = RefCell::new(None);
+}
 
 #[derive(Args)]
 pub struct TrainArgs {
@@ -100,12 +106,23 @@ pub fn cmd_train(args: TrainArgs) {
         _ => TrainingStage::Stage1Supervised,
     };
 
+    // Show target sequence length stats
+    let mut lens: Vec<usize> = pairs.iter().map(|p| p.target_tokens.len()).collect();
+    lens.sort();
+    let median = lens[lens.len() / 2];
+    let min_len = lens[0];
+    let max_len = lens[lens.len() - 1];
+
     let device_tag = if args.cpu { "CPU" } else { "GPU" };
     eprintln!(
         "  corpus    {} files, {} training pairs, {} blocks",
         corpus.len(),
         pairs.len(),
         total_blocks,
+    );
+    eprintln!(
+        "  targets   len min={} median={} max={} (tokens incl EOS)",
+        min_len, median, max_len,
     );
     eprintln!("  baseline  {} total cost", total_baseline);
     eprintln!(
@@ -240,6 +257,7 @@ fn run_stage1<B: burn::tensor::backend::AutodiffBackend>(
     let beam_config = BeamConfig {
         k: 4,
         max_steps: 64,
+        ..Default::default()
     };
 
     for epoch in 0..epochs {
@@ -329,6 +347,7 @@ fn run_stage2<B: burn::tensor::backend::AutodiffBackend>(
     let beam_config = BeamConfig {
         k: 4,
         max_steps: 64,
+        ..Default::default()
     };
 
     let start = std::time::Instant::now();
@@ -503,17 +522,20 @@ fn eval_files<B: burn::prelude::Backend>(
             .filter(|s| !s.is_empty())
             .count();
 
-        // Diagnostic: show first file's top beam for debugging
+        // Diagnostic: save first file's top beam for display after eval
         if file_idx == 0 && !beam_result.sequences.is_empty() {
             let top = &beam_result.sequences[0];
             let tasm = vocab.decode_sequence(top);
-            let preview: Vec<&str> = tasm.iter().map(|s| s.as_str()).take(8).collect();
-            eprintln!(
-                "    beam[0] {} tokens: [{}]{}",
-                top.len(),
-                preview.join(", "),
-                if tasm.len() > 8 { " ..." } else { "" },
-            );
+            let preview: Vec<&str> = tasm.iter().map(|s| s.as_str()).take(10).collect();
+            // Store in thread-local for display_epoch_table to pick up
+            BEAM_DIAGNOSTIC.with(|d| {
+                *d.borrow_mut() = Some(format!(
+                    "beam[0] {} tokens: [{}]{}",
+                    top.len(),
+                    preview.join(", "),
+                    if tasm.len() > 10 { " ..." } else { "" },
+                ));
+            });
         }
 
         if let Some(r) = ranked {
@@ -563,7 +585,11 @@ fn display_epoch_table(
 
     let loss_marker = if improved { " *" } else { "" };
 
-    let table_lines = 1 + 1 + 1 + file_evals.len() + 1;
+    // Pick up beam diagnostic if available
+    let diag = BEAM_DIAGNOSTIC.with(|d| d.borrow_mut().take());
+    let diag_lines = if diag.is_some() { 1 } else { 0 };
+
+    let table_lines = 1 + diag_lines + 1 + 1 + file_evals.len() + 1;
     if epoch > 0 && prev_table_lines > 0 {
         eprint!("\x1B[{}A", prev_table_lines);
     }
@@ -574,6 +600,9 @@ fn display_epoch_table(
         epoch_decoded, total_blk, epoch_checked, epoch_proven, epoch_wins,
         elapsed.as_secs_f64(),
     );
+    if let Some(d) = diag {
+        eprintln!("    {}\x1B[K", d);
+    }
 
     display_file_table(file_evals, compiled);
 
