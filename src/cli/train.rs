@@ -725,8 +725,8 @@ fn train_one_compiled(
     ) = if let Some((tasm, cost, wins, ver, dec, dc, db, vc, vb)) = best_captured {
         (
             cost,
-            // Only save neural TASM when at least one block won (verified AND cheaper)
-            if wins > 0 { Some(tasm) } else { None },
+            // Only save neural TASM when at least one block is verified (stack-equivalent)
+            if ver > 0 { Some(tasm) } else { None },
             wins,
             ver,
             dec,
