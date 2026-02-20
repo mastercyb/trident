@@ -432,10 +432,10 @@ pub fn generate_test_stack(seed: u64, size: usize) -> Vec<u64> {
 }
 
 /// Verify that candidate TASM produces the same stack as baseline TASM.
-/// Tests with 8 independent seeds — all must pass. A single concrete test
-/// case is trivially gamed by the neural optimizer; 8 distinct Goldilocks
-/// stacks catch wrong operand order, off-by-one dup/swap depth, and
-/// missing operations.
+/// Tests with 40 stacks (32 random + 8 structured) — all must pass.
+/// A single concrete test case is trivially gamed by the neural optimizer;
+/// diverse stacks catch wrong operand order, off-by-one dup/swap depth,
+/// missing operations, and false positives on complex blocks.
 /// Conservative: rejects candidates when baseline can't be simulated.
 pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], seed: u64) -> bool {
     // Instructions the verifier can simulate with exact semantics.
@@ -486,9 +486,11 @@ pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], se
     // Structured stacks expose these exploits by including zeros, duplicates,
     // and ordered values where comparisons actually produce different results.
     let test_stacks: Vec<Vec<u64>> = {
-        let mut stacks = Vec::with_capacity(12);
-        // 4 random seeds (catch arithmetic/stack depth errors)
-        for i in 0..4u64 {
+        let mut stacks = Vec::with_capacity(40);
+        // 32 random seeds — 4 was too few; complex blocks (keccak rounds,
+        // field arithmetic) can produce false positives when random stacks
+        // happen to collide. 32 brings P(false positive) to ~2^(-64*32).
+        for i in 0..32u64 {
             let s = seed.wrapping_mul(6364136223846793005).wrapping_add(i);
             stacks.push(generate_test_stack(s, 16));
         }
