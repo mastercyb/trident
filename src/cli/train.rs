@@ -128,8 +128,10 @@ pub fn cmd_train(args: TrainArgs) {
         shuffle(&mut indices, gen_start + epoch);
 
         let epoch_start = std::time::Instant::now();
-        // (file_idx, cost, wins, total_blocks, verified, decoded, verified_cost, verified_baseline)
-        let mut epoch_costs: Vec<(usize, u64, usize, usize, usize, usize, u64, u64)> = Vec::new();
+        // (file_idx, cost, wins, total_blocks, verified, decoded,
+        //  decoded_cost, decoded_baseline, verified_cost, verified_baseline)
+        let mut epoch_costs: Vec<(usize, u64, usize, usize, usize, usize, u64, u64, u64, u64)> =
+            Vec::new();
 
         for (i, &file_idx) in indices.iter().enumerate() {
             let cf = &compiled[file_idx];
@@ -155,6 +157,8 @@ pub fn cmd_train(args: TrainArgs) {
                 result.total_blocks,
                 result.neural_verified,
                 result.neural_decoded,
+                result.decoded_cost,
+                result.decoded_baseline,
                 result.verified_cost,
                 result.verified_baseline,
             ));
@@ -169,8 +173,10 @@ pub fn cmd_train(args: TrainArgs) {
         }
 
         let epoch_elapsed = epoch_start.elapsed();
-        let epoch_ver_cost: u64 = epoch_costs.iter().map(|e| e.6).sum();
-        let epoch_ver_bl: u64 = epoch_costs.iter().map(|e| e.7).sum();
+        let epoch_dec_cost: u64 = epoch_costs.iter().map(|e| e.6).sum();
+        let epoch_dec_bl: u64 = epoch_costs.iter().map(|e| e.7).sum();
+        let epoch_ver_cost: u64 = epoch_costs.iter().map(|e| e.8).sum();
+        let epoch_ver_bl: u64 = epoch_costs.iter().map(|e| e.9).sum();
 
         let trend = if epoch == 0 {
             String::new()
@@ -231,25 +237,36 @@ pub fn cmd_train(args: TrainArgs) {
         let total_blk: usize = epoch_costs.iter().map(|e| e.3).sum();
         let epoch_verified: usize = epoch_costs.iter().map(|e| e.4).sum();
         let epoch_decoded: usize = epoch_costs.iter().map(|e| e.5).sum();
-        let ver_ratio = if epoch_ver_bl > 0 {
+        let dec_ratio = if epoch_dec_bl > 0 {
             format!(
                 " {}/{} ({:.2}x)",
-                epoch_ver_cost,
-                epoch_ver_bl,
-                epoch_ver_cost as f64 / epoch_ver_bl as f64
+                epoch_dec_cost,
+                epoch_dec_bl,
+                epoch_dec_cost as f64 / epoch_dec_bl as f64
             )
         } else {
             String::new()
         };
+        let ver_info = if epoch_ver_bl > 0 {
+            format!(
+                " | verified {} {}/{} ({:.2}x) | won {}",
+                epoch_verified,
+                epoch_ver_cost,
+                epoch_ver_bl,
+                epoch_ver_cost as f64 / epoch_ver_bl as f64,
+                epoch_wins
+            )
+        } else {
+            " | verified 0 | won 0".to_string()
+        };
         eprintln!(
-            "\r  epoch {}/{} | decoded {}/{} | verified {}{} | won {} | {:.1}s{}{}",
+            "\r  epoch {}/{} | decoded {}/{}{}{} | {:.1}s{}{}",
             epoch + 1,
             args.epochs,
             epoch_decoded,
             total_blk,
-            epoch_verified,
-            ver_ratio,
-            epoch_wins,
+            dec_ratio,
+            ver_info,
             epoch_elapsed.as_secs_f64(),
             trend,
             conv_info,
@@ -257,7 +274,7 @@ pub fn cmd_train(args: TrainArgs) {
 
         // Per-file breakdown on first and last epoch
         if epoch == 0 || epoch + 1 == args.epochs {
-            // (path, blocks, verified_cost, verified_baseline, decoded, verified, wins)
+            // (path, blocks, dec_cost, dec_bl, ver_cost, ver_bl, decoded, verified, wins)
             let mut sorted: Vec<_> = epoch_costs
                 .iter()
                 .map(|e| {
@@ -265,49 +282,51 @@ pub fn cmd_train(args: TrainArgs) {
                     (
                         cf.path.as_str(),
                         cf.blocks.len(),
-                        e.6, // verified_cost
-                        e.7, // verified_baseline
+                        e.6, // decoded_cost
+                        e.7, // decoded_baseline
+                        e.8, // verified_cost
+                        e.9, // verified_baseline
                         e.5, // decoded
                         e.4, // verified
                         e.2, // wins
                     )
                 })
                 .collect();
-            // Sort: files with verified wins first (by ratio), then by verified count, then name
+            // Sort by decoded cost ratio (lower = model produces cheaper output)
             sorted.sort_by(|a, b| {
-                let a_has_ver = a.5 > 0;
-                let b_has_ver = b.5 > 0;
-                match (a_has_ver, b_has_ver) {
-                    (true, false) => std::cmp::Ordering::Less,
-                    (false, true) => std::cmp::Ordering::Greater,
-                    (true, true) => {
-                        let ra = a.2 as f64 / a.3.max(1) as f64;
-                        let rb = b.2 as f64 / b.3.max(1) as f64;
-                        ra.partial_cmp(&rb).unwrap()
-                    }
-                    (false, false) => b.4.cmp(&a.4), // more decoded first
-                }
+                let ra = if a.3 > 0 {
+                    a.2 as f64 / a.3 as f64
+                } else {
+                    f64::MAX
+                };
+                let rb = if b.3 > 0 {
+                    b.2 as f64 / b.3 as f64
+                } else {
+                    f64::MAX
+                };
+                ra.partial_cmp(&rb).unwrap()
             });
             let label = if epoch == 0 { "initial" } else { "final" };
-            let total_dec: usize = sorted.iter().map(|s| s.4).sum();
-            let total_ver: usize = sorted.iter().map(|s| s.5).sum();
-            let total_wins: usize = sorted.iter().map(|s| s.6).sum();
+            let total_dec: usize = sorted.iter().map(|s| s.6).sum();
+            let total_ver: usize = sorted.iter().map(|s| s.7).sum();
+            let total_wins: usize = sorted.iter().map(|s| s.8).sum();
             let total_blk: usize = sorted.iter().map(|s| s.1).sum();
             eprintln!(
                 "    {} per-file (decoded {}, verified {}, won {} / {} blocks):",
                 label, total_dec, total_ver, total_wins, total_blk,
             );
-            for &(path, blocks, ver_cost, ver_bl, decoded, verified, wins) in &sorted {
-                if verified > 0 {
-                    let r = ver_cost as f64 / ver_bl.max(1) as f64;
+            for &(path, blocks, dc, db, vc, vb, decoded, verified, wins) in &sorted {
+                if decoded > 0 {
+                    let dr = dc as f64 / db.max(1) as f64;
+                    let ver_tag = if verified > 0 {
+                        let vr = vc as f64 / vb.max(1) as f64;
+                        format!(" v:{} w:{} | {}/{} ({:.2}x)", verified, wins, vc, vb, vr)
+                    } else {
+                        " v:0 w:0".to_string()
+                    };
                     eprintln!(
-                        "      {:<42} {:>3} blk  d:{} v:{} w:{} | {}/{} ({:.2}x)",
-                        path, blocks, decoded, verified, wins, ver_cost, ver_bl, r,
-                    );
-                } else if decoded > 0 {
-                    eprintln!(
-                        "      {:<42} {:>3} blk  d:{} v:0 w:0",
-                        path, blocks, decoded,
+                        "      {:<42} {:>3} blk  {:>6}/{:<6} ({:.2}x) d:{}{}",
+                        path, blocks, dc, db, dr, decoded, ver_tag,
                     );
                 } else {
                     eprintln!("      {:<42} {:>3} blk  (no output)", path, blocks,);
@@ -548,9 +567,13 @@ struct TrainResult {
     neural_verified: usize,
     /// Number of blocks where model produced a non-empty decodable candidate.
     neural_decoded: usize,
+    /// Sum of neural costs for decoded blocks (unverified — shows what model produces).
+    decoded_cost: u64,
+    /// Sum of baselines for decoded blocks (same set as decoded_cost).
+    decoded_baseline: u64,
     /// Sum of neural costs for verified blocks only.
     verified_cost: u64,
-    /// Sum of baselines for verified blocks only (denominator for verified ratio).
+    /// Sum of baselines for verified blocks only.
     verified_baseline: u64,
     /// Total number of blocks in this file.
     total_blocks: usize,
@@ -610,44 +633,64 @@ fn train_one_compiled(
     }
 
     let mut best_seen = i64::MIN;
-    // (per_block_tasm, honest_cost, wins, verified, decoded, verified_cost, verified_baseline)
-    let mut best_captured: Option<(Vec<Vec<String>>, u64, usize, usize, usize, u64, u64)> = None;
+    // (per_block_tasm, honest_cost, wins, verified, decoded, dec_cost, dec_bl, ver_cost, ver_bl)
+    let mut best_captured: Option<(
+        Vec<Vec<String>>,
+        u64,
+        usize,
+        usize,
+        usize,
+        u64,
+        u64,
+        u64,
+        u64,
+    )> = None;
     for gen in 0..generations {
-        let evals: Vec<(i64, Vec<Vec<String>>, u64, usize, usize, usize, u64, u64)> =
-            if let Some(ref accel) = gpu_accel {
-                let weight_vecs: Vec<Vec<trident::field::fixed::Fixed>> = pop
+        let evals: Vec<(
+            i64,
+            Vec<Vec<String>>,
+            u64,
+            usize,
+            usize,
+            usize,
+            u64,
+            u64,
+            u64,
+            u64,
+        )> = if let Some(ref accel) = gpu_accel {
+            let weight_vecs: Vec<Vec<trident::field::fixed::Fixed>> = pop
+                .individuals
+                .iter()
+                .map(|ind| ind.weights.clone())
+                .collect();
+            let gpu_outputs = accel.batch_forward(&weight_vecs);
+            let baselines = &cf.per_block_baselines;
+            let block_tasm = &cf.per_block_tasm;
+            std::thread::scope(|s| {
+                let handles: Vec<_> = gpu_outputs
+                    .iter()
+                    .map(|ind_outputs| {
+                        let verifiable = &cf.per_block_verifiable;
+                        s.spawn(move || {
+                            eval_individual_gpu(ind_outputs, baselines, block_tasm, verifiable)
+                        })
+                    })
+                    .collect();
+                handles.into_iter().map(|h| h.join().unwrap()).collect()
+            })
+        } else {
+            std::thread::scope(|s| {
+                let handles: Vec<_> = pop
                     .individuals
                     .iter()
-                    .map(|ind| ind.weights.clone())
+                    .map(|individual| s.spawn(move || eval_individual_cpu(individual, cf)))
                     .collect();
-                let gpu_outputs = accel.batch_forward(&weight_vecs);
-                let baselines = &cf.per_block_baselines;
-                let block_tasm = &cf.per_block_tasm;
-                std::thread::scope(|s| {
-                    let handles: Vec<_> = gpu_outputs
-                        .iter()
-                        .map(|ind_outputs| {
-                            let verifiable = &cf.per_block_verifiable;
-                            s.spawn(move || {
-                                eval_individual_gpu(ind_outputs, baselines, block_tasm, verifiable)
-                            })
-                        })
-                        .collect();
-                    handles.into_iter().map(|h| h.join().unwrap()).collect()
-                })
-            } else {
-                std::thread::scope(|s| {
-                    let handles: Vec<_> = pop
-                        .individuals
-                        .iter()
-                        .map(|individual| s.spawn(move || eval_individual_cpu(individual, cf)))
-                        .collect();
-                    handles
-                        .into_iter()
-                        .map(|h| h.join().expect("evaluate thread panicked"))
-                        .collect()
-                })
-            };
+                handles
+                    .into_iter()
+                    .map(|h| h.join().expect("evaluate thread panicked"))
+                    .collect()
+            })
+        };
 
         for (i, eval) in evals.iter().enumerate() {
             pop.individuals[i].fitness = eval.0;
@@ -657,8 +700,8 @@ fn train_one_compiled(
         if let Some((idx, best)) = evals.iter().enumerate().max_by_key(|(_, e)| e.0) {
             if best.0 > best_seen {
                 best_seen = best.0;
-                let (_, tasm, cost, w, v, d, rc, dbl) = evals.into_iter().nth(idx).unwrap();
-                best_captured = Some((tasm, cost, w, v, d, rc, dbl));
+                let (_, tasm, cost, w, v, d, dc, db, vc, vb) = evals.into_iter().nth(idx).unwrap();
+                best_captured = Some((tasm, cost, w, v, d, dc, db, vc, vb));
             }
         }
         pop.evolve(gen_start.wrapping_add(gen));
@@ -688,25 +731,36 @@ fn train_one_compiled(
     };
     let _ = weights::save_meta(&new_meta, &weights::meta_path(dummy_root));
 
-    let (honest_cost, neural_tasm, neural_wins, neural_verified, neural_decoded, ver_cost, ver_bl) =
-        if let Some((tasm, cost, wins, ver, dec, vc, vbl)) = best_captured {
-            let has_neural = cost != cf.baseline_cost
-                || tasm
-                    .iter()
-                    .zip(cf.per_block_tasm.iter())
-                    .any(|(n, b)| n != b);
-            (
-                cost,
-                if has_neural { Some(tasm) } else { None },
-                wins,
-                ver,
-                dec,
-                vc,
-                vbl,
-            )
-        } else {
-            (cf.baseline_cost, None, 0, 0, 0, 0, 0)
-        };
+    let (
+        honest_cost,
+        neural_tasm,
+        neural_wins,
+        neural_verified,
+        neural_decoded,
+        d_cost,
+        d_bl,
+        v_cost,
+        v_bl,
+    ) = if let Some((tasm, cost, wins, ver, dec, dc, db, vc, vb)) = best_captured {
+        let has_neural = cost != cf.baseline_cost
+            || tasm
+                .iter()
+                .zip(cf.per_block_tasm.iter())
+                .any(|(n, b)| n != b);
+        (
+            cost,
+            if has_neural { Some(tasm) } else { None },
+            wins,
+            ver,
+            dec,
+            dc,
+            db,
+            vc,
+            vb,
+        )
+    } else {
+        (cf.baseline_cost, None, 0, 0, 0, 0, 0, 0, 0)
+    };
 
     TrainResult {
         cost: honest_cost,
@@ -714,8 +768,10 @@ fn train_one_compiled(
         neural_wins,
         neural_verified,
         neural_decoded,
-        verified_cost: ver_cost,
-        verified_baseline: ver_bl,
+        decoded_cost: d_cost,
+        decoded_baseline: d_bl,
+        verified_cost: v_cost,
+        verified_baseline: v_bl,
         total_blocks: cf.blocks.len(),
     }
 }
@@ -824,13 +880,25 @@ fn write_neural_tasm(cf: &CompiledFile, per_block: &[Vec<String>], repo_root: &P
 }
 
 /// Evaluate one individual on GPU outputs.
-/// Returns (fitness, per_block_tasm, honest_cost, wins, verified, decoded, verified_cost, verified_baseline).
+/// Returns (fitness, per_block_tasm, honest_cost, wins, verified, decoded,
+///          decoded_cost, decoded_baseline, verified_cost, verified_baseline).
 fn eval_individual_gpu(
     ind_outputs: &[Vec<u32>],
     baselines: &[u64],
     block_tasm: &[Vec<String>],
     verifiable: &[bool],
-) -> (i64, Vec<Vec<String>>, u64, usize, usize, usize, u64, u64) {
+) -> (
+    i64,
+    Vec<Vec<String>>,
+    u64,
+    usize,
+    usize,
+    usize,
+    u64,
+    u64,
+    u64,
+    u64,
+) {
     use trident::cost::{scorer, stack_verifier};
     use trident::ir::tir::lower::decode_output;
 
@@ -840,6 +908,8 @@ fn eval_individual_gpu(
     let mut wins = 0usize;
     let mut verified = 0usize;
     let mut decoded = 0usize;
+    let mut decoded_cost = 0u64;
+    let mut decoded_bl = 0u64;
     let mut verified_cost = 0u64;
     let mut verified_bl = 0u64;
 
@@ -847,7 +917,6 @@ fn eval_individual_gpu(
         let baseline = baselines[b];
         let baseline_lines = &block_tasm[b];
 
-        // Skip blocks whose baseline uses side-effect ops — can't verify
         if !verifiable.get(b).copied().unwrap_or(false) {
             honest_cost += baseline;
             per_block.push(baseline_lines.clone());
@@ -866,6 +935,8 @@ fn eval_individual_gpu(
                 let profile =
                     scorer::profile_tasm(&candidate.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                 let cost = profile.cost();
+                decoded_cost += cost;
+                decoded_bl += baseline;
 
                 if stack_verifier::verify_equivalent(baseline_lines, &candidate, b as u64) {
                     verified += 1;
@@ -892,17 +963,31 @@ fn eval_individual_gpu(
         wins,
         verified,
         decoded,
+        decoded_cost,
+        decoded_bl,
         verified_cost,
         verified_bl,
     )
 }
 
 /// Evaluate one individual on CPU.
-/// Returns (fitness, per_block_tasm, honest_cost, wins, verified, decoded, verified_cost, verified_baseline).
+/// Returns (fitness, per_block_tasm, honest_cost, wins, verified, decoded,
+///          decoded_cost, decoded_baseline, verified_cost, verified_baseline).
 fn eval_individual_cpu(
     individual: &trident::ir::tir::neural::evolve::Individual,
     cf: &CompiledFile,
-) -> (i64, Vec<Vec<String>>, u64, usize, usize, usize, u64, u64) {
+) -> (
+    i64,
+    Vec<Vec<String>>,
+    u64,
+    usize,
+    usize,
+    usize,
+    u64,
+    u64,
+    u64,
+    u64,
+) {
     use trident::cost::{scorer, stack_verifier};
     use trident::ir::tir::lower::decode_output;
     use trident::ir::tir::neural::model::NeuralModel;
@@ -914,6 +999,8 @@ fn eval_individual_cpu(
     let mut wins = 0usize;
     let mut verified = 0usize;
     let mut decoded = 0usize;
+    let mut decoded_cost = 0u64;
+    let mut decoded_bl = 0u64;
     let mut verified_cost = 0u64;
     let mut verified_bl = 0u64;
 
@@ -935,6 +1022,8 @@ fn eval_individual_cpu(
                 let profile =
                     scorer::profile_tasm(&candidate.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                 let cost = profile.cost();
+                decoded_cost += cost;
+                decoded_bl += baseline;
 
                 if stack_verifier::verify_equivalent(baseline_tasm, &candidate, i as u64) {
                     verified += 1;
@@ -961,6 +1050,8 @@ fn eval_individual_cpu(
         wins,
         verified,
         decoded,
+        decoded_cost,
+        decoded_bl,
         verified_cost,
         verified_bl,
     )

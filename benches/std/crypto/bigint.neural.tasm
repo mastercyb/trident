@@ -1,0 +1,1442 @@
+__zero256:
+    push 0
+    split
+    pop 1
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    swap 8
+    pop 5
+    pop 3
+    return
+    
+__one256:
+    push 0
+    split
+    pop 1
+    push 1
+    split
+    pop 1
+    dup 0
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    swap 9
+    pop 5
+    pop 4
+    return
+    
+__from_u32:
+    push 0
+    split
+    pop 1
+    dup 1
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    swap 9
+    pop 5
+    pop 4
+    return
+    
+__add_u32_carry:
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    add
+    dup 1
+    add
+    dup 0
+    split
+    dup 0
+    dup 2
+    push 1073741824
+    swap 1
+    swap 2
+    write_mem 2
+    pop 5
+    pop 5
+    push 1073741825
+    read_mem 2
+    pop 1
+    return
+    
+__sub_u32_borrow:
+    dup 2
+    dup 2
+    dup 2
+    push 65536
+    split
+    pop 1
+    dup 0
+    dup 1
+    mul
+    dup 0
+    dup 5
+    add
+    dup 4
+    push -1
+    mul
+    add
+    dup 3
+    push -1
+    mul
+    add
+    dup 0
+    split
+    dup 1
+    push 1
+    split
+    pop 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__1
+    skiz
+    call __else__2
+    return
+    
+__then__1:
+    pop 1
+    push 0
+    split
+    pop 1
+    dup 1
+    dup 1
+    push 0
+    return
+
+__else__2:
+    push 1
+    split
+    pop 1
+    dup 1
+    dup 1
+    return
+
+__add256:
+    push 0
+    split
+    pop 1
+    dup 2
+    dup 2
+    dup 2
+    call __add_u32_carry
+    dup 4
+    dup 4
+    dup 2
+    call __add_u32_carry
+    dup 6
+    dup 6
+    dup 2
+    call __add_u32_carry
+    dup 8
+    dup 8
+    dup 2
+    call __add_u32_carry
+    dup 10
+    dup 10
+    dup 2
+    call __add_u32_carry
+    dup 12
+    dup 12
+    dup 2
+    call __add_u32_carry
+    dup 14
+    swap 13
+    pop 1
+    dup 14
+    swap 13
+    dup 2
+    call __add_u32_carry
+    dup 14
+    swap 13
+    pop 1
+    dup 14
+    swap 13
+    dup 2
+    call __add_u32_carry
+    swap 13
+    pop 1
+    dup 0
+    swap 13
+    dup 0
+    swap 13
+    pop 1
+    dup 0
+    dup 12
+    dup 10
+    dup 8
+    dup 6
+    dup 4
+    swap 11
+    pop 5
+    pop 1
+    swap 3
+    swap 10
+    pop 3
+    swap 12
+    pop 5
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    swap 15
+    pop 5
+    pop 3
+    dup 0
+    swap 9
+    swap 8
+    swap 7
+    swap 6
+    swap 5
+    swap 4
+    swap 3
+    swap 2
+    pop 5
+    pop 3
+    return
+    
+__sub256:
+    push 0
+    split
+    pop 1
+    dup 2
+    dup 2
+    dup 2
+    call __sub_u32_borrow
+    dup 4
+    dup 4
+    dup 2
+    call __sub_u32_borrow
+    dup 6
+    dup 6
+    dup 2
+    call __sub_u32_borrow
+    dup 8
+    dup 8
+    dup 2
+    call __sub_u32_borrow
+    dup 10
+    dup 10
+    dup 2
+    call __sub_u32_borrow
+    dup 12
+    dup 12
+    dup 2
+    call __sub_u32_borrow
+    dup 14
+    swap 13
+    pop 1
+    dup 14
+    swap 13
+    dup 2
+    call __sub_u32_borrow
+    dup 14
+    swap 13
+    pop 1
+    dup 14
+    swap 13
+    dup 2
+    call __sub_u32_borrow
+    swap 13
+    pop 1
+    dup 0
+    swap 13
+    dup 0
+    swap 13
+    pop 1
+    dup 0
+    dup 12
+    dup 10
+    dup 8
+    dup 6
+    dup 4
+    swap 11
+    pop 5
+    pop 2
+    swap 15
+    pop 5
+    pop 5
+    pop 5
+    return
+    
+__lt256:
+    dup 1
+    dup 1
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__3
+    skiz
+    call __else__4
+    swap 1
+    pop 1
+    return
+    
+__then__3:
+    pop 1
+    push 1
+    push 0
+    return
+
+__else__4:
+    dup 0
+    dup 2
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__5
+    skiz
+    call __else__6
+    return
+
+__then__5:
+    pop 1
+    push 0
+    push 0
+    return
+
+__else__6:
+    dup 1
+    dup 1
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__7
+    skiz
+    call __else__8
+    return
+
+__then__7:
+    pop 1
+    push 1
+    push 0
+    return
+
+__else__8:
+    dup 0
+    dup 2
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__9
+    skiz
+    call __else__10
+    return
+
+__then__9:
+    pop 1
+    push 0
+    push 0
+    return
+
+__else__10:
+    dup 1
+    dup 1
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__11
+    skiz
+    call __else__12
+    return
+
+__then__11:
+    pop 1
+    push 1
+    push 0
+    return
+
+__else__12:
+    dup 0
+    dup 2
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__13
+    skiz
+    call __else__14
+    return
+
+__then__13:
+    pop 1
+    push 0
+    push 0
+    return
+
+__else__14:
+    dup 1
+    dup 1
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__15
+    skiz
+    call __else__16
+    return
+
+__then__15:
+    pop 1
+    push 1
+    push 0
+    return
+
+__else__16:
+    dup 0
+    dup 2
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__17
+    skiz
+    call __else__18
+    return
+
+__then__17:
+    pop 1
+    push 0
+    push 0
+    return
+
+__else__18:
+    dup 1
+    dup 1
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__19
+    skiz
+    call __else__20
+    return
+
+__then__19:
+    pop 1
+    push 1
+    push 0
+    return
+
+__else__20:
+    dup 0
+    dup 2
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__21
+    skiz
+    call __else__22
+    return
+
+__then__21:
+    pop 1
+    push 0
+    push 0
+    return
+
+__else__22:
+    dup 1
+    dup 1
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__23
+    skiz
+    call __else__24
+    return
+
+__then__23:
+    pop 1
+    push 1
+    push 0
+    return
+
+__else__24:
+    dup 0
+    dup 2
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__25
+    skiz
+    call __else__26
+    return
+
+__then__25:
+    pop 1
+    push 0
+    push 0
+    return
+
+__else__26:
+    dup 1
+    dup 1
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__27
+    skiz
+    call __else__28
+    return
+
+__then__27:
+    pop 1
+    push 1
+    push 0
+    return
+
+__else__28:
+    dup 0
+    dup 2
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__29
+    skiz
+    call __else__30
+    return
+
+__then__29:
+    pop 1
+    push 0
+    push 0
+    return
+
+__else__30:
+    dup 1
+    dup 1
+    lt
+    push 1
+    swap 1
+    skiz
+    call __then__31
+    skiz
+    call __else__32
+    return
+
+__then__31:
+    pop 1
+    push 1
+    push 0
+    return
+
+__else__32:
+    push 0
+    return
+
+__eq256:
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__33
+    skiz
+    call __else__34
+    swap 1
+    pop 1
+    return
+    
+__then__33:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__35
+    skiz
+    call __else__36
+    push 0
+    return
+
+__else__34:
+    push 0
+    return
+
+__then__35:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__37
+    skiz
+    call __else__38
+    push 0
+    return
+
+__else__36:
+    push 0
+    return
+
+__then__37:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__39
+    skiz
+    call __else__40
+    push 0
+    return
+
+__else__38:
+    push 0
+    return
+
+__then__39:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__41
+    skiz
+    call __else__42
+    push 0
+    return
+
+__else__40:
+    push 0
+    return
+
+__then__41:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__43
+    skiz
+    call __else__44
+    push 0
+    return
+
+__else__42:
+    push 0
+    return
+
+__then__43:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__45
+    skiz
+    call __else__46
+    push 0
+    return
+
+__else__44:
+    push 0
+    return
+
+__then__45:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__47
+    skiz
+    call __else__48
+    push 0
+    return
+
+__else__46:
+    push 0
+    return
+
+__then__47:
+    pop 1
+    push 1
+    push 0
+    return
+
+__else__48:
+    push 0
+    return
+
+__mul256_by_u32:
+    dup 0
+    push 0
+    split
+    pop 1
+    dup 3
+    dup 2
+    mul
+    dup 0
+    split
+    dup 6
+    dup 5
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    dup 9
+    dup 8
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    dup 12
+    dup 11
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    swap 14
+    pop 1
+    dup 15
+    swap 13
+    pop 1
+    dup 13
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    swap 12
+    pop 1
+    swap 12
+    dup 15
+    swap 13
+    pop 1
+    dup 13
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    swap 12
+    pop 1
+    swap 12
+    dup 15
+    swap 13
+    pop 1
+    dup 13
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    swap 12
+    pop 1
+    swap 12
+    dup 15
+    swap 13
+    pop 1
+    dup 13
+    mul
+    dup 2
+    add
+    dup 0
+    split
+    swap 12
+    pop 1
+    swap 12
+    swap 13
+    pop 1
+    dup 0
+    swap 13
+    pop 1
+    dup 0
+    swap 12
+    dup 0
+    swap 13
+    pop 1
+    dup 0
+    swap 13
+    pop 1
+    dup 0
+    dup 11
+    dup 8
+    dup 5
+    swap 12
+    pop 5
+    pop 1
+    swap 6
+    swap 12
+    pop 5
+    pop 3
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    dup 7
+    swap 15
+    pop 5
+    pop 3
+    dup 0
+    swap 9
+    swap 8
+    swap 7
+    swap 6
+    swap 5
+    swap 4
+    swap 3
+    swap 2
+    pop 5
+    pop 3
+    return
+    
+__shl_one_limb:
+    push 0
+    split
+    pop 1
+    dup 0
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    dup 1
+    swap 9
+    pop 5
+    pop 4
+    return
+    
+__shl_limbs:
+    push 0
+    split
+    pop 1
+    dup 1
+    push 0
+    split
+    pop 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__49
+    skiz
+    call __else__50
+    swap 2
+    pop 2
+    return
+    
+__then__49:
+    pop 1
+    dup 2
+    push 0
+    return
+
+__else__50:
+    dup 1
+    push 1
+    split
+    pop 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__51
+    skiz
+    call __else__52
+    return
+
+__then__51:
+    pop 1
+    dup 0
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    push 0
+    return
+
+__else__52:
+    dup 1
+    push 2
+    split
+    pop 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__53
+    skiz
+    call __else__54
+    return
+
+__then__53:
+    pop 1
+    dup 0
+    dup 0
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    push 0
+    return
+
+__else__54:
+    dup 1
+    push 3
+    split
+    pop 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__55
+    skiz
+    call __else__56
+    return
+
+__then__55:
+    pop 1
+    dup 0
+    dup 0
+    dup 0
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    push 0
+    return
+
+__else__56:
+    dup 1
+    push 4
+    split
+    pop 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__57
+    skiz
+    call __else__58
+    return
+
+__then__57:
+    pop 1
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 2
+    dup 2
+    dup 2
+    dup 2
+    push 0
+    return
+
+__else__58:
+    dup 1
+    push 5
+    split
+    pop 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__59
+    skiz
+    call __else__60
+    return
+
+__then__59:
+    pop 1
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 2
+    dup 2
+    dup 2
+    push 0
+    return
+
+__else__60:
+    dup 1
+    push 6
+    split
+    pop 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__61
+    skiz
+    call __else__62
+    return
+
+__then__61:
+    pop 1
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 2
+    dup 2
+    push 0
+    return
+
+__else__62:
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 0
+    dup 2
+    return
+
+__mul256_low:
+    dup 1
+    dup 1
+    call __mul256_by_u32
+    pop 1
+    dup 0
+    dup 3
+    dup 3
+    call __mul256_by_u32
+    pop 1
+    dup 0
+    push 1
+    split
+    pop 1
+    call __shl_limbs
+    dup 2
+    dup 1
+    call __add256
+    pop 1
+    dup 6
+    dup 6
+    call __mul256_by_u32
+    pop 1
+    dup 0
+    push 2
+    split
+    pop 1
+    call __shl_limbs
+    dup 2
+    dup 1
+    call __add256
+    pop 1
+    dup 9
+    dup 9
+    call __mul256_by_u32
+    pop 1
+    dup 0
+    push 3
+    split
+    pop 1
+    call __shl_limbs
+    dup 2
+    dup 1
+    call __add256
+    pop 1
+    dup 12
+    dup 12
+    call __mul256_by_u32
+    pop 1
+    dup 0
+    push 4
+    split
+    pop 1
+    call __shl_limbs
+    dup 2
+    swap 13
+    pop 1
+    dup 1
+    call __add256
+    pop 1
+    dup 14
+    swap 12
+    pop 1
+    dup 14
+    call __mul256_by_u32
+    pop 1
+    dup 0
+    swap 13
+    pop 1
+    push 5
+    split
+    pop 1
+    call __shl_limbs
+    dup 2
+    swap 13
+    pop 1
+    dup 1
+    call __add256
+    pop 1
+    dup 14
+    swap 12
+    pop 1
+    dup 14
+    call __mul256_by_u32
+    pop 1
+    dup 0
+    swap 13
+    pop 1
+    push 6
+    split
+    pop 1
+    call __shl_limbs
+    dup 2
+    swap 13
+    pop 1
+    dup 1
+    call __add256
+    pop 1
+    dup 14
+    swap 12
+    pop 1
+    dup 14
+    call __mul256_by_u32
+    pop 1
+    dup 0
+    swap 13
+    pop 1
+    push 7
+    split
+    pop 1
+    call __shl_limbs
+    dup 2
+    swap 13
+    pop 1
+    dup 1
+    call __add256
+    pop 1
+    dup 0
+    swap 15
+    pop 5
+    pop 5
+    pop 5
+    return
+    
+__mod_reduce_once:
+    dup 1
+    dup 1
+    call __lt256
+    push 1
+    swap 1
+    skiz
+    call __then__63
+    skiz
+    call __else__64
+    swap 1
+    pop 1
+    return
+    
+__then__63:
+    pop 1
+    dup 1
+    push 0
+    return
+
+__else__64:
+    dup 1
+    dup 1
+    call __sub256
+    return
+
+__add_mod:
+    dup 2
+    dup 2
+    call __add256
+    dup 1
+    dup 3
+    call __mod_reduce_once
+    swap 5
+    pop 5
+    return
+    
+__sub_mod:
+    dup 2
+    dup 2
+    call __lt256
+    push 1
+    swap 1
+    skiz
+    call __then__65
+    skiz
+    call __else__66
+    swap 2
+    pop 2
+    return
+    
+__then__65:
+    pop 1
+    dup 1
+    dup 3
+    call __sub256
+    dup 1
+    dup 1
+    call __sub256
+    push 0
+    return
+
+__else__66:
+    dup 2
+    dup 2
+    call __sub256
+    return
+
+__mul_mod:
+    dup 2
+    dup 2
+    call __mul256_low
+    dup 0
+    dup 2
+    call __mod_reduce_once
+    swap 4
+    pop 4
+    return
+    
+__and256:
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    dup 1
+    dup 1
+    and
+    swap 9
+    pop 5
+    pop 4
+    return
+    
+__xor256:
+pop 1
+    return
+    
+__is_zero:
+    push 0
+    split
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__67
+    skiz
+    call __else__68
+    swap 1
+    pop 1
+    return
+    
+__then__67:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__69
+    skiz
+    call __else__70
+    push 0
+    return
+
+__else__68:
+    push 0
+    return
+
+__then__69:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__71
+    skiz
+    call __else__72
+    push 0
+    return
+
+__else__70:
+    push 0
+    return
+
+__then__71:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__73
+    skiz
+    call __else__74
+    push 0
+    return
+
+__else__72:
+    push 0
+    return
+
+__then__73:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__75
+    skiz
+    call __else__76
+    push 0
+    return
+
+__else__74:
+    push 0
+    return
+
+__then__75:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__77
+    skiz
+    call __else__78
+    push 0
+    return
+
+__else__76:
+    push 0
+    return
+
+__then__77:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__79
+    skiz
+    call __else__80
+    push 0
+    return
+
+__else__78:
+    push 0
+    return
+
+__then__79:
+    pop 1
+    dup 1
+    dup 1
+    eq
+    push 1
+    swap 1
+    skiz
+    call __then__81
+    skiz
+    call __else__82
+    push 0
+    return
+
+__else__80:
+    push 0
+    return
+
+__then__81:
+    pop 1
+    push 1
+    push 0
+    return
+
+__else__82:
+    push 0
+    return
