@@ -255,3 +255,88 @@ pub fn decode_output(codes: &[u64]) -> Vec<String> {
     }
     out
 }
+
+/// Encode a single TASM instruction line to its VOCAB code (reverse of decode_output).
+/// Returns None if the instruction is not in the vocabulary.
+pub fn encode_tasm_line(line: &str) -> Option<u64> {
+    const VOCAB: &[&str] = &[
+        "",              // 0: end of sequence
+        "push 0",        // 1
+        "push 1",        // 2
+        "push -1",       // 3
+        "pop 1",         // 4
+        "pop 2",         // 5
+        "pop 3",         // 6
+        "pop 4",         // 7
+        "pop 5",         // 8
+        "dup 0",         // 9
+        "dup 1",         // 10
+        "dup 2",         // 11
+        "dup 3",         // 12
+        "dup 4",         // 13
+        "dup 5",         // 14
+        "swap 1",        // 15
+        "swap 2",        // 16
+        "swap 3",        // 17
+        "swap 4",        // 18
+        "swap 5",        // 19
+        "add",           // 20
+        "mul",           // 21
+        "eq",            // 22
+        "lt",            // 23
+        "and",           // 24
+        "xor",           // 25
+        "div_mod",       // 26
+        "split",         // 27
+        "pop_count",     // 28
+        "log_2_floor",   // 29
+        "nop",           // 30
+        "assert",        // 31
+        "dup 9",         // 32
+        "write_io 1",    // 33
+        "dup 11",        // 34
+        "dup 12",        // 35
+        "divine 1",      // 36
+        "dup 14",        // 37
+        "dup 15",        // 38
+        "swap 10",       // 39
+        "swap 11",       // 40
+        "swap 12",       // 41
+        "swap 13",       // 42
+        "halt",          // 43
+        "swap 15",       // 44
+        "write_io 5",    // 45
+        "pick 2",        // 46
+        "pick 3",        // 47
+        "divine 5",      // 48
+        "pick 5",        // 49
+        "place 1",       // 50
+        "place 2",       // 51
+        "place 3",       // 52
+        "place 4",       // 53
+        "place 5",       // 54
+        "push 2",        // 55
+        "push 3",        // 56
+        "assert_vector", // 57
+        "dup 6",         // 58
+        "dup 7",         // 59
+        "swap 6",        // 60
+        "swap 7",        // 61
+        "swap 8",        // 62
+        "swap 9",        // 63
+    ];
+
+    let trimmed = line.trim();
+    for (i, &entry) in VOCAB.iter().enumerate().skip(1) {
+        if trimmed == entry {
+            return Some(i as u64);
+        }
+    }
+    None
+}
+
+/// Encode a sequence of TASM instruction lines to VOCAB codes.
+/// Lines not in the vocabulary are skipped.
+pub fn encode_tasm_block(lines: &[String]) -> Vec<u64> {
+    lines.iter().filter_map(|l| encode_tasm_line(l)).collect()
+}
