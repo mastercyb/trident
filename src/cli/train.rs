@@ -120,6 +120,7 @@ pub fn cmd_train(args: TrainArgs) {
     let mut ema_rate: Option<f64> = None;
     let mut ema_volatility: Option<f64> = None;
     const EMA_ALPHA: f64 = 0.3;
+    let mut prev_table_lines: usize = 0;
     let repo_root = find_repo_root();
 
     for epoch in 0..args.epochs {
@@ -232,7 +233,6 @@ pub fn cmd_train(args: TrainArgs) {
         };
 
         let epoch_wins: usize = epoch_costs.iter().map(|e| e.2).sum();
-        let total_blk: usize = epoch_costs.iter().map(|e| e.3).sum();
         let epoch_verified: usize = epoch_costs.iter().map(|e| e.4).sum();
         let epoch_decoded: usize = epoch_costs.iter().map(|e| e.5).sum();
         let ver_info = if epoch_ver_bl > 0 {
@@ -247,8 +247,45 @@ pub fn cmd_train(args: TrainArgs) {
         } else {
             format!(" | verified 0 | won 0")
         };
+        // Build per-file table
+        // (path, blocks, dec_cost, dec_bl, ver_cost, ver_bl, decoded, verified, wins)
+        let mut sorted: Vec<_> = epoch_costs
+            .iter()
+            .map(|e| {
+                let cf = &compiled[e.0];
+                (
+                    cf.path.as_str(),
+                    cf.blocks.len(),
+                    e.6, // decoded_cost
+                    e.7, // decoded_baseline
+                    e.8, // verified_cost
+                    e.9, // verified_baseline
+                    e.5, // decoded
+                    e.4, // verified
+                    e.2, // wins
+                )
+            })
+            .collect();
+        // Sort by verified wins (most first), then verified count, then decoded count
+        sorted.sort_by(|a, b| {
+            b.8.cmp(&a.8) // wins descending
+                .then(b.7.cmp(&a.7)) // verified descending
+                .then(b.6.cmp(&a.6)) // decoded descending
+        });
+        let total_dec: usize = sorted.iter().map(|s| s.6).sum();
+        let total_ver: usize = sorted.iter().map(|s| s.7).sum();
+        let total_wins: usize = sorted.iter().map(|s| s.8).sum();
+        let total_blk: usize = sorted.iter().map(|s| s.1).sum();
+
+        // Move cursor up to overwrite previous table (epoch > 0)
+        // table_lines = 1 (epoch) + 1 (header) + file_count + 1 (blank)
+        let table_lines = 1 + 1 + sorted.len() + 1;
+        if epoch > 0 && prev_table_lines > 0 {
+            eprint!("\x1B[{}A", prev_table_lines);
+        }
+
         eprintln!(
-            "\r  epoch {}/{} | decoded {}/{}{} | {:.1}s{}{}",
+            "\r  epoch {}/{} | decoded {}/{}{} | {:.1}s{}{}\x1B[K",
             epoch + 1,
             args.epochs,
             epoch_decoded,
@@ -258,59 +295,28 @@ pub fn cmd_train(args: TrainArgs) {
             trend,
             conv_info,
         );
-
-        // Per-file breakdown every epoch
-        {
-            // (path, blocks, dec_cost, dec_bl, ver_cost, ver_bl, decoded, verified, wins)
-            let mut sorted: Vec<_> = epoch_costs
-                .iter()
-                .map(|e| {
-                    let cf = &compiled[e.0];
-                    (
-                        cf.path.as_str(),
-                        cf.blocks.len(),
-                        e.6, // decoded_cost
-                        e.7, // decoded_baseline
-                        e.8, // verified_cost
-                        e.9, // verified_baseline
-                        e.5, // decoded
-                        e.4, // verified
-                        e.2, // wins
-                    )
-                })
-                .collect();
-            // Sort by verified wins (most first), then verified count, then decoded count
-            sorted.sort_by(|a, b| {
-                b.8.cmp(&a.8) // wins descending
-                    .then(b.7.cmp(&a.7)) // verified descending
-                    .then(b.6.cmp(&a.6)) // decoded descending
-            });
-            let total_dec: usize = sorted.iter().map(|s| s.6).sum();
-            let total_ver: usize = sorted.iter().map(|s| s.7).sum();
-            let total_wins: usize = sorted.iter().map(|s| s.8).sum();
-            let total_blk: usize = sorted.iter().map(|s| s.1).sum();
-            eprintln!(
-                "    per-file (decoded {}, verified {}, won {} / {} blocks):",
-                total_dec, total_ver, total_wins, total_blk,
-            );
-            for &(path, blocks, _dc, _db, vc, vb, decoded, verified, wins) in &sorted {
-                if decoded > 0 {
-                    let ver_tag = if verified > 0 {
-                        let vr = vc as f64 / vb.max(1) as f64;
-                        format!(" | {}/{} ({:.2}x)", vc, vb, vr)
-                    } else {
-                        String::new()
-                    };
-                    eprintln!(
-                        "      {:<42} {:>3} blk  d:{} v:{} w:{}{}",
-                        path, blocks, decoded, verified, wins, ver_tag,
-                    );
+        eprintln!(
+            "    per-file (decoded {}, verified {}, won {} / {} blocks):\x1B[K",
+            total_dec, total_ver, total_wins, total_blk,
+        );
+        for &(path, blocks, _dc, _db, vc, vb, decoded, verified, wins) in &sorted {
+            if decoded > 0 {
+                let ver_tag = if verified > 0 {
+                    let vr = vc as f64 / vb.max(1) as f64;
+                    format!(" | {}/{} ({:.2}x)", vc, vb, vr)
                 } else {
-                    eprintln!("      {:<42} {:>3} blk  d:0", path, blocks);
-                }
+                    String::new()
+                };
+                eprintln!(
+                    "      {:<42} {:>3} blk  d:{:<4} v:{:<4} w:{}{}\x1B[K",
+                    path, blocks, decoded, verified, wins, ver_tag,
+                );
+            } else {
+                eprintln!("      {:<42} {:>3} blk  d:0\x1B[K", path, blocks);
             }
-            eprintln!();
         }
+        eprintln!("\x1B[K");
+        prev_table_lines = table_lines;
     }
 
     let elapsed = start.elapsed();
