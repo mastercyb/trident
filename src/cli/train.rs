@@ -112,6 +112,15 @@ pub fn cmd_train(args: TrainArgs) {
         None
     };
 
+    // Bootstrap: if no weights exist, pre-train to reproduce compiler output
+    let needs_bootstrap = weights::load_best_weights()
+        .map(|w| w.iter().all(|v| v.to_f64() == 0.0))
+        .unwrap_or(true);
+    if needs_bootstrap {
+        eprintln!("  bootstrapping from compiler output...");
+        bootstrap_from_compiler(&compiled, &mut gpu_accel);
+    }
+
     let start = std::time::Instant::now();
     let mut total_trained = 0u64;
     let mut epoch_history: Vec<u64> = Vec::new();
@@ -808,6 +817,139 @@ fn train_one_compiled(
             diagnostics: Vec::new(),
         }
     }
+}
+
+/// Bootstrap model weights by evolving to reproduce compiler output.
+///
+/// Fitness = number of output tokens matching the compiler's own TASM.
+/// Runs across all trainable blocks in the corpus. Once match rate
+/// stabilizes, saves weights and returns.
+fn bootstrap_from_compiler(
+    compiled: &[CompiledFile],
+    _gpu_accel: &mut Option<trident::gpu::neural_accel::NeuralAccelerator>,
+) {
+    use trident::ir::tir::lower::encode_tasm_block;
+    use trident::ir::tir::neural::evolve::Population;
+    use trident::ir::tir::neural::model::NeuralModel;
+    use trident::ir::tir::neural::weights;
+
+    // Collect all trainable (block, expected_codes) pairs
+    let mut all_blocks: Vec<&trident::ir::tir::encode::TIRBlock> = Vec::new();
+    let mut all_expected: Vec<Vec<u64>> = Vec::new();
+    for cf in compiled {
+        for (i, block) in cf.blocks.iter().enumerate() {
+            if !cf.per_block_verifiable.get(i).copied().unwrap_or(false) {
+                continue;
+            }
+            let codes = encode_tasm_block(&cf.per_block_tasm[i]);
+            if codes.is_empty() {
+                continue;
+            }
+            all_blocks.push(block);
+            all_expected.push(codes);
+        }
+    }
+
+    if all_blocks.is_empty() {
+        eprintln!("  bootstrap: no trainable blocks, skipping");
+        return;
+    }
+
+    let weight_count = NeuralModel::zeros().to_weight_vec().len();
+    let mut pop = Population::new_random_with_size(weight_count, 7777);
+    let max_gens: u64 = 500;
+    let mut best_match_rate = 0.0f64;
+
+    let bs_start = std::time::Instant::now();
+
+    for gen in 0..max_gens {
+        // Evaluate each individual: fitness = total token matches across all blocks
+        for ind in &mut pop.individuals {
+            let mut model = NeuralModel::from_weight_vec(&ind.weights);
+            let mut score = 0i64;
+            for (block, expected) in all_blocks.iter().zip(&all_expected) {
+                let output = model.forward(block);
+                // +10 per matching token at correct position
+                for (pos, &code) in output.iter().enumerate() {
+                    if pos < expected.len() && code == expected[pos] {
+                        score += 10;
+                    }
+                }
+                // +5 for correct length
+                if output.len() == expected.len() {
+                    score += 5;
+                }
+            }
+            ind.fitness = score;
+        }
+        pop.update_best();
+
+        // Compute match rate for best individual
+        let best_w = pop.best_weights().to_vec();
+        let mut model = NeuralModel::from_weight_vec(&best_w);
+        let mut total_tokens = 0usize;
+        let mut matched_tokens = 0usize;
+        for (block, expected) in all_blocks.iter().zip(&all_expected) {
+            let output = model.forward(block);
+            total_tokens += expected.len();
+            for (pos, &code) in output.iter().enumerate() {
+                if pos < expected.len() && code == expected[pos] {
+                    matched_tokens += 1;
+                }
+            }
+        }
+        let rate = if total_tokens > 0 {
+            matched_tokens as f64 / total_tokens as f64
+        } else {
+            0.0
+        };
+
+        if gen % 50 == 0 || rate > best_match_rate + 0.05 {
+            eprint!(
+                "\r  bootstrap gen {}/{} | {}/{} tokens ({:.1}%)     ",
+                gen + 1,
+                max_gens,
+                matched_tokens,
+                total_tokens,
+                rate * 100.0,
+            );
+            use std::io::Write;
+            let _ = std::io::stderr().flush();
+        }
+
+        if rate > best_match_rate {
+            best_match_rate = rate;
+        }
+
+        // Exit early if match rate > 80%
+        if rate > 0.80 {
+            break;
+        }
+
+        pop.evolve(gen.wrapping_add(7777));
+    }
+
+    // Save bootstrapped weights
+    let best = pop.best_weights();
+    let dummy_root = Path::new(".");
+    let _ = weights::save_weights(best, &weights::weights_path(dummy_root));
+    let weight_hash = weights::hash_weights(best);
+    let meta = weights::OptimizerMeta {
+        generation: 0,
+        weight_hash,
+        best_score: 0,
+        prev_score: 0,
+        baseline_score: 0,
+        status: weights::OptimizerStatus::Improving,
+    };
+    let _ = weights::save_meta(&meta, &weights::meta_path(dummy_root));
+
+    let elapsed = bs_start.elapsed();
+    eprintln!(
+        "\r  bootstrap done | {:.1}% match | {:.1}s                              ",
+        best_match_rate * 100.0,
+        elapsed.as_secs_f64(),
+    );
 }
 
 fn discover_corpus() -> Vec<std::path::PathBuf> {
