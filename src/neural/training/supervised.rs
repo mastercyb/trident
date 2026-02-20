@@ -3,6 +3,7 @@
 //! Teacher forcing with grammar mask penalties. Trains the composite
 //! model (GNN encoder + Transformer decoder) on (TirGraph, TASM) pairs.
 
+use burn::grad_clipping::GradientClippingConfig;
 use burn::optim::{AdamWConfig, GradientsParams, Optimizer};
 use burn::prelude::*;
 use burn::tensor::activation;
@@ -15,8 +16,10 @@ use crate::neural::model::vocab::VOCAB_SIZE;
 
 /// Supervised training configuration.
 pub struct SupervisedConfig {
-    /// Learning rate.
+    /// Initial learning rate.
     pub lr: f64,
+    /// Minimum learning rate (cosine decay target).
+    pub lr_min: f64,
     /// Weight decay.
     pub weight_decay: f64,
     /// Gradient clipping norm.
@@ -31,12 +34,22 @@ impl Default for SupervisedConfig {
     fn default() -> Self {
         Self {
             lr: 3e-4,
+            lr_min: 1e-5,
             weight_decay: 0.01,
             grad_clip: 1.0,
             max_epochs: 100,
             patience: 3,
         }
     }
+}
+
+/// Cosine annealing learning rate: lr_min + 0.5*(lr - lr_min)*(1 + cos(pi*t/T))
+pub fn cosine_lr(config: &SupervisedConfig, epoch: usize, total_epochs: usize) -> f64 {
+    if total_epochs <= 1 {
+        return config.lr;
+    }
+    let t = epoch as f64 / total_epochs as f64;
+    config.lr_min + 0.5 * (config.lr - config.lr_min) * (1.0 + (std::f64::consts::PI * t).cos())
 }
 
 /// Result of one training epoch.
@@ -240,12 +253,13 @@ pub fn graph_to_edges<B: Backend>(
     )
 }
 
-/// Create an AdamW optimizer with the default supervised training config.
+/// Create an AdamW optimizer with gradient clipping.
 pub fn create_optimizer<B: burn::tensor::backend::AutodiffBackend>(
     config: &SupervisedConfig,
 ) -> impl Optimizer<NeuralCompilerV2<B>, B> {
     AdamWConfig::new()
         .with_weight_decay(config.weight_decay as f32)
+        .with_grad_clipping(Some(GradientClippingConfig::Norm(config.grad_clip)))
         .init()
 }
 

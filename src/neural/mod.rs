@@ -3,6 +3,7 @@
 //! Replaces the v1 MLP evolutionary model with a ~13M parameter
 //! architecture trained via supervised learning + GFlowNets.
 
+pub mod checkpoint;
 pub mod data;
 pub mod inference;
 pub mod model;

@@ -194,20 +194,41 @@ pub fn sample_sequence<B: Backend>(
     (tokens, log_pf, first_violation)
 }
 
-/// Sample from a categorical distribution (proportional to unnormalized probs).
+/// Sample from a categorical distribution using inverse-CDF.
+///
+/// Uses thread-local xorshift64 PRNG — fast, no external deps, non-deterministic.
 fn sample_categorical(probs: &[f32]) -> u32 {
-    // Simple deterministic "sampling" based on argmax for reproducibility.
-    // In real training, use a proper RNG.
-    let mut best_idx = 0;
-    let mut best_prob = probs[0];
-    // Add noise for diversity (poor man's sampling without external RNG)
-    for (i, &p) in probs.iter().enumerate().skip(1) {
-        if p > best_prob {
-            best_prob = p;
-            best_idx = i;
+    use std::cell::Cell;
+    thread_local! {
+        static RNG_STATE: Cell<u64> = Cell::new(
+            // Seed from system time (nanos) to avoid deterministic argmax trap
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0xDEAD_BEEF_CAFE_1337) | 1
+        );
+    }
+
+    let u: f32 = RNG_STATE.with(|s| {
+        let mut x = s.get();
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        s.set(x);
+        // Map to [0, 1)
+        (x >> 40) as f32 / (1u64 << 24) as f32
+    });
+
+    // Inverse-CDF sampling
+    let mut cumulative = 0.0f32;
+    for (i, &p) in probs.iter().enumerate() {
+        cumulative += p;
+        if u < cumulative {
+            return i as u32;
         }
     }
-    best_idx as u32
+    // Fallback to last token (numerical edge case)
+    (probs.len() - 1) as u32
 }
 
 /// Trajectory Balance loss.

@@ -13,6 +13,9 @@ pub struct TrainArgs {
     /// Disable GPU (use CPU for training)
     #[arg(long)]
     pub cpu: bool,
+    /// Force a specific stage (1=supervised, 2=gflownet)
+    #[arg(long)]
+    pub stage: Option<u32>,
 }
 
 #[derive(Subcommand)]
@@ -31,19 +34,12 @@ struct CompiledFile {
 
 /// Per-file eval result after beam search.
 struct FileEval {
-    /// Number of TASM lines in the baseline.
     total_blocks: usize,
-    /// Beams where model produced a non-empty candidate.
     decoded: usize,
-    /// Candidates that passed stack verification.
     checked: usize,
-    /// Candidates proven via Triton VM (set post-eval).
     proven: usize,
-    /// Files where neural cost < baseline cost.
     wins: usize,
-    /// Neural cost for checked candidates.
     checked_cost: u64,
-    /// Baseline cost for checked candidates.
     checked_baseline: u64,
 }
 
@@ -53,6 +49,7 @@ pub fn cmd_train(args: TrainArgs) {
         return;
     }
 
+    use trident::neural::checkpoint::{self, TrainingStage};
     use trident::neural::data::pairs::extract_pairs;
     use trident::neural::model::composite::NeuralCompilerConfig;
     use trident::neural::model::vocab::Vocab;
@@ -93,6 +90,14 @@ pub fn cmd_train(args: TrainArgs) {
         process::exit(1);
     }
 
+    // Stage detection
+    let stage = match args.stage {
+        Some(1) => TrainingStage::Stage1Supervised,
+        Some(2) => TrainingStage::Stage2GFlowNet,
+        Some(3) => TrainingStage::Stage3Online,
+        _ => checkpoint::detect_stage(0, 100),
+    };
+
     let device_tag = if args.cpu { "CPU" } else { "GPU" };
     eprintln!(
         "  corpus    {} files, {} training pairs, {} blocks",
@@ -106,7 +111,15 @@ pub fn cmd_train(args: TrainArgs) {
         config.param_estimate() / 1_000_000,
         device_tag,
     );
-    eprintln!("  schedule  {} epochs, supervised CE", args.epochs);
+    eprintln!("  schedule  {} epochs, {}", args.epochs, stage);
+
+    // Show existing checkpoints
+    let ckpts = checkpoint::available_checkpoints();
+    if !ckpts.is_empty() {
+        for (tag, path) in &ckpts {
+            eprintln!("  checkpoint  {:?} -> {}", tag, path.display());
+        }
+    }
     eprintln!();
 
     if args.cpu {
@@ -115,20 +128,34 @@ pub fn cmd_train(args: TrainArgs) {
         type B = Autodiff<NdArray>;
         let device = Default::default();
         let model = config.init::<B>(&device);
-        run_training_loop::<B>(model, &pairs, &compiled, &vocab, args.epochs, &device);
+        run_training_loop::<B>(
+            model,
+            &pairs,
+            &compiled,
+            &vocab,
+            args.epochs,
+            &device,
+            stage,
+        );
     } else {
         use burn::backend::wgpu::{Wgpu, WgpuDevice};
         use burn::backend::Autodiff;
         type B = Autodiff<Wgpu>;
         let device = WgpuDevice::default();
         let model = config.init::<B>(&device);
-        run_training_loop::<B>(model, &pairs, &compiled, &vocab, args.epochs, &device);
+        run_training_loop::<B>(
+            model,
+            &pairs,
+            &compiled,
+            &vocab,
+            args.epochs,
+            &device,
+            stage,
+        );
     }
 }
 
 /// Main training loop — generic over backend.
-///
-/// Each epoch: train on all pairs, then eval each file via beam search, display table.
 fn run_training_loop<B: burn::tensor::backend::AutodiffBackend>(
     model: trident::neural::model::composite::NeuralCompilerV2<B>,
     pairs: &[trident::neural::data::pairs::TrainingPair],
@@ -136,16 +163,66 @@ fn run_training_loop<B: burn::tensor::backend::AutodiffBackend>(
     vocab: &trident::neural::model::vocab::Vocab,
     epochs: u64,
     device: &B::Device,
-) {
+    stage: trident::neural::checkpoint::TrainingStage,
+) where
+    <B as burn::tensor::backend::Backend>::FloatElem: From<f32>,
+{
+    use trident::neural::checkpoint::{self, CheckpointTag, TrainingStage};
+
+    // Try loading existing checkpoint
+    let load_tag = match stage {
+        TrainingStage::Stage1Supervised => CheckpointTag::Stage1Best,
+        TrainingStage::Stage2GFlowNet => CheckpointTag::Stage1Best,
+        TrainingStage::Stage3Online => CheckpointTag::Stage2Latest,
+    };
+    let model = match checkpoint::load_checkpoint(model, load_tag, device) {
+        Ok(Some(loaded)) => {
+            eprintln!("  loaded checkpoint {:?}", load_tag);
+            loaded
+        }
+        Ok(None) => {
+            eprintln!("  no checkpoint found, training from scratch");
+            // Re-init since load_checkpoint consumed the model
+            trident::neural::model::composite::NeuralCompilerConfig::new().init::<B>(device)
+        }
+        Err(e) => {
+            eprintln!("  warning: checkpoint load failed: {}", e);
+            trident::neural::model::composite::NeuralCompilerConfig::new().init::<B>(device)
+        }
+    };
+
+    match stage {
+        TrainingStage::Stage1Supervised => {
+            run_stage1(model, pairs, compiled, vocab, epochs, device);
+        }
+        TrainingStage::Stage2GFlowNet => {
+            run_stage2(model, compiled, vocab, epochs, device);
+        }
+        TrainingStage::Stage3Online => {
+            run_stage2(model, compiled, vocab, epochs, device);
+        }
+    }
+}
+
+/// Stage 1: Supervised pre-training with cosine LR decay.
+fn run_stage1<B: burn::tensor::backend::AutodiffBackend>(
+    model: trident::neural::model::composite::NeuralCompilerV2<B>,
+    pairs: &[trident::neural::data::pairs::TrainingPair],
+    compiled: &[CompiledFile],
+    vocab: &trident::neural::model::vocab::Vocab,
+    epochs: u64,
+    device: &B::Device,
+) where
+    <B as burn::tensor::backend::Backend>::FloatElem: From<f32>,
+{
     use burn::module::AutodiffModule;
-    use trident::neural::inference::beam::{beam_search, BeamConfig};
-    use trident::neural::inference::execute::validate_and_rank;
+    use trident::neural::checkpoint::{self, CheckpointTag};
+    use trident::neural::inference::beam::BeamConfig;
     use trident::neural::training::supervised;
-    use trident::neural::training::supervised::{graph_to_edges, graph_to_features};
+    use trident::neural::training::supervised::cosine_lr;
 
     let sup_config = supervised::SupervisedConfig::default();
     let mut optimizer = supervised::create_optimizer::<B>(&sup_config);
-    let lr = sup_config.lr;
 
     let start = std::time::Instant::now();
     let mut model = model;
@@ -153,21 +230,18 @@ fn run_training_loop<B: burn::tensor::backend::AutodiffBackend>(
     let mut stale_epochs = 0usize;
     let mut prev_table_lines: usize = 0;
 
-    // EMA convergence tracking
-    let mut epoch_history: Vec<u64> = Vec::new();
-    let mut ema_rate: Option<f64> = None;
-    let mut ema_volatility: Option<f64> = None;
-    const EMA_ALPHA: f64 = 0.3;
-
     let beam_config = BeamConfig {
-        k: 8,
-        max_steps: 64,
+        k: 32,
+        max_steps: 256,
     };
 
     for epoch in 0..epochs {
         let epoch_start = std::time::Instant::now();
 
-        // 1. Train one epoch
+        // Cosine LR decay
+        let lr = cosine_lr(&sup_config, epoch as usize, epochs as usize);
+
+        // Train one epoch
         let (updated, result) = supervised::train_epoch(model, pairs, &mut optimizer, lr, device);
         model = updated;
 
@@ -175,211 +249,33 @@ fn run_training_loop<B: burn::tensor::backend::AutodiffBackend>(
         if improved {
             best_loss = result.avg_loss;
             stale_epochs = 0;
+            // Save best checkpoint
+            if let Err(e) = checkpoint::save_checkpoint(&model, CheckpointTag::Stage1Best, device) {
+                eprintln!("  warning: checkpoint save failed: {}", e);
+            }
         } else {
             stale_epochs += 1;
         }
 
-        // 2. Evaluate each file via beam search (using inner model, no grads)
+        // Evaluate via beam search
         let inner = model.valid();
-        // B::InnerBackend has Device = B::Device, so same device works
         let inner_device = device.clone();
-        let mut file_evals: Vec<FileEval> = Vec::with_capacity(compiled.len());
-
-        for (file_idx, cf) in compiled.iter().enumerate() {
-            eprint!(
-                "\r  epoch {}/{} | eval {}/{}    ",
-                epoch + 1,
-                epochs,
-                file_idx + 1,
-                compiled.len(),
-            );
-            use std::io::Write;
-            let _ = std::io::stderr().flush();
-
-            let graph = trident::neural::data::tir_graph::TirGraph::from_tir_ops(&cf.tir_ops);
-            if graph.nodes.is_empty() {
-                file_evals.push(FileEval {
-                    total_blocks: cf.tasm_lines.len(),
-                    decoded: 0,
-                    checked: 0,
-                    proven: 0,
-                    wins: 0,
-                    checked_cost: 0,
-                    checked_baseline: 0,
-                });
-                continue;
-            }
-
-            let node_features = graph_to_features::<B::InnerBackend>(&graph, &inner_device);
-            let (edge_src, edge_dst, edge_types) =
-                graph_to_edges::<B::InnerBackend>(&graph, &inner_device);
-
-            let beam_result = beam_search(
-                &inner.encoder,
-                &inner.decoder,
-                node_features,
-                edge_src,
-                edge_dst,
-                edge_types,
-                &beam_config,
-                0,
-                &inner_device,
-            );
-
-            let ranked = validate_and_rank(
-                &beam_result.sequences,
-                vocab,
-                &cf.tasm_lines,
-                file_idx as u64,
-            );
-
-            let total_blocks = cf.tasm_lines.len();
-            let decoded = beam_result
-                .sequences
-                .iter()
-                .filter(|s| !s.is_empty())
-                .count();
-
-            if let Some(r) = ranked {
-                let wins = if r.cost < cf.baseline_cost { 1 } else { 0 };
-                file_evals.push(FileEval {
-                    total_blocks,
-                    decoded,
-                    checked: r.valid_count,
-                    proven: 0,
-                    wins,
-                    checked_cost: r.cost,
-                    checked_baseline: cf.baseline_cost,
-                });
-            } else {
-                file_evals.push(FileEval {
-                    total_blocks,
-                    decoded,
-                    checked: 0,
-                    proven: 0,
-                    wins: 0,
-                    checked_cost: 0,
-                    checked_baseline: 0,
-                });
-            }
-        }
-
-        // 3. Proven verification via trisha
-        // TODO: restore when v2 produces full spliced programs
-        // For now, proven stays 0 — checked (stack verifier) is the signal.
+        let file_evals = eval_files(&inner, compiled, vocab, &beam_config, &inner_device);
 
         let epoch_elapsed = epoch_start.elapsed();
 
-        // 4. Aggregate stats
-        let epoch_decoded: usize = file_evals.iter().map(|e| e.decoded).sum();
-        let epoch_checked: usize = file_evals.iter().map(|e| e.checked).sum();
-        let epoch_proven: usize = file_evals.iter().map(|e| e.proven).sum();
-        let epoch_wins: usize = file_evals.iter().map(|e| e.wins).sum();
-        let epoch_chk_cost: u64 = file_evals.iter().map(|e| e.checked_cost).sum();
-        let total_blk: usize = file_evals.iter().map(|e| e.total_blocks).sum();
-
-        // EMA convergence
-        epoch_history.push(epoch_chk_cost);
-        let conv_info = if epoch_history.len() >= 2 {
-            let prev = epoch_history[epoch_history.len() - 2];
-            let curr = epoch_history[epoch_history.len() - 1];
-            let instant_rate = if prev > 0 {
-                (prev as f64 - curr as f64) / prev as f64
-            } else {
-                0.0
-            };
-            let instant_vol = instant_rate.abs();
-            let rate = match ema_rate {
-                Some(prev_ema) => EMA_ALPHA * instant_rate + (1.0 - EMA_ALPHA) * prev_ema,
-                None => instant_rate,
-            };
-            let vol = match ema_volatility {
-                Some(prev_vol) => EMA_ALPHA * instant_vol + (1.0 - EMA_ALPHA) * prev_vol,
-                None => instant_vol,
-            };
-            ema_rate = Some(rate);
-            ema_volatility = Some(vol);
-            if vol > 0.02 {
-                format!(" | unstable ({:.1}%/ep swing)", vol * 100.0)
-            } else if vol > 0.005 {
-                format!(" | searching ({:.1}%/ep swing)", vol * 100.0)
-            } else if rate < 0.001 {
-                " | converged".to_string()
-            } else if rate < 0.005 {
-                format!(" | plateau ({:.2}%/ep)", rate * 100.0)
-            } else {
-                format!(" | improving ({:.1}%/ep)", rate * 100.0)
-            }
-        } else {
-            String::new()
-        };
-
-        let loss_marker = if improved { " *" } else { "" };
-
-        // 5. Build per-file table
-        let mut sorted: Vec<_> = file_evals
-            .iter()
-            .enumerate()
-            .map(|(i, e)| {
-                (
-                    compiled[i].path.as_str(),
-                    e.total_blocks,
-                    e.decoded,
-                    e.checked,
-                    e.proven,
-                    e.wins,
-                    e.checked_cost,
-                    e.checked_baseline,
-                )
-            })
-            .collect();
-        sorted.sort_by(|a, b| b.5.cmp(&a.5).then(b.3.cmp(&a.3)).then(b.2.cmp(&a.2)));
-
-        // Overwrite previous table
-        let table_lines = 1 + 1 + 1 + sorted.len() + 1;
-        if epoch > 0 && prev_table_lines > 0 {
-            eprint!("\x1B[{}A", prev_table_lines);
-        }
-
-        // Epoch summary line
-        eprintln!(
-            "\r  epoch {}/{} | loss: {:.2}{} | decoded {}/{} | checked {} proven {} won {} | {:.1}s{}\x1B[K",
-            epoch + 1,
+        // Display table
+        prev_table_lines = display_epoch_table(
+            epoch,
             epochs,
-            result.avg_loss,
-            loss_marker,
-            epoch_decoded,
-            total_blk,
-            epoch_checked,
-            epoch_proven,
-            epoch_wins,
-            epoch_elapsed.as_secs_f64(),
-            conv_info,
+            &result,
+            improved,
+            lr,
+            &file_evals,
+            compiled,
+            epoch_elapsed,
+            prev_table_lines,
         );
-
-        // Table header
-        eprintln!(
-            "  {:<60} | {:>9} | {:>7} {:>8} {:>7} {:>5} | {:>15}\x1B[K",
-            "Module", "Blocks", "Decoded", "Checked", "Proven", "Won", "Cost (ratio)"
-        );
-        eprintln!("  {}\x1B[K", "-".repeat(122));
-
-        for &(path, total, decoded, checked, proven, wins, vc, vb) in &sorted {
-            let blocks_col = format!("{}/{}", total, total);
-            let cost_col = if checked > 0 {
-                let vr = vc as f64 / vb.max(1) as f64;
-                format!("{}/{} ({:.2}x)", vc, vb, vr)
-            } else {
-                "\u{2013}".to_string()
-            };
-            eprintln!(
-                "  {:<60} | {:>9} | {:>7} {:>8} {:>7} {:>5} | {:>15}\x1B[K",
-                path, blocks_col, decoded, checked, proven, wins, cost_col,
-            );
-        }
-        eprintln!("  {}\x1B[K", "-".repeat(122));
-
-        prev_table_lines = table_lines;
 
         // Early stopping
         if stale_epochs >= sup_config.patience {
@@ -393,55 +289,337 @@ fn run_training_loop<B: burn::tensor::backend::AutodiffBackend>(
 
     let elapsed = start.elapsed();
     eprintln!();
-    eprintln!("done");
     eprintln!(
-        "  trained      {} pairs in {:.1}s",
-        pairs.len(),
+        "  Stage 1 done in {:.1}s, best loss: {:.4}",
+        elapsed.as_secs_f64(),
+        best_loss
+    );
+}
+
+/// Stage 2: GFlowNet fine-tuning.
+fn run_stage2<B: burn::tensor::backend::AutodiffBackend>(
+    model: trident::neural::model::composite::NeuralCompilerV2<B>,
+    compiled: &[CompiledFile],
+    vocab: &trident::neural::model::vocab::Vocab,
+    epochs: u64,
+    device: &B::Device,
+) where
+    <B as burn::tensor::backend::Backend>::FloatElem: From<f32>,
+{
+    use burn::grad_clipping::GradientClippingConfig;
+    use burn::module::AutodiffModule;
+    use burn::optim::{AdamWConfig, GradientsParams, Optimizer};
+    use trident::neural::checkpoint::{self, CheckpointTag};
+    use trident::neural::inference::beam::BeamConfig;
+    use trident::neural::training::gflownet::{self, GFlowNetConfig};
+
+    let gf_config = GFlowNetConfig::default();
+    let mut optimizer = AdamWConfig::new()
+        .with_weight_decay(0.01)
+        .with_grad_clipping(Some(GradientClippingConfig::Norm(1.0)))
+        .init();
+
+    let beam_config = BeamConfig {
+        k: 32,
+        max_steps: 256,
+    };
+
+    let start = std::time::Instant::now();
+    let mut model = model;
+    let mut global_step = 0usize;
+    let mut prev_table_lines: usize = 0;
+    let mut total_valid = 0usize;
+    let mut total_sampled = 0usize;
+
+    for epoch in 0..epochs {
+        let epoch_start = std::time::Instant::now();
+        let mut epoch_loss = 0.0f32;
+        let mut epoch_valid = 0usize;
+        let mut epoch_reward = 0.0f32;
+
+        // For each compiled file, sample a sequence and compute TB loss
+        for cf in compiled.iter() {
+            let graph = trident::neural::data::tir_graph::TirGraph::from_tir_ops(&cf.tir_ops);
+            if graph.nodes.is_empty() {
+                continue;
+            }
+
+            let (loss, reward, valid) = gflownet::gflownet_step(
+                &model,
+                &graph,
+                &cf.tasm_lines,
+                cf.baseline_cost,
+                burn::tensor::Tensor::<B, 1>::zeros([1], device), // log_z (simplified)
+                global_step,
+                &gf_config,
+                vocab,
+                device,
+            );
+
+            let loss_val: f32 = loss.clone().into_data().to_vec::<f32>().unwrap()[0];
+            epoch_loss += loss_val;
+            epoch_reward += reward;
+            if valid {
+                epoch_valid += 1;
+            }
+            total_sampled += 1;
+            if valid {
+                total_valid += 1;
+            }
+
+            // Backward + step
+            let grads = loss.backward();
+            let grads = GradientsParams::from_grads(grads, &model);
+            let lr = 1e-4; // Lower LR for fine-tuning
+            model = optimizer.step(lr, model, grads);
+
+            global_step += 1;
+        }
+
+        // Save checkpoint periodically
+        if (epoch + 1) % 5 == 0 || epoch == epochs - 1 {
+            if let Err(e) = checkpoint::save_checkpoint(&model, CheckpointTag::Stage2Latest, device)
+            {
+                eprintln!("  warning: checkpoint save failed: {}", e);
+            }
+        }
+
+        // Evaluate
+        let inner = model.valid();
+        let inner_device = device.clone();
+        let file_evals = eval_files(&inner, compiled, vocab, &beam_config, &inner_device);
+
+        let epoch_elapsed = epoch_start.elapsed();
+
+        // Aggregate
+        let epoch_decoded: usize = file_evals.iter().map(|e| e.decoded).sum();
+        let epoch_checked: usize = file_evals.iter().map(|e| e.checked).sum();
+        let epoch_wins: usize = file_evals.iter().map(|e| e.wins).sum();
+        let total_blk: usize = file_evals.iter().map(|e| e.total_blocks).sum();
+        let epoch_sampled = compiled.len();
+        let validity_rate = if epoch_sampled > 0 {
+            epoch_valid as f32 / epoch_sampled as f32 * 100.0
+        } else {
+            0.0
+        };
+
+        let num_files = compiled.len().max(1) as f32;
+        let avg_loss = epoch_loss / num_files;
+        let avg_reward = epoch_reward / num_files;
+        let tau = gflownet::temperature_at_step(global_step, &gf_config);
+
+        // Display
+        let table_lines = 1 + 1 + 1 + file_evals.len() + 1;
+        if epoch > 0 && prev_table_lines > 0 {
+            eprint!("\x1B[{}A", prev_table_lines);
+        }
+
+        eprintln!(
+            "\r  epoch {}/{} | TB loss: {:.4} | reward: {:.3} | tau: {:.2} | valid: {:.0}% | decoded {}/{} checked {} won {} | {:.1}s\x1B[K",
+            epoch + 1, epochs, avg_loss, avg_reward, tau, validity_rate,
+            epoch_decoded, total_blk, epoch_checked, epoch_wins,
+            epoch_elapsed.as_secs_f64(),
+        );
+
+        display_file_table(&file_evals, compiled);
+
+        prev_table_lines = table_lines;
+    }
+
+    let elapsed = start.elapsed();
+    eprintln!();
+    eprintln!(
+        "  Stage 2 done in {:.1}s, validity: {:.0}%",
+        elapsed.as_secs_f64(),
+        if total_sampled > 0 {
+            total_valid as f64 / total_sampled as f64 * 100.0
+        } else {
+            0.0
+        },
+    );
+}
+
+/// Evaluate all compiled files via beam search (no grads).
+fn eval_files<B: burn::prelude::Backend>(
+    model: &trident::neural::model::composite::NeuralCompilerV2<B>,
+    compiled: &[CompiledFile],
+    vocab: &trident::neural::model::vocab::Vocab,
+    beam_config: &trident::neural::inference::beam::BeamConfig,
+    device: &B::Device,
+) -> Vec<FileEval> {
+    use trident::neural::inference::beam::beam_search;
+    use trident::neural::inference::execute::validate_and_rank;
+    use trident::neural::training::supervised::{graph_to_edges, graph_to_features};
+
+    let mut evals = Vec::with_capacity(compiled.len());
+
+    for (file_idx, cf) in compiled.iter().enumerate() {
+        let graph = trident::neural::data::tir_graph::TirGraph::from_tir_ops(&cf.tir_ops);
+        if graph.nodes.is_empty() {
+            evals.push(FileEval {
+                total_blocks: cf.tasm_lines.len(),
+                decoded: 0,
+                checked: 0,
+                proven: 0,
+                wins: 0,
+                checked_cost: 0,
+                checked_baseline: 0,
+            });
+            continue;
+        }
+
+        let node_features = graph_to_features::<B>(&graph, device);
+        let (edge_src, edge_dst, edge_types) = graph_to_edges::<B>(&graph, device);
+
+        let beam_result = beam_search(
+            &model.encoder,
+            &model.decoder,
+            node_features,
+            edge_src,
+            edge_dst,
+            edge_types,
+            beam_config,
+            0,
+            device,
+        );
+
+        let ranked = validate_and_rank(
+            &beam_result.sequences,
+            vocab,
+            &cf.tasm_lines,
+            file_idx as u64,
+        );
+
+        let decoded = beam_result
+            .sequences
+            .iter()
+            .filter(|s| !s.is_empty())
+            .count();
+
+        if let Some(r) = ranked {
+            let wins = if r.cost < cf.baseline_cost { 1 } else { 0 };
+            evals.push(FileEval {
+                total_blocks: cf.tasm_lines.len(),
+                decoded,
+                checked: r.valid_count,
+                proven: 0,
+                wins,
+                checked_cost: r.cost,
+                checked_baseline: cf.baseline_cost,
+            });
+        } else {
+            evals.push(FileEval {
+                total_blocks: cf.tasm_lines.len(),
+                decoded,
+                checked: 0,
+                proven: 0,
+                wins: 0,
+                checked_cost: 0,
+                checked_baseline: 0,
+            });
+        }
+    }
+
+    evals
+}
+
+/// Display epoch summary + per-file table. Returns number of lines for overwriting.
+fn display_epoch_table(
+    epoch: u64,
+    total_epochs: u64,
+    result: &trident::neural::training::supervised::EpochResult,
+    improved: bool,
+    lr: f64,
+    file_evals: &[FileEval],
+    compiled: &[CompiledFile],
+    elapsed: std::time::Duration,
+    prev_table_lines: usize,
+) -> usize {
+    let epoch_decoded: usize = file_evals.iter().map(|e| e.decoded).sum();
+    let epoch_checked: usize = file_evals.iter().map(|e| e.checked).sum();
+    let epoch_proven: usize = file_evals.iter().map(|e| e.proven).sum();
+    let epoch_wins: usize = file_evals.iter().map(|e| e.wins).sum();
+    let total_blk: usize = file_evals.iter().map(|e| e.total_blocks).sum();
+
+    let loss_marker = if improved { " *" } else { "" };
+
+    let table_lines = 1 + 1 + 1 + file_evals.len() + 1;
+    if epoch > 0 && prev_table_lines > 0 {
+        eprint!("\x1B[{}A", prev_table_lines);
+    }
+
+    eprintln!(
+        "\r  epoch {}/{} | loss: {:.4}{} | lr: {:.1e} | decoded {}/{} | checked {} proven {} won {} | {:.1}s\x1B[K",
+        epoch + 1, total_epochs, result.avg_loss, loss_marker, lr,
+        epoch_decoded, total_blk, epoch_checked, epoch_proven, epoch_wins,
         elapsed.as_secs_f64(),
     );
-    eprintln!("  best loss    {:.4}", best_loss);
-    if let Some(rate) = ema_rate {
-        let vol = ema_volatility.unwrap_or(0.0);
-        let (label, hint) = if vol > 0.02 {
-            ("unstable", "high variance — model exploring, keep training")
-        } else if vol > 0.005 {
-            ("searching", "moderate variance — model still exploring")
-        } else if rate < 0.001 {
-            ("converged", "further training unlikely to help")
-        } else if rate < 0.005 {
-            ("plateau", "diminishing returns, may stop soon")
+
+    display_file_table(file_evals, compiled);
+
+    table_lines
+}
+
+/// Per-file table rows (shared between Stage 1 and Stage 2).
+fn display_file_table(file_evals: &[FileEval], compiled: &[CompiledFile]) {
+    let mut sorted: Vec<_> = file_evals
+        .iter()
+        .enumerate()
+        .map(|(i, e)| {
+            (
+                compiled[i].path.as_str(),
+                e.total_blocks,
+                e.decoded,
+                e.checked,
+                e.proven,
+                e.wins,
+                e.checked_cost,
+                e.checked_baseline,
+            )
+        })
+        .collect();
+    sorted.sort_by(|a, b| b.5.cmp(&a.5).then(b.3.cmp(&a.3)).then(b.2.cmp(&a.2)));
+
+    eprintln!(
+        "  {:<60} | {:>9} | {:>7} {:>8} {:>7} {:>5} | {:>15}\x1B[K",
+        "Module", "Blocks", "Decoded", "Checked", "Proven", "Won", "Cost (ratio)"
+    );
+    eprintln!("  {}\x1B[K", "-".repeat(122));
+
+    for &(path, total, decoded, checked, proven, wins, vc, vb) in &sorted {
+        let blocks_col = format!("{}/{}", total, total);
+        let cost_col = if checked > 0 {
+            let vr = vc as f64 / vb.max(1) as f64;
+            format!("{}/{} ({:.2}x)", vc, vb, vr)
         } else {
-            ("improving", "model still learning, keep training")
+            "\u{2013}".to_string()
         };
         eprintln!(
-            "  convergence  {} ({:.2}%/ep, {:.1}% swing) — {}",
-            label,
-            rate * 100.0,
-            vol * 100.0,
-            hint,
+            "  {:<60} | {:>9} | {:>7} {:>8} {:>7} {:>5} | {:>15}\x1B[K",
+            path, blocks_col, decoded, checked, proven, wins, cost_col,
         );
     }
+    eprintln!("  {}\x1B[K", "-".repeat(122));
 }
 
 fn cmd_train_reset() {
     let repo_root = find_repo_root();
     let mut deleted = 0usize;
 
-    // Delete neural weights
-    let weights_dir = repo_root.join("data").join("neural");
-    if weights_dir.exists() {
-        if let Err(e) = std::fs::remove_dir_all(&weights_dir) {
-            eprintln!("error: failed to delete {}: {}", weights_dir.display(), e);
-            process::exit(1);
+    // Delete neural weights (both v1 and v2)
+    for subdir in &["data/neural", "data/neural/v2"] {
+        let dir = repo_root.join(subdir);
+        if dir.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&dir) {
+                eprintln!("error: failed to delete {}: {}", dir.display(), e);
+                process::exit(1);
+            }
+            eprintln!(
+                "  deleted {}",
+                dir.strip_prefix(&repo_root).unwrap_or(&dir).display()
+            );
+            deleted += 1;
         }
-        eprintln!(
-            "  deleted {}",
-            weights_dir
-                .strip_prefix(&repo_root)
-                .unwrap_or(&weights_dir)
-                .display()
-        );
-        deleted += 1;
     }
 
     // Delete all .neural.tasm files under benches/
