@@ -15,15 +15,14 @@ pub(crate) struct ModuleTasm {
 pub(crate) fn link(modules: Vec<ModuleTasm>) -> String {
     // First, mangle all modules and collect the full TASM.
     let mut all_lines = Vec::new();
-    let mut entry_label = String::new();
 
     // Find program entry
-    if let Some(prog) = modules.iter().find(|m| m.is_program) {
-        entry_label = format!("{}main", mangle_module(&prog.module_name));
+    let entry_label = if let Some(prog) = modules.iter().find(|m| m.is_program) {
+        format!("{}main", mangle_module(&prog.module_name))
     } else {
         // No program module — emit a halt-only program.
         return "    halt\n// error: no program module found".to_string();
-    }
+    };
 
     // Mangle all modules
     for module in &modules {
