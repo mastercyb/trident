@@ -438,11 +438,11 @@ pub fn generate_test_stack(seed: u64, size: usize) -> Vec<u64> {
 /// missing operations.
 /// Conservative: rejects candidates when baseline can't be simulated.
 pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], seed: u64) -> bool {
-    // Only allow instructions the verifier simulates with exact Goldilocks
-    // arithmetic. The neural optimizer exploits every dummy-value instruction
-    // (divine, hash, read_io, read_mem, sponge_*) and every nop-modeled
-    // instruction (xb_mul, merkle_step) to produce "equivalent" output that
-    // is actually wrong on real Triton VM.
+    // Instructions the verifier can simulate with exact semantics.
+    // Side-effect ops (write_io, assert, divine, halt, split) are now
+    // supported via side-channel logging — the verifier compares I/O
+    // output, assertion values, divine call patterns, and halt state
+    // alongside the stack.
     const ALLOWED: &[&str] = &[
         "push",
         "pop",
@@ -452,43 +452,24 @@ pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], se
         "place",
         "add",
         "mul",
-        // invert is NOT allowed — the verifier implements it as negation
-        // but Triton VM's invert is multiplicative inverse (1/x mod p).
-        // Neural candidates using invert would pass verification but
-        // crash or produce wrong results on real Triton VM.
+        // invert is NOT allowed — verifier implements negation,
+        // Triton VM does multiplicative inverse (1/x mod p).
         "eq",
         "lt",
         "and",
         "xor",
-        // split is NOT allowed — split(push_const) produces deterministic
-        // hi/lo that make test stacks irrelevant for that branch.
+        "split",
         "div_mod",
         "pow",
         "log_2_floor",
         "pop_count",
         "nop",
-        // halt is NOT allowed — it terminates the program mid-block,
-        // preventing all subsequent code from running.
-        // write_io is NOT allowed — it has I/O side effects that
-        // the verifier ignores (only checks stack state). Removing
-        // write_io operations changes program output.
-        // assert is NOT allowed — the neural model can insert asserts
-        // that crash on inputs the test stacks don't cover.
+        "halt",
+        "write_io",
+        "divine",
+        "assert",
+        "assert_vector",
     ];
-    // Reject blocks whose baselines use side-effecting or dummy-value ops.
-    // - write_io/halt/assert: side effects the verifier can't check
-    // - divine: pushes dummy zeros in verifier, real values on Triton VM
-    // - split: hi part depends on value magnitude; split(small) always gives
-    //   hi=0 which makes the verifier path-dependent on test values
-    for line in baseline_tasm {
-        let op = line.trim().split_whitespace().next().unwrap_or("");
-        if matches!(
-            op,
-            "write_io" | "halt" | "assert" | "assert_vector" | "divine" | "split"
-        ) {
-            return false;
-        }
-    }
     for line in candidate_tasm {
         let op = line.trim().split_whitespace().next().unwrap_or("");
         if op.is_empty() || op.starts_with("//") || op.ends_with(':') {
@@ -561,6 +542,25 @@ pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], se
             1u64 << 48,
             1u64 << 63,
         ]);
+        // Split-specific: values with non-trivial hi parts (all < MODULUS)
+        stacks.push(vec![
+            0x0000_0001_0000_0001, // hi=1, lo=1
+            0x0000_0002_FFFF_FFFF, // hi=2, lo=max32
+            0x0000_FFFF_0000_0000, // hi=65535, lo=0
+            0x0000_0000_FFFF_FFFF, // hi=0, lo=max32
+            0x0000_0001_0000_0000, // hi=1, lo=0
+            0x0000_0000_0000_0001, // hi=0, lo=1
+            0x0000_ABCD_1234_5678, // mixed
+            0x0000_0000_8000_0000, // hi=0, lo=2^31
+            0x0000_0001_8000_0000, // hi=1, lo=2^31
+            0x0000_7FFF_7FFF_FFFF, // hi=32767, lo=max31+
+            0x0000_0010_0000_0010, // hi=16, lo=16
+            0x0000_0100_0001_0000, // hi=256, lo=65536
+            0,
+            1,
+            MODULUS - 1,
+            MODULUS - 2,
+        ]);
         stacks
     };
 
@@ -581,6 +581,21 @@ pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], se
         }
 
         if baseline_state.stack != candidate_state.stack {
+            return false;
+        }
+        if baseline_state.halted != candidate_state.halted {
+            return false;
+        }
+        if baseline_state.io_output != candidate_state.io_output {
+            return false;
+        }
+        if baseline_state.divine_log != candidate_state.divine_log {
+            return false;
+        }
+        if baseline_state.assert_log != candidate_state.assert_log {
+            return false;
+        }
+        if baseline_state.assert_vector_log != candidate_state.assert_vector_log {
             return false;
         }
     }
