@@ -79,51 +79,75 @@ pub fn beam_search<B: Backend>(
         .map(|_| StackStateMachine::new(initial_stack_depth))
         .collect();
 
-    // 3. Autoregressive decoding
+    // 3. Autoregressive decoding — pass full sequence history each step.
+    //
+    // The decoder uses self-attention over all previous positions, so we must
+    // feed the entire generated sequence (not just the last token). At step t,
+    // input shape is [K, t+1] and we take logits at position t.
     for step in 0..config.max_steps {
         // Check if all beams are finished
         if beam_finished.iter().all(|&f| f) {
             break;
         }
 
-        // Build decoder inputs for all active beams
-        let prev_tokens: Vec<u32> = (0..k)
-            .map(|b| {
-                if beam_finished[b] {
-                    0 // EOS for finished beams
-                } else {
-                    beam_sequences[b].last().copied().unwrap_or(0)
-                }
-            })
-            .collect();
+        let cur_len = step + 1; // sequence length including the start EOS token
 
-        // Create input tensors: [K, 1] (single step)
-        let token_ids = Tensor::<B, 2, Int>::from_data(
-            TensorData::new(
-                prev_tokens.iter().map(|&t| t as i32).collect::<Vec<_>>(),
-                [k, 1],
-            ),
-            device,
-        );
+        // Build full sequence inputs: [K, cur_len]
+        // Each beam's input is: [EOS=0, tok_0, tok_1, ..., tok_{step-1}]
+        let mut token_data = Vec::with_capacity(k * cur_len);
+        let mut pos_data = Vec::with_capacity(k * cur_len);
+        let mut depth_data = Vec::with_capacity(k * cur_len);
+        let mut type_data = Vec::with_capacity(k * cur_len * 24);
+
+        for b in 0..k {
+            // Token IDs: [EOS, ...generated tokens]
+            token_data.push(0i32); // EOS start
+            for &t in &beam_sequences[b] {
+                token_data.push(t as i32);
+            }
+            // Pad if beam is shorter than step
+            while token_data.len() < (b + 1) * cur_len {
+                token_data.push(0i32);
+            }
+
+            // Positions: [0, 1, 2, ...]
+            for p in 0..cur_len {
+                pos_data.push(p as i32);
+            }
+
+            // Stack depths: replay state machine for each position
+            let mut sm = StackStateMachine::new(initial_stack_depth);
+            depth_data.push(sm.depth_for_embedding(65) as i32); // depth at EOS start
+            for &t in &beam_sequences[b] {
+                sm.step(t);
+                depth_data.push(sm.depth_for_embedding(65) as i32);
+            }
+            while depth_data.len() < (b + 1) * cur_len {
+                depth_data.push(sm.depth_for_embedding(65) as i32);
+            }
+
+            // Type states: replay for each position
+            let mut sm2 = StackStateMachine::new(initial_stack_depth);
+            type_data.extend(sm2.type_encoding()); // type at EOS start
+            for &t in &beam_sequences[b] {
+                sm2.step(t);
+                type_data.extend(sm2.type_encoding());
+            }
+            while type_data.len() < (b + 1) * cur_len * 24 {
+                type_data.extend(std::iter::repeat(0.0f32).take(24));
+            }
+        }
+
+        let token_ids =
+            Tensor::<B, 2, Int>::from_data(TensorData::new(token_data, [k, cur_len]), device);
         let positions =
-            Tensor::<B, 2, Int>::from_data(TensorData::new(vec![step as i32; k], [k, 1]), device);
-
-        // Stack depths for each beam
-        let depth_vals: Vec<i32> = beam_state_machines
-            .iter()
-            .map(|sm| sm.depth_for_embedding(65) as i32)
-            .collect();
+            Tensor::<B, 2, Int>::from_data(TensorData::new(pos_data, [k, cur_len]), device);
         let stack_depths =
-            Tensor::<B, 2, Int>::from_data(TensorData::new(depth_vals, [k, 1]), device);
+            Tensor::<B, 2, Int>::from_data(TensorData::new(depth_data, [k, cur_len]), device);
+        let type_states =
+            Tensor::<B, 3>::from_data(TensorData::new(type_data, [k, cur_len, 24]), device);
 
-        // Type states for each beam: [K, 1, 24]
-        let type_data: Vec<f32> = beam_state_machines
-            .iter()
-            .flat_map(|sm| sm.type_encoding())
-            .collect();
-        let type_states = Tensor::<B, 3>::from_data(TensorData::new(type_data, [k, 1, 24]), device);
-
-        // Forward pass: [K, 1, VOCAB_SIZE]
+        // Forward pass: [K, cur_len, VOCAB_SIZE]
         let logits = decoder.forward(
             token_ids,
             positions,
@@ -132,8 +156,11 @@ pub fn beam_search<B: Backend>(
             memory.clone(),
         );
 
-        // Extract logits for the single step: [K, VOCAB_SIZE]
-        let logits_2d = logits.squeeze_dim::<2>(1);
+        // Extract logits at the LAST position only: [K, VOCAB_SIZE]
+        // logits shape: [K, cur_len, VOCAB_SIZE] → select position step
+        let logits_2d = logits
+            .slice([0..k, step..step + 1, 0..VOCAB_SIZE])
+            .squeeze_dim::<2>(1);
 
         // Convert to CPU for beam management
         let logits_data = logits_2d.to_data();

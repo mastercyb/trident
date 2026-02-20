@@ -120,27 +120,48 @@ pub fn sample_sequence<B: Backend>(
 
     let mut tokens = Vec::new();
     let mut log_pf = 0.0f32;
-    let mut sm = StackStateMachine::new(0);
+    let mut sm = StackStateMachine::new(16); // permissive initial depth
     let mut first_violation: Option<usize> = None;
 
     for step in 0..config.max_seq_len {
-        let prev_token = tokens.last().copied().unwrap_or(0);
+        let cur_len = step + 1;
 
-        // Prepare single-step decoder input
-        let token_ids = Tensor::<B, 2, Int>::from_data(
-            TensorData::new(vec![prev_token as i32], [1, 1]),
-            device,
-        );
+        // Build full sequence: [EOS=0, tok_0, ..., tok_{step-1}]
+        let mut token_data = vec![0i32]; // EOS start
+        for &t in &tokens {
+            token_data.push(t as i32);
+        }
+        let pos_data: Vec<i32> = (0..cur_len as i32).collect();
+
+        // Stack depths: replay state machine
+        let mut depth_data = Vec::with_capacity(cur_len);
+        let mut sm_replay = StackStateMachine::new(16);
+        depth_data.push(sm_replay.depth_for_embedding(65) as i32);
+        for &t in &tokens {
+            sm_replay.step(t);
+            depth_data.push(sm_replay.depth_for_embedding(65) as i32);
+        }
+
+        // Type states: replay
+        let mut type_data = Vec::with_capacity(cur_len * 24);
+        let mut sm_replay2 = StackStateMachine::new(16);
+        type_data.extend(sm_replay2.type_encoding());
+        for &t in &tokens {
+            sm_replay2.step(t);
+            type_data.extend(sm_replay2.type_encoding());
+        }
+
+        let token_ids =
+            Tensor::<B, 2, Int>::from_data(TensorData::new(token_data, [1, cur_len]), device);
         let positions =
-            Tensor::<B, 2, Int>::from_data(TensorData::new(vec![step as i32], [1, 1]), device);
-        let depth_val = sm.depth_for_embedding(65) as i32;
+            Tensor::<B, 2, Int>::from_data(TensorData::new(pos_data, [1, cur_len]), device);
         let stack_depths =
-            Tensor::<B, 2, Int>::from_data(TensorData::new(vec![depth_val], [1, 1]), device);
-        let type_enc = sm.type_encoding();
-        let type_states = Tensor::<B, 3>::from_data(TensorData::new(type_enc, [1, 1, 24]), device);
+            Tensor::<B, 2, Int>::from_data(TensorData::new(depth_data, [1, cur_len]), device);
+        let type_states =
+            Tensor::<B, 3>::from_data(TensorData::new(type_data, [1, cur_len, 24]), device);
         let memory_expanded = memory.clone().expand([1, num_nodes, d_model]);
 
-        // Forward pass
+        // Forward pass: [1, cur_len, VOCAB_SIZE]
         let logits = model.decoder.forward(
             token_ids,
             positions,
@@ -148,8 +169,11 @@ pub fn sample_sequence<B: Backend>(
             type_states,
             memory_expanded,
         );
-        // logits: [1, 1, VOCAB_SIZE]
-        let logits_1d = logits.squeeze_dim::<2>(0).squeeze_dim::<1>(0); // [VOCAB_SIZE]
+        // Extract logits at the last position: [VOCAB_SIZE]
+        let logits_1d = logits
+            .slice([0..1, step..step + 1, 0..VOCAB_SIZE])
+            .squeeze_dim::<2>(0)
+            .squeeze_dim::<1>(0);
         let logits_data: Vec<f32> = logits_1d.to_data().to_vec().unwrap();
 
         // Apply grammar mask
