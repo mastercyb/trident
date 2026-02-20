@@ -129,8 +129,8 @@ pub fn cmd_train(args: TrainArgs) {
         shuffle(&mut indices, gen_start + epoch);
 
         let epoch_start = std::time::Instant::now();
-        // (file_idx, cost, wins, total_blocks, verified, decoded,
-        //  decoded_cost, decoded_baseline, verified_cost, verified_baseline)
+        // (file_idx, cost, wins, total_blocks, checked, decoded,
+        //  decoded_cost, decoded_baseline, checked_cost, checked_baseline)
         let mut epoch_costs: Vec<(usize, u64, usize, usize, usize, usize, u64, u64, u64, u64)> =
             Vec::new();
         let mut epoch_diagnostics: Vec<(String, Vec<BlockDiagnostic>)> = Vec::new();
@@ -160,12 +160,12 @@ pub fn cmd_train(args: TrainArgs) {
                 result.cost,
                 result.neural_wins,
                 result.total_blocks,
-                result.neural_verified,
+                result.neural_checked,
                 result.neural_decoded,
                 result.decoded_cost,
                 result.decoded_baseline,
-                result.verified_cost,
-                result.verified_baseline,
+                result.checked_cost,
+                result.checked_baseline,
             ));
             total_trained += 1;
 
@@ -178,8 +178,8 @@ pub fn cmd_train(args: TrainArgs) {
         }
 
         let epoch_elapsed = epoch_start.elapsed();
-        let epoch_ver_cost: u64 = epoch_costs.iter().map(|e| e.8).sum();
-        let epoch_ver_bl: u64 = epoch_costs.iter().map(|e| e.9).sum();
+        let epoch_chk_cost: u64 = epoch_costs.iter().map(|e| e.8).sum();
+        let epoch_chk_bl: u64 = epoch_costs.iter().map(|e| e.9).sum();
 
         let trend = if epoch == 0 {
             String::new()
@@ -189,15 +189,15 @@ pub fn cmd_train(args: TrainArgs) {
             } else {
                 epoch_history[epoch_history.len() - 1]
             };
-            if epoch_ver_cost < prev && prev > 0 {
-                format!(" (-{} vs prev)", prev - epoch_ver_cost)
-            } else if epoch_ver_cost > prev && prev > 0 {
-                format!(" (+{} vs prev)", epoch_ver_cost - prev)
+            if epoch_chk_cost < prev && prev > 0 {
+                format!(" (-{} vs prev)", prev - epoch_chk_cost)
+            } else if epoch_chk_cost > prev && prev > 0 {
+                format!(" (+{} vs prev)", epoch_chk_cost - prev)
             } else {
                 String::new()
             }
         };
-        epoch_history.push(epoch_ver_cost);
+        epoch_history.push(epoch_chk_cost);
 
         // EMA convergence: track smoothed improvement rate + volatility
         let conv_info = if epoch_history.len() >= 2 {
@@ -237,22 +237,22 @@ pub fn cmd_train(args: TrainArgs) {
         };
 
         let epoch_wins: usize = epoch_costs.iter().map(|e| e.2).sum();
-        let epoch_verified: usize = epoch_costs.iter().map(|e| e.4).sum();
+        let epoch_checked: usize = epoch_costs.iter().map(|e| e.4).sum();
         let epoch_decoded: usize = epoch_costs.iter().map(|e| e.5).sum();
-        let ver_info = if epoch_ver_bl > 0 {
+        let ver_info = if epoch_chk_bl > 0 {
             format!(
-                " | verified {} {}/{} ({:.2}x) | won {}",
-                epoch_verified,
-                epoch_ver_cost,
-                epoch_ver_bl,
-                epoch_ver_cost as f64 / epoch_ver_bl as f64,
+                " | checked {} {}/{} ({:.2}x) | won {}",
+                epoch_checked,
+                epoch_chk_cost,
+                epoch_chk_bl,
+                epoch_chk_cost as f64 / epoch_chk_bl as f64,
                 epoch_wins
             )
         } else {
-            format!(" | verified 0 | won 0")
+            format!(" | checked 0 | won 0")
         };
         // Build per-file table
-        // (path, total_blocks, trainable, dec_cost, dec_bl, ver_cost, ver_bl, decoded, verified, wins)
+        // (path, total_blocks, trainable, dec_cost, dec_bl, chk_cost, chk_bl, decoded, checked, wins)
         let mut sorted: Vec<_> = epoch_costs
             .iter()
             .map(|e| {
@@ -264,18 +264,18 @@ pub fn cmd_train(args: TrainArgs) {
                     trainable,
                     e.6, // decoded_cost
                     e.7, // decoded_baseline
-                    e.8, // verified_cost
-                    e.9, // verified_baseline
+                    e.8, // checked_cost
+                    e.9, // checked_baseline
                     e.5, // decoded
-                    e.4, // verified
+                    e.4, // checked
                     e.2, // wins
                 )
             })
             .collect();
-        // Sort by verified wins (most first), then verified count, then decoded count
+        // Sort by wins (most first), then checked count, then decoded count
         sorted.sort_by(|a, b| {
             b.9.cmp(&a.9) // wins descending
-                .then(b.8.cmp(&a.8)) // verified descending
+                .then(b.8.cmp(&a.8)) // checked descending
                 .then(b.7.cmp(&a.7)) // decoded descending
         });
         let total_blk: usize = sorted.iter().map(|s| s.1).sum();
@@ -288,12 +288,12 @@ pub fn cmd_train(args: TrainArgs) {
         }
 
         eprintln!(
-            "\r  epoch {}/{} | decoded {}/{} | verified {}{} | {:.1}s{}{}\x1B[K",
+            "\r  epoch {}/{} | decoded {}/{} | checked {}{} | {:.1}s{}{}\x1B[K",
             epoch + 1,
             args.epochs,
             epoch_decoded,
             total_blk,
-            epoch_verified,
+            epoch_checked,
             ver_info,
             epoch_elapsed.as_secs_f64(),
             trend,
@@ -303,13 +303,13 @@ pub fn cmd_train(args: TrainArgs) {
         // Table header
         eprintln!(
             "  {:<60} | {:>9} | {:>7} {:>8} {:>5} | {:>15}\x1B[K",
-            "Module", "Blocks", "Decoded", "Verified", "Won", "Cost (ratio)"
+            "Module", "Blocks", "Decoded", "Checked", "Won", "Cost (ratio)"
         );
         eprintln!("  {}\x1B[K", "-".repeat(113));
 
-        for &(path, total, trainable, _dc, _db, vc, vb, decoded, verified, wins) in &sorted {
+        for &(path, total, trainable, _dc, _db, vc, vb, decoded, checked, wins) in &sorted {
             let blocks_col = format!("{}/{}", trainable, total);
-            let cost_col = if verified > 0 {
+            let cost_col = if checked > 0 {
                 let vr = vc as f64 / vb.max(1) as f64;
                 format!("{}/{} ({:.2}x)", vc, vb, vr)
             } else {
@@ -317,12 +317,12 @@ pub fn cmd_train(args: TrainArgs) {
             };
             eprintln!(
                 "  {:<60} | {:>9} | {:>7} {:>8} {:>5} | {:>15}\x1B[K",
-                path, blocks_col, decoded, verified, wins, cost_col,
+                path, blocks_col, decoded, checked, wins, cost_col,
             );
         }
         eprintln!("  {}\x1B[K", "-".repeat(113));
 
-        // Print diagnostics: first few decoded-but-not-verified blocks
+        // Print diagnostics: first few decoded-but-not-checked blocks
         let mut diag_lines = 0;
         let max_diag_files = 2;
         let max_diag_blocks = 2;
@@ -359,8 +359,8 @@ pub fn cmd_train(args: TrainArgs) {
     let gen_end = meta.as_ref().map_or(0, |m| m.generation);
 
     // Corpus-level final cost (last epoch)
-    // Last epoch's verified totals for summary
-    let final_ver_cost = epoch_history.last().copied().unwrap_or(0);
+    // Last epoch's checked totals for summary
+    let final_chk_cost = epoch_history.last().copied().unwrap_or(0);
 
     // Save corpus-level meta
     {
@@ -373,7 +373,7 @@ pub fn cmd_train(args: TrainArgs) {
         let new_meta = weights::OptimizerMeta {
             generation: gen_end,
             weight_hash,
-            best_score: final_ver_cost,
+            best_score: final_chk_cost,
             prev_score: total_baseline,
             baseline_score: total_baseline,
             status: weights::OptimizerStatus::Improving,
@@ -567,25 +567,25 @@ struct TrainResult {
     neural_tasm: Option<Vec<Vec<String>>>,
     /// Number of blocks where neural candidate was cheaper than baseline.
     neural_wins: usize,
-    /// Number of blocks where neural candidate passed verification (any cost).
-    neural_verified: usize,
+    /// Number of blocks where neural candidate passed stack check (heuristic, not proof).
+    neural_checked: usize,
     /// Number of blocks where model produced a non-empty decodable candidate.
     neural_decoded: usize,
-    /// Sum of neural costs for decoded blocks (unverified — shows what model produces).
+    /// Sum of neural costs for decoded blocks (unchecked — shows what model produces).
     decoded_cost: u64,
     /// Sum of baselines for decoded blocks (same set as decoded_cost).
     decoded_baseline: u64,
-    /// Sum of neural costs for verified blocks only.
-    verified_cost: u64,
-    /// Sum of baselines for verified blocks only.
-    verified_baseline: u64,
+    /// Sum of neural costs for checked blocks only.
+    checked_cost: u64,
+    /// Sum of baselines for checked blocks only.
+    checked_baseline: u64,
     /// Total number of blocks in this file.
     total_blocks: usize,
-    /// Diagnostic examples: decoded-but-not-verified blocks (up to 3 per file).
+    /// Diagnostic examples: decoded-but-not-checked blocks (up to 3 per file).
     diagnostics: Vec<BlockDiagnostic>,
 }
 
-/// Diagnostic info for a single block that decoded but failed verification.
+/// Diagnostic info for a single block that decoded but failed stack check.
 struct BlockDiagnostic {
     block_idx: usize,
     baseline: Vec<String>,
@@ -599,12 +599,12 @@ struct EvalResult {
     per_block: Vec<Vec<String>>,
     honest_cost: u64,
     wins: usize,
-    verified: usize,
+    checked: usize,
     decoded: usize,
     decoded_cost: u64,
     decoded_bl: u64,
-    verified_cost: u64,
-    verified_bl: u64,
+    checked_cost: u64,
+    checked_bl: u64,
     diagnostics: Vec<BlockDiagnostic>,
 }
 
@@ -740,18 +740,18 @@ fn train_one_compiled(
     if let Some(ev) = best_captured {
         TrainResult {
             cost: ev.honest_cost,
-            neural_tasm: if ev.verified > 0 {
+            neural_tasm: if ev.checked > 0 {
                 Some(ev.per_block)
             } else {
                 None
             },
             neural_wins: ev.wins,
-            neural_verified: ev.verified,
+            neural_checked: ev.checked,
             neural_decoded: ev.decoded,
             decoded_cost: ev.decoded_cost,
             decoded_baseline: ev.decoded_bl,
-            verified_cost: ev.verified_cost,
-            verified_baseline: ev.verified_bl,
+            checked_cost: ev.checked_cost,
+            checked_baseline: ev.checked_bl,
             total_blocks: cf.blocks.len(),
             diagnostics: ev.diagnostics,
         }
@@ -760,12 +760,12 @@ fn train_one_compiled(
             cost: cf.baseline_cost,
             neural_tasm: None,
             neural_wins: 0,
-            neural_verified: 0,
+            neural_checked: 0,
             neural_decoded: 0,
             decoded_cost: 0,
             decoded_baseline: 0,
-            verified_cost: 0,
-            verified_baseline: 0,
+            checked_cost: 0,
+            checked_baseline: 0,
             total_blocks: cf.blocks.len(),
             diagnostics: Vec::new(),
         }
@@ -876,8 +876,6 @@ fn write_neural_tasm(cf: &CompiledFile, per_block: &[Vec<String>], repo_root: &P
 }
 
 /// Evaluate one individual on GPU outputs.
-/// Returns (fitness, per_block_tasm, honest_cost, wins, verified, decoded,
-///          decoded_cost, decoded_baseline, verified_cost, verified_baseline).
 fn eval_individual_gpu(
     ind_outputs: &[Vec<u32>],
     baselines: &[u64],
@@ -891,12 +889,12 @@ fn eval_individual_gpu(
     let mut per_block: Vec<Vec<String>> = Vec::with_capacity(ind_outputs.len());
     let mut honest_cost = 0u64;
     let mut wins = 0usize;
-    let mut verified = 0usize;
+    let mut checked = 0usize;
     let mut decoded = 0usize;
     let mut decoded_cost = 0u64;
     let mut decoded_bl = 0u64;
-    let mut verified_cost = 0u64;
-    let mut verified_bl = 0u64;
+    let mut checked_cost = 0u64;
+    let mut checked_bl = 0u64;
     let mut diagnostics = Vec::new();
 
     for (b, block_out) in ind_outputs.iter().enumerate() {
@@ -928,9 +926,9 @@ fn eval_individual_gpu(
                 if shape >= 900
                     && stack_verifier::verify_equivalent(baseline_lines, &candidate, b as u64)
                 {
-                    verified += 1;
-                    verified_cost += cost;
-                    verified_bl += baseline;
+                    checked += 1;
+                    checked_cost += cost;
+                    checked_bl += baseline;
                     honest_cost += cost;
                     fitness += 1000
                         + if cost < baseline {
@@ -944,7 +942,7 @@ fn eval_individual_gpu(
                 }
                 // Partial credit from shaped fitness
                 fitness += shape;
-                // Collect diagnostic for decoded-but-not-verified
+                // Collect diagnostic for decoded-but-not-checked
                 if diagnostics.len() < 3 {
                     let reason =
                         stack_verifier::diagnose_failure(baseline_lines, &candidate, b as u64);
@@ -966,12 +964,12 @@ fn eval_individual_gpu(
         per_block,
         honest_cost,
         wins,
-        verified,
+        checked,
         decoded,
         decoded_cost,
         decoded_bl,
-        verified_cost,
-        verified_bl,
+        checked_cost,
+        checked_bl,
         diagnostics,
     }
 }
@@ -989,12 +987,12 @@ fn eval_individual_cpu(
     let mut per_block: Vec<Vec<String>> = Vec::with_capacity(cf.blocks.len());
     let mut honest_cost = 0u64;
     let mut wins = 0usize;
-    let mut verified = 0usize;
+    let mut checked = 0usize;
     let mut decoded = 0usize;
     let mut decoded_cost = 0u64;
     let mut decoded_bl = 0u64;
-    let mut verified_cost = 0u64;
-    let mut verified_bl = 0u64;
+    let mut checked_cost = 0u64;
+    let mut checked_bl = 0u64;
     let mut diagnostics = Vec::new();
 
     for (i, block) in cf.blocks.iter().enumerate() {
@@ -1022,9 +1020,9 @@ fn eval_individual_cpu(
                 if shape >= 900
                     && stack_verifier::verify_equivalent(baseline_tasm, &candidate, i as u64)
                 {
-                    verified += 1;
-                    verified_cost += cost;
-                    verified_bl += baseline;
+                    checked += 1;
+                    checked_cost += cost;
+                    checked_bl += baseline;
                     honest_cost += cost;
                     fitness += 1000
                         + if cost < baseline {
@@ -1058,12 +1056,12 @@ fn eval_individual_cpu(
         per_block,
         honest_cost,
         wins,
-        verified,
+        checked,
         decoded,
         decoded_cost,
         decoded_bl,
-        verified_cost,
-        verified_bl,
+        checked_cost,
+        checked_bl,
         diagnostics,
     }
 }
