@@ -575,3 +575,13 @@ __loop__4:
     pop 2
     return
     
+    call __main
+    halt
+
+__main:
+    read_io 1
+    dup 0
+    call @os_neptune_proof__verify_inner_proof
+    pop 1
+    return
+    

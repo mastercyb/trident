@@ -116,8 +116,8 @@ pub fn cmd_train(args: TrainArgs) {
         shuffle(&mut indices, gen_start + epoch);
 
         let epoch_start = std::time::Instant::now();
-        // (file_idx, cost, wins, total_blocks, verified, decoded, raw_cost)
-        let mut epoch_costs: Vec<(usize, u64, usize, usize, usize, usize, u64)> = Vec::new();
+        // (file_idx, cost, wins, total_blocks, verified, decoded, raw_cost, decoded_baseline)
+        let mut epoch_costs: Vec<(usize, u64, usize, usize, usize, usize, u64, u64)> = Vec::new();
 
         for (i, &file_idx) in indices.iter().enumerate() {
             let cf = &compiled[file_idx];
@@ -144,6 +144,7 @@ pub fn cmd_train(args: TrainArgs) {
                 result.neural_verified,
                 result.neural_decoded,
                 result.raw_neural_cost,
+                result.decoded_baseline,
             ));
             total_trained += 1;
 
@@ -213,13 +214,14 @@ pub fn cmd_train(args: TrainArgs) {
         let total_blk: usize = epoch_costs.iter().map(|e| e.3).sum();
         let epoch_verified: usize = epoch_costs.iter().map(|e| e.4).sum();
         let epoch_decoded: usize = epoch_costs.iter().map(|e| e.5).sum();
-        let raw_ratio = epoch_raw as f64 / total_baseline.max(1) as f64;
+        let epoch_decoded_bl: u64 = epoch_costs.iter().map(|e| e.7).sum();
+        let raw_ratio = epoch_raw as f64 / epoch_decoded_bl.max(1) as f64;
         eprintln!(
             "\r  epoch {}/{} | neural {}/{} ({:.2}x) | decoded {}/{} | verified {} | won {} | {:.1}s{}{}",
             epoch + 1,
             args.epochs,
             epoch_raw,
-            total_baseline,
+            epoch_decoded_bl,
             raw_ratio,
             epoch_decoded,
             total_blk,
@@ -232,7 +234,7 @@ pub fn cmd_train(args: TrainArgs) {
 
         // Per-file breakdown on first and last epoch
         if epoch == 0 || epoch + 1 == args.epochs {
-            // (path, blocks, baseline, decoded, verified, wins, raw_cost)
+            // (path, blocks, decoded_baseline, decoded, verified, wins, raw_cost)
             let mut sorted: Vec<_> = epoch_costs
                 .iter()
                 .map(|e| {
@@ -240,7 +242,7 @@ pub fn cmd_train(args: TrainArgs) {
                     (
                         cf.path.as_str(),
                         cf.blocks.len(),
-                        cf.baseline_cost,
+                        e.7, // decoded_baseline (only blocks that decoded)
                         e.5,
                         e.4,
                         e.2,
@@ -262,17 +264,17 @@ pub fn cmd_train(args: TrainArgs) {
                 "    {} per-file (decoded {}, verified {}, won {} / {} blocks):",
                 label, total_dec, total_ver, total_wins, total_blk,
             );
-            for &(path, blocks, baseline, decoded, verified, wins, raw_cost) in &sorted {
+            for &(path, blocks, dec_bl, decoded, verified, wins, raw_cost) in &sorted {
                 if decoded > 0 {
-                    let r = raw_cost as f64 / baseline.max(1) as f64;
+                    let r = raw_cost as f64 / dec_bl.max(1) as f64;
                     eprintln!(
                         "      {:<42} {:>3} blk  {:>6} / {:<6} ({:.2}x) d:{} v:{} w:{}",
-                        path, blocks, raw_cost, baseline, r, decoded, verified, wins,
+                        path, blocks, raw_cost, dec_bl, r, decoded, verified, wins,
                     );
                 } else {
                     eprintln!(
                         "      {:<42} {:>3} blk  {:>6}           (no output)",
-                        path, blocks, baseline,
+                        path, blocks, dec_bl,
                     );
                 }
             }
@@ -441,6 +443,8 @@ struct TrainResult {
     neural_decoded: usize,
     /// Sum of costs of all decoded candidates (before verification gate).
     raw_neural_cost: u64,
+    /// Sum of baselines for decoded blocks only (the denominator for raw_neural_cost ratio).
+    decoded_baseline: u64,
     /// Total number of blocks in this file.
     total_blocks: usize,
 }
@@ -499,10 +503,10 @@ fn train_one_compiled(
     }
 
     let mut best_seen = i64::MIN;
-    // (per_block_tasm, honest_cost, wins, verified, decoded, raw_cost)
-    let mut best_captured: Option<(Vec<Vec<String>>, u64, usize, usize, usize, u64)> = None;
+    // (per_block_tasm, honest_cost, wins, verified, decoded, raw_cost, decoded_baseline)
+    let mut best_captured: Option<(Vec<Vec<String>>, u64, usize, usize, usize, u64, u64)> = None;
     for gen in 0..generations {
-        let evals: Vec<(i64, Vec<Vec<String>>, u64, usize, usize, usize, u64)> =
+        let evals: Vec<(i64, Vec<Vec<String>>, u64, usize, usize, usize, u64, u64)> =
             if let Some(ref accel) = gpu_accel {
                 let weight_vecs: Vec<Vec<trident::field::fixed::Fixed>> = pop
                     .individuals
@@ -546,8 +550,8 @@ fn train_one_compiled(
         if let Some((idx, best)) = evals.iter().enumerate().max_by_key(|(_, e)| e.0) {
             if best.0 > best_seen {
                 best_seen = best.0;
-                let (_, tasm, cost, w, v, d, rc) = evals.into_iter().nth(idx).unwrap();
-                best_captured = Some((tasm, cost, w, v, d, rc));
+                let (_, tasm, cost, w, v, d, rc, dbl) = evals.into_iter().nth(idx).unwrap();
+                best_captured = Some((tasm, cost, w, v, d, rc, dbl));
             }
         }
         pop.evolve(gen_start.wrapping_add(gen));
@@ -577,24 +581,32 @@ fn train_one_compiled(
     };
     let _ = weights::save_meta(&new_meta, &weights::meta_path(dummy_root));
 
-    let (honest_cost, neural_tasm, neural_wins, neural_verified, neural_decoded, raw_neural_cost) =
-        if let Some((tasm, cost, wins, ver, dec, rc)) = best_captured {
-            let has_neural = cost != cf.baseline_cost
-                || tasm
-                    .iter()
-                    .zip(cf.per_block_tasm.iter())
-                    .any(|(n, b)| n != b);
-            (
-                cost,
-                if has_neural { Some(tasm) } else { None },
-                wins,
-                ver,
-                dec,
-                rc,
-            )
-        } else {
-            (cf.baseline_cost, None, 0, 0, 0, 0)
-        };
+    let (
+        honest_cost,
+        neural_tasm,
+        neural_wins,
+        neural_verified,
+        neural_decoded,
+        raw_neural_cost,
+        dec_bl,
+    ) = if let Some((tasm, cost, wins, ver, dec, rc, dbl)) = best_captured {
+        let has_neural = cost != cf.baseline_cost
+            || tasm
+                .iter()
+                .zip(cf.per_block_tasm.iter())
+                .any(|(n, b)| n != b);
+        (
+            cost,
+            if has_neural { Some(tasm) } else { None },
+            wins,
+            ver,
+            dec,
+            rc,
+            dbl,
+        )
+    } else {
+        (cf.baseline_cost, None, 0, 0, 0, 0, 0)
+    };
 
     TrainResult {
         cost: honest_cost,
@@ -603,6 +615,7 @@ fn train_one_compiled(
         neural_verified,
         neural_decoded,
         raw_neural_cost,
+        decoded_baseline: dec_bl,
         total_blocks: cf.blocks.len(),
     }
 }
@@ -711,13 +724,13 @@ fn write_neural_tasm(cf: &CompiledFile, per_block: &[Vec<String>], repo_root: &P
 }
 
 /// Evaluate one individual on GPU outputs.
-/// Returns (fitness, per_block_tasm, honest_cost, wins, verified, decoded, raw_cost).
+/// Returns (fitness, per_block_tasm, honest_cost, wins, verified, decoded, raw_cost, decoded_baseline).
 fn eval_individual_gpu(
     ind_outputs: &[Vec<u32>],
     baselines: &[u64],
     block_tasm: &[Vec<String>],
     verifiable: &[bool],
-) -> (i64, Vec<Vec<String>>, u64, usize, usize, usize, u64) {
+) -> (i64, Vec<Vec<String>>, u64, usize, usize, usize, u64, u64) {
     use trident::cost::{scorer, stack_verifier};
     use trident::ir::tir::lower::decode_output;
 
@@ -728,6 +741,7 @@ fn eval_individual_gpu(
     let mut verified = 0usize;
     let mut decoded = 0usize;
     let mut raw_cost = 0u64;
+    let mut decoded_bl = 0u64;
 
     for (b, block_out) in ind_outputs.iter().enumerate() {
         let baseline = baselines[b];
@@ -749,6 +763,7 @@ fn eval_individual_gpu(
             let candidate = decode_output(&codes);
             if !candidate.is_empty() && !baseline_lines.is_empty() {
                 decoded += 1;
+                decoded_bl += baseline;
                 let profile =
                     scorer::profile_tasm(&candidate.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                 let cost = profile.cost();
@@ -778,15 +793,16 @@ fn eval_individual_gpu(
         verified,
         decoded,
         raw_cost,
+        decoded_bl,
     )
 }
 
 /// Evaluate one individual on CPU.
-/// Returns (fitness, per_block_tasm, honest_cost, wins, verified, decoded, raw_cost).
+/// Returns (fitness, per_block_tasm, honest_cost, wins, verified, decoded, raw_cost, decoded_baseline).
 fn eval_individual_cpu(
     individual: &trident::ir::tir::neural::evolve::Individual,
     cf: &CompiledFile,
-) -> (i64, Vec<Vec<String>>, u64, usize, usize, usize, u64) {
+) -> (i64, Vec<Vec<String>>, u64, usize, usize, usize, u64, u64) {
     use trident::cost::{scorer, stack_verifier};
     use trident::ir::tir::lower::decode_output;
     use trident::ir::tir::neural::model::NeuralModel;
@@ -799,6 +815,7 @@ fn eval_individual_cpu(
     let mut verified = 0usize;
     let mut decoded = 0usize;
     let mut raw_cost = 0u64;
+    let mut decoded_bl = 0u64;
 
     for (i, block) in cf.blocks.iter().enumerate() {
         let baseline = cf.per_block_baselines[i];
@@ -815,6 +832,7 @@ fn eval_individual_cpu(
             let candidate = decode_output(&output);
             if !candidate.is_empty() && !baseline_tasm.is_empty() {
                 decoded += 1;
+                decoded_bl += baseline;
                 let profile =
                     scorer::profile_tasm(&candidate.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                 let cost = profile.cost();
@@ -844,5 +862,6 @@ fn eval_individual_cpu(
         verified,
         decoded,
         raw_cost,
+        decoded_bl,
     )
 }
