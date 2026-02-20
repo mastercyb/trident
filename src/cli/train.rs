@@ -723,14 +723,10 @@ fn train_one_compiled(
         v_cost,
         v_bl,
     ) = if let Some((tasm, cost, wins, ver, dec, dc, db, vc, vb)) = best_captured {
-        let has_neural = cost != cf.baseline_cost
-            || tasm
-                .iter()
-                .zip(cf.per_block_tasm.iter())
-                .any(|(n, b)| n != b);
         (
             cost,
-            if has_neural { Some(tasm) } else { None },
+            // Only save neural TASM when at least one block won (verified AND cheaper)
+            if wins > 0 { Some(tasm) } else { None },
             wins,
             ver,
             dec,
