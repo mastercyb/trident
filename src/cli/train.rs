@@ -131,8 +131,8 @@ pub fn cmd_train(args: TrainArgs) {
         let epoch_start = std::time::Instant::now();
         // (file_idx, cost, wins, total_blocks, checked, decoded,
         //  decoded_cost, decoded_baseline, checked_cost, checked_baseline)
-        let mut epoch_costs: Vec<(usize, u64, usize, usize, usize, usize, u64, u64, u64, u64)> =
-            Vec::new();
+        // (file_idx, TrainResult)
+        let mut epoch_results: Vec<(usize, TrainResult)> = Vec::new();
         let mut epoch_diagnostics: Vec<(String, Vec<BlockDiagnostic>)> = Vec::new();
 
         for (i, &file_idx) in indices.iter().enumerate() {
@@ -145,34 +145,69 @@ pub fn cmd_train(args: TrainArgs) {
                 compiled.len(),
                 cf.path,
             );
-            // Pad to clear previous longer lines
             let pad = 50usize.saturating_sub(cf.path.len());
             eprint!("{}", " ".repeat(pad));
             use std::io::Write;
             let _ = std::io::stderr().flush();
 
-            let result = train_one_compiled(cf, args.generations, &mut gpu_accel);
-            if !result.diagnostics.is_empty() {
-                epoch_diagnostics.push((cf.path.clone(), result.diagnostics));
+            let mut result = train_one_compiled(cf, args.generations, &mut gpu_accel);
+            let diags = std::mem::take(&mut result.diagnostics);
+            if !diags.is_empty() {
+                epoch_diagnostics.push((cf.path.clone(), diags));
             }
-            epoch_costs.push((
-                file_idx,
-                result.cost,
-                result.neural_wins,
-                result.total_blocks,
-                result.neural_checked,
-                result.neural_decoded,
-                result.decoded_cost,
-                result.decoded_baseline,
-                result.checked_cost,
-                result.checked_baseline,
-            ));
+            epoch_results.push((file_idx, result));
             total_trained += 1;
+        }
 
-            // On last epoch, write captured neural TASM to disk
-            if epoch + 1 == args.epochs {
-                if let Some(ref per_block) = result.neural_tasm {
-                    write_neural_tasm(cf, per_block, &repo_root);
+        // Proven verification: run files with checked > 0 through Triton VM
+        eprint!(
+            "\r  epoch {}/{} | proving via trisha...                                        ",
+            epoch + 1,
+            args.epochs
+        );
+        {
+            use std::io::Write;
+            let _ = std::io::stderr().flush();
+        }
+        for (file_idx, result) in &mut epoch_results {
+            if result.neural_checked == 0 {
+                continue;
+            }
+            if let Some(ref per_block) = result.neural_tasm {
+                let cf = &compiled[*file_idx];
+                let neural_full = splice_neural_tasm(cf, per_block);
+                let proven = super::trisha::verify_neural_tasm(&cf.compiled_tasm, &neural_full);
+                result.neural_proven = if proven { result.neural_checked } else { 0 };
+            }
+        }
+
+        // Build epoch_costs from results for aggregation
+        let epoch_costs: Vec<(usize, u64, usize, usize, usize, usize, u64, u64, u64, u64)> =
+            epoch_results
+                .iter()
+                .map(|(idx, r)| {
+                    (
+                        *idx,
+                        r.cost,
+                        r.neural_wins,
+                        r.total_blocks,
+                        r.neural_checked,
+                        r.neural_decoded,
+                        r.decoded_cost,
+                        r.decoded_baseline,
+                        r.checked_cost,
+                        r.checked_baseline,
+                    )
+                })
+                .collect();
+
+        // On last epoch, write proven neural TASM to disk
+        if epoch + 1 == args.epochs {
+            for (file_idx, result) in &epoch_results {
+                if result.neural_proven > 0 {
+                    if let Some(ref per_block) = result.neural_tasm {
+                        write_neural_tasm(&compiled[*file_idx], per_block, &repo_root);
+                    }
                 }
             }
         }
@@ -239,42 +274,41 @@ pub fn cmd_train(args: TrainArgs) {
         let epoch_wins: usize = epoch_costs.iter().map(|e| e.2).sum();
         let epoch_checked: usize = epoch_costs.iter().map(|e| e.4).sum();
         let epoch_decoded: usize = epoch_costs.iter().map(|e| e.5).sum();
+        let epoch_proven: usize = epoch_results.iter().map(|(_, r)| r.neural_proven).sum();
         let ver_info = if epoch_chk_bl > 0 {
             format!(
-                " | checked {} {}/{} ({:.2}x) | won {}",
-                epoch_checked,
-                epoch_chk_cost,
-                epoch_chk_bl,
-                epoch_chk_cost as f64 / epoch_chk_bl as f64,
-                epoch_wins
+                " | checked {} proven {} | won {}",
+                epoch_checked, epoch_proven, epoch_wins
             )
         } else {
-            format!(" | checked 0 | won 0")
+            format!(" | checked 0 proven 0 | won 0")
         };
         // Build per-file table
-        // (path, total_blocks, trainable, dec_cost, dec_bl, chk_cost, chk_bl, decoded, checked, wins)
-        let mut sorted: Vec<_> = epoch_costs
+        // (path, total_blocks, trainable, dec_cost, dec_bl, chk_cost, chk_bl, decoded, checked, wins, proven)
+        let mut sorted: Vec<_> = epoch_results
             .iter()
-            .map(|e| {
-                let cf = &compiled[e.0];
+            .map(|(idx, r)| {
+                let cf = &compiled[*idx];
                 let trainable = cf.per_block_verifiable.iter().filter(|&&v| v).count();
                 (
                     cf.path.as_str(),
                     cf.blocks.len(),
                     trainable,
-                    e.6, // decoded_cost
-                    e.7, // decoded_baseline
-                    e.8, // checked_cost
-                    e.9, // checked_baseline
-                    e.5, // decoded
-                    e.4, // checked
-                    e.2, // wins
+                    r.decoded_cost,
+                    r.decoded_baseline,
+                    r.checked_cost,
+                    r.checked_baseline,
+                    r.neural_decoded,
+                    r.neural_checked,
+                    r.neural_wins,
+                    r.neural_proven,
                 )
             })
             .collect();
-        // Sort by wins (most first), then checked count, then decoded count
+        // Sort by wins (most first), then proven, then checked count, then decoded count
         sorted.sort_by(|a, b| {
             b.9.cmp(&a.9) // wins descending
+                .then(b.10.cmp(&a.10)) // proven descending
                 .then(b.8.cmp(&a.8)) // checked descending
                 .then(b.7.cmp(&a.7)) // decoded descending
         });
@@ -302,12 +336,12 @@ pub fn cmd_train(args: TrainArgs) {
 
         // Table header
         eprintln!(
-            "  {:<60} | {:>9} | {:>7} {:>8} {:>5} | {:>15}\x1B[K",
-            "Module", "Blocks", "Decoded", "Checked", "Won", "Cost (ratio)"
+            "  {:<60} | {:>9} | {:>7} {:>8} {:>7} {:>5} | {:>15}\x1B[K",
+            "Module", "Blocks", "Decoded", "Checked", "Proven", "Won", "Cost (ratio)"
         );
-        eprintln!("  {}\x1B[K", "-".repeat(113));
+        eprintln!("  {}\x1B[K", "-".repeat(122));
 
-        for &(path, total, trainable, _dc, _db, vc, vb, decoded, checked, wins) in &sorted {
+        for &(path, total, trainable, _dc, _db, vc, vb, decoded, checked, wins, proven) in &sorted {
             let blocks_col = format!("{}/{}", trainable, total);
             let cost_col = if checked > 0 {
                 let vr = vc as f64 / vb.max(1) as f64;
@@ -316,11 +350,11 @@ pub fn cmd_train(args: TrainArgs) {
                 "\u{2013}".to_string()
             };
             eprintln!(
-                "  {:<60} | {:>9} | {:>7} {:>8} {:>5} | {:>15}\x1B[K",
-                path, blocks_col, decoded, checked, wins, cost_col,
+                "  {:<60} | {:>9} | {:>7} {:>8} {:>7} {:>5} | {:>15}\x1B[K",
+                path, blocks_col, decoded, checked, proven, wins, cost_col,
             );
         }
-        eprintln!("  {}\x1B[K", "-".repeat(113));
+        eprintln!("  {}\x1B[K", "-".repeat(122));
 
         // Print diagnostics: first few decoded-but-not-checked blocks
         let mut diag_lines = 0;
@@ -569,6 +603,8 @@ struct TrainResult {
     neural_wins: usize,
     /// Number of blocks where neural candidate passed stack check (heuristic, not proof).
     neural_checked: usize,
+    /// Number of blocks proven via Triton VM execution (ground truth). Set post-training.
+    neural_proven: usize,
     /// Number of blocks where model produced a non-empty decodable candidate.
     neural_decoded: usize,
     /// Sum of neural costs for decoded blocks (unchecked — shows what model produces).
@@ -747,6 +783,7 @@ fn train_one_compiled(
             },
             neural_wins: ev.wins,
             neural_checked: ev.checked,
+            neural_proven: 0,
             neural_decoded: ev.decoded,
             decoded_cost: ev.decoded_cost,
             decoded_baseline: ev.decoded_bl,
@@ -761,6 +798,7 @@ fn train_one_compiled(
             neural_tasm: None,
             neural_wins: 0,
             neural_checked: 0,
+            neural_proven: 0,
             neural_decoded: 0,
             decoded_cost: 0,
             decoded_baseline: 0,
@@ -820,6 +858,32 @@ fn short_path(path: &Path) -> String {
     s.to_string()
 }
 
+/// Splice neural blocks into the full compiler output, producing a complete TASM program.
+///
+/// For each block where the neural candidate differs from baseline,
+/// find the baseline block text in the full TASM and substitute it.
+/// Non-substituted regions (labels, control flow, subroutines) are preserved.
+fn splice_neural_tasm(cf: &CompiledFile, per_block: &[Vec<String>]) -> String {
+    let mut result = cf.compiled_tasm.clone();
+    for (i, neural_block) in per_block.iter().enumerate() {
+        let classical_block = &cf.per_block_tasm[i];
+        if classical_block.is_empty() || neural_block == classical_block {
+            continue;
+        }
+        let needle = classical_block.join("\n");
+        let replacement = neural_block.join("\n");
+        if let Some(pos) = result.find(&needle) {
+            result = format!(
+                "{}{}{}",
+                &result[..pos],
+                replacement,
+                &result[pos + needle.len()..],
+            );
+        }
+    }
+    result
+}
+
 /// Write captured neural TASM to disk at benches/<path>.neural.tasm.
 ///
 /// Produces a complete, executable TASM program by splicing neural blocks
@@ -833,29 +897,15 @@ fn write_neural_tasm(cf: &CompiledFile, per_block: &[Vec<String>], repo_root: &P
         let _ = std::fs::create_dir_all(parent);
     }
 
-    // Start with full compiler output; splice in neural blocks where they differ.
-    let mut result = cf.compiled_tasm.clone();
-    let mut substitutions = 0usize;
-
-    for (i, neural_block) in per_block.iter().enumerate() {
-        let classical_block = &cf.per_block_tasm[i];
-        if classical_block.is_empty() || neural_block == classical_block {
-            continue; // No substitution needed
-        }
-        // Find classical block text in the full TASM and replace with neural.
-        // Straight-line blocks have no labels, so substring match is reliable.
-        let needle = classical_block.join("\n");
-        let replacement = neural_block.join("\n");
-        if let Some(pos) = result.find(&needle) {
-            result = format!(
-                "{}{}{}",
-                &result[..pos],
-                replacement,
-                &result[pos + needle.len()..],
-            );
-            substitutions += 1;
-        }
-    }
+    let result = splice_neural_tasm(cf, per_block);
+    let substitutions = per_block
+        .iter()
+        .enumerate()
+        .filter(|(i, nb)| {
+            let cb = &cf.per_block_tasm[*i];
+            !cb.is_empty() && *nb != cb
+        })
+        .count();
 
     if std::fs::write(&neural_path, &result).is_ok() {
         let tag = if substitutions > 0 {
