@@ -235,9 +235,11 @@ fn run_stage1<B: burn::tensor::backend::AutodiffBackend>(
     let mut stale_epochs = 0usize;
     let mut prev_table_lines: usize = 0;
 
+    // Small beam for eval during training — full K=32 is too slow (197s/epoch).
+    // K=4, max_steps=64 gives fast feedback; production inference uses K=32.
     let beam_config = BeamConfig {
-        k: 32,
-        max_steps: 256,
+        k: 4,
+        max_steps: 64,
     };
 
     for epoch in 0..epochs {
@@ -325,8 +327,8 @@ fn run_stage2<B: burn::tensor::backend::AutodiffBackend>(
         .init();
 
     let beam_config = BeamConfig {
-        k: 32,
-        max_steps: 256,
+        k: 4,
+        max_steps: 64,
     };
 
     let start = std::time::Instant::now();
@@ -484,7 +486,7 @@ fn eval_files<B: burn::prelude::Backend>(
             edge_dst,
             edge_types,
             beam_config,
-            0,
+            16, // permissive initial depth — model trained without grammar masks
             device,
         );
 

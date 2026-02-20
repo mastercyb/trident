@@ -100,7 +100,7 @@ pub fn compile_with_device<B: burn::prelude::Backend>(
         edge_dst,
         edge_types,
         &beam_config,
-        0,
+        16, // permissive initial depth — model trained without grammar masks
         device,
     );
 
