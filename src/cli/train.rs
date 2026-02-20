@@ -10,12 +10,6 @@ pub struct TrainArgs {
     /// Epochs over the full corpus (default: 10)
     #[arg(short, long, default_value = "10")]
     pub epochs: u64,
-    /// Generations per file per epoch (default: 10)
-    #[arg(short, long, default_value = "10")]
-    pub generations: u64,
-    /// Disable GPU (use CPU parallel instead)
-    #[arg(long)]
-    pub cpu: bool,
 }
 
 #[derive(Subcommand)]
@@ -24,18 +18,12 @@ pub enum TrainAction {
     Reset,
 }
 
-/// Pre-compiled file data — TIR + blocks + baselines, computed once.
+/// Pre-compiled file data — TIR + baselines, computed once.
 struct CompiledFile {
     path: String,
-    blocks: Vec<trident::ir::tir::encode::TIRBlock>,
-    per_block_baselines: Vec<u64>,
-    per_block_tasm: Vec<Vec<String>>,
-    /// Per-block: true if baseline uses only verifiable ops (no side effects).
-    per_block_verifiable: Vec<bool>,
+    tir_ops: Vec<trident::tir::TIROp>,
+    tasm_lines: Vec<String>,
     baseline_cost: u64,
-    /// Full compiler output (with labels, control flow, subroutines).
-    /// Neural blocks get spliced into this to produce a complete program.
-    compiled_tasm: String,
 }
 
 pub fn cmd_train(args: TrainArgs) {
@@ -44,19 +32,20 @@ pub fn cmd_train(args: TrainArgs) {
         return;
     }
 
-    use trident::ir::tir::neural::weights;
+    use burn::backend::Autodiff;
+    use burn::backend::NdArray;
+    use trident::neural::data::pairs::extract_pairs;
+    use trident::neural::model::composite::NeuralCompilerConfig;
+    use trident::neural::model::vocab::Vocab;
+    use trident::neural::training::supervised;
+
+    type TrainBackend = Autodiff<NdArray>;
 
     let corpus = discover_corpus();
     if corpus.is_empty() {
         eprintln!("error: no .tri files found in vm/, std/, os/");
         process::exit(1);
     }
-
-    let meta = weights::load_best_meta().ok();
-    let gen_start = meta.as_ref().map_or(0, |m| m.generation);
-
-    let use_gpu = !args.cpu;
-    let device_tag = if use_gpu { "GPU" } else { "CPU" };
 
     eprintln!("trident train");
     eprintln!("  compiling corpus...");
@@ -65,414 +54,117 @@ pub fn cmd_train(args: TrainArgs) {
     let _guard = trident::diagnostic::suppress_warnings();
     let compiled = compile_corpus(&corpus);
     drop(_guard);
-    let total_blocks: usize = compiled.iter().map(|c| c.blocks.len()).sum();
     let total_baseline: u64 = compiled.iter().map(|c| c.baseline_cost).sum();
-    let total_gens = args.epochs * compiled.len() as u64 * args.generations;
 
-    let verifiable_blocks: usize = compiled
+    let config = NeuralCompilerConfig::new();
+    let device = Default::default();
+    let vocab = Vocab::new();
+
+    // Build training pairs from all compiled files
+    let blocks: Vec<(Vec<trident::tir::TIROp>, Vec<String>, String, u64)> = compiled
         .iter()
-        .flat_map(|cf| &cf.per_block_verifiable)
-        .filter(|&&v| v)
-        .count();
-    let rejected_blocks = total_blocks - verifiable_blocks;
+        .map(|cf| {
+            (
+                cf.tir_ops.clone(),
+                cf.tasm_lines.clone(),
+                cf.path.clone(),
+                cf.baseline_cost,
+            )
+        })
+        .collect();
+    let pairs = extract_pairs(&blocks, &vocab);
 
     eprintln!(
-        "  corpus    {} files ({} trainable, {} blocks)",
+        "  corpus    {} files, {} training pairs",
         corpus.len(),
-        compiled.len(),
-        total_blocks
-    );
-    eprintln!(
-        "  blocks    {} verifiable, {} rejected (baseline uses side-effect ops)",
-        verifiable_blocks, rejected_blocks,
+        pairs.len(),
     );
     eprintln!("  baseline  {} total cost", total_baseline);
     eprintln!(
-        "  schedule  {} epochs x {} gens/file = {} total gens",
-        args.epochs, args.generations, total_gens
+        "  model     ~{}M params | v2 GNN+Transformer",
+        config.param_estimate() / 1_000_000,
     );
-    eprintln!("  model     gen {} | 10K MLP | {}", gen_start, device_tag);
+    eprintln!("  schedule  {} epochs, supervised CE", args.epochs,);
     eprintln!();
 
-    // Create GPU accelerator once, sized for the largest file in corpus
-    let mut gpu_accel: Option<trident::gpu::neural_accel::NeuralAccelerator> = if use_gpu {
-        let max_blocks = compiled.iter().map(|c| c.blocks.len()).max().unwrap_or(1) as u32;
-        let pop_size = trident::ir::tir::neural::evolve::POP_SIZE as u32;
-        match trident::gpu::neural_accel::NeuralAccelerator::try_create(max_blocks, pop_size) {
-            Some(accel) => {
-                eprintln!("  GPU initialized (f32, capacity: {} blocks)", max_blocks);
-                Some(accel)
-            }
-            None => {
-                eprintln!("  GPU unavailable, falling back to CPU");
-                None
-            }
-        }
-    } else {
-        None
-    };
-
-    // Bootstrap: if no weights exist, pre-train to reproduce compiler output
-    let needs_bootstrap = weights::load_best_weights()
-        .map(|w| w.iter().all(|v| v.to_f64() == 0.0))
-        .unwrap_or(true);
-    if needs_bootstrap {
-        eprintln!("  bootstrapping from compiler output...");
-        bootstrap_from_compiler(&compiled, &mut gpu_accel);
+    if pairs.is_empty() {
+        eprintln!("error: no training pairs extracted from corpus");
+        process::exit(1);
     }
 
+    let model = config.init::<TrainBackend>(&device);
+    let sup_config = supervised::SupervisedConfig::default();
+    let mut optimizer = supervised::create_optimizer::<TrainBackend>(&sup_config);
+    let lr = sup_config.lr;
+
     let start = std::time::Instant::now();
-    let mut total_trained = 0u64;
-    let mut epoch_history: Vec<u64> = Vec::new();
-    // EMA of per-epoch improvement rate + volatility (alpha=0.3 — smooths over ~3 epochs)
-    // Initialized to None — seeded from first observed values, not 0.0.
-    let mut ema_rate: Option<f64> = None;
-    let mut ema_volatility: Option<f64> = None;
-    const EMA_ALPHA: f64 = 0.3;
-    let mut prev_table_lines: usize = 0;
-    let repo_root = find_repo_root();
+    let mut model = model;
+    let mut best_loss = f32::INFINITY;
+    let mut stale_epochs = 0usize;
 
     for epoch in 0..args.epochs {
-        // Shuffle file indices each epoch
-        let mut indices: Vec<usize> = (0..compiled.len()).collect();
-        shuffle(&mut indices, gen_start + epoch);
-
         let epoch_start = std::time::Instant::now();
-        // (file_idx, cost, wins, total_blocks, checked, decoded,
-        //  decoded_cost, decoded_baseline, checked_cost, checked_baseline)
-        // (file_idx, TrainResult)
-        let mut epoch_results: Vec<(usize, TrainResult)> = Vec::new();
-        let mut epoch_diagnostics: Vec<(String, Vec<BlockDiagnostic>)> = Vec::new();
-
-        for (i, &file_idx) in indices.iter().enumerate() {
-            let cf = &compiled[file_idx];
-            eprint!(
-                "\r  epoch {}/{} | {}/{} | {}",
-                epoch + 1,
-                args.epochs,
-                i + 1,
-                compiled.len(),
-                cf.path,
-            );
-            let pad = 50usize.saturating_sub(cf.path.len());
-            eprint!("{}", " ".repeat(pad));
-            use std::io::Write;
-            let _ = std::io::stderr().flush();
-
-            let mut result = train_one_compiled(cf, args.generations, &mut gpu_accel);
-            let diags = std::mem::take(&mut result.diagnostics);
-            if !diags.is_empty() {
-                epoch_diagnostics.push((cf.path.clone(), diags));
-            }
-            epoch_results.push((file_idx, result));
-            total_trained += 1;
-        }
-
-        // Proven verification: run files with checked > 0 through Triton VM
-        eprint!(
-            "\r  epoch {}/{} | proving via trisha...                                        ",
-            epoch + 1,
-            args.epochs
-        );
-        {
-            use std::io::Write;
-            let _ = std::io::stderr().flush();
-        }
-        for (file_idx, result) in &mut epoch_results {
-            if result.neural_checked == 0 {
-                continue;
-            }
-            if let Some(ref per_block) = result.neural_tasm {
-                let cf = &compiled[*file_idx];
-                let neural_full = splice_neural_tasm(cf, per_block);
-                let proven = super::trisha::verify_neural_tasm(&cf.compiled_tasm, &neural_full);
-                result.neural_proven = if proven { result.neural_checked } else { 0 };
-            }
-        }
-
-        // Build epoch_costs from results for aggregation
-        let epoch_costs: Vec<(usize, u64, usize, usize, usize, usize, u64, u64, u64, u64)> =
-            epoch_results
-                .iter()
-                .map(|(idx, r)| {
-                    (
-                        *idx,
-                        r.cost,
-                        r.neural_wins,
-                        r.total_blocks,
-                        r.neural_checked,
-                        r.neural_decoded,
-                        r.decoded_cost,
-                        r.decoded_baseline,
-                        r.checked_cost,
-                        r.checked_baseline,
-                    )
-                })
-                .collect();
-
-        // On last epoch, write proven neural TASM to disk
-        if epoch + 1 == args.epochs {
-            for (file_idx, result) in &epoch_results {
-                if result.neural_proven > 0 {
-                    if let Some(ref per_block) = result.neural_tasm {
-                        write_neural_tasm(&compiled[*file_idx], per_block, &repo_root);
-                    }
-                }
-            }
-        }
-
+        let (updated, result) = supervised::train_epoch(model, &pairs, &mut optimizer, lr, &device);
+        model = updated;
         let epoch_elapsed = epoch_start.elapsed();
-        let epoch_chk_cost: u64 = epoch_costs.iter().map(|e| e.8).sum();
-        let epoch_chk_bl: u64 = epoch_costs.iter().map(|e| e.9).sum();
 
-        let trend = if epoch == 0 {
-            String::new()
+        let improved = result.avg_loss < best_loss;
+        if improved {
+            best_loss = result.avg_loss;
+            stale_epochs = 0;
         } else {
-            let prev = if epoch_history.is_empty() {
-                0
-            } else {
-                epoch_history[epoch_history.len() - 1]
-            };
-            if epoch_chk_cost < prev && prev > 0 {
-                format!(" (-{} vs prev)", prev - epoch_chk_cost)
-            } else if epoch_chk_cost > prev && prev > 0 {
-                format!(" (+{} vs prev)", epoch_chk_cost - prev)
-            } else {
-                String::new()
-            }
-        };
-        epoch_history.push(epoch_chk_cost);
-
-        // EMA convergence: track smoothed improvement rate + volatility
-        let conv_info = if epoch_history.len() >= 2 {
-            let prev = epoch_history[epoch_history.len() - 2];
-            let curr = epoch_history[epoch_history.len() - 1];
-            let instant_rate = if prev > 0 {
-                (prev as f64 - curr as f64) / prev as f64
-            } else {
-                0.0
-            };
-            let instant_vol = instant_rate.abs();
-            // Seed EMAs from first observation; update normally after
-            let rate = match ema_rate {
-                Some(prev_ema) => EMA_ALPHA * instant_rate + (1.0 - EMA_ALPHA) * prev_ema,
-                None => instant_rate,
-            };
-            let vol = match ema_volatility {
-                Some(prev_vol) => EMA_ALPHA * instant_vol + (1.0 - EMA_ALPHA) * prev_vol,
-                None => instant_vol,
-            };
-            ema_rate = Some(rate);
-            ema_volatility = Some(vol);
-            // Unstable = volatility > 2% per epoch (big swings mean not converged)
-            if vol > 0.02 {
-                format!(" | unstable ({:.1}%/ep swing)", vol * 100.0)
-            } else if vol > 0.005 {
-                format!(" | searching ({:.1}%/ep swing)", vol * 100.0)
-            } else if rate < 0.001 {
-                " | converged".to_string()
-            } else if rate < 0.005 {
-                format!(" | plateau ({:.2}%/ep)", rate * 100.0)
-            } else {
-                format!(" | improving ({:.1}%/ep)", rate * 100.0)
-            }
-        } else {
-            String::new()
-        };
-
-        let epoch_wins: usize = epoch_costs.iter().map(|e| e.2).sum();
-        let epoch_checked: usize = epoch_costs.iter().map(|e| e.4).sum();
-        let epoch_decoded: usize = epoch_costs.iter().map(|e| e.5).sum();
-        let epoch_proven: usize = epoch_results.iter().map(|(_, r)| r.neural_proven).sum();
-        let ver_info = if epoch_chk_bl > 0 {
-            format!(
-                " | checked {} proven {} | won {}",
-                epoch_checked, epoch_proven, epoch_wins
-            )
-        } else {
-            format!(" | checked 0 proven 0 | won 0")
-        };
-        // Build per-file table
-        // (path, total_blocks, trainable, dec_cost, dec_bl, chk_cost, chk_bl, decoded, checked, wins, proven)
-        let mut sorted: Vec<_> = epoch_results
-            .iter()
-            .map(|(idx, r)| {
-                let cf = &compiled[*idx];
-                let trainable = cf.per_block_verifiable.iter().filter(|&&v| v).count();
-                (
-                    cf.path.as_str(),
-                    cf.blocks.len(),
-                    trainable,
-                    r.decoded_cost,
-                    r.decoded_baseline,
-                    r.checked_cost,
-                    r.checked_baseline,
-                    r.neural_decoded,
-                    r.neural_checked,
-                    r.neural_wins,
-                    r.neural_proven,
-                )
-            })
-            .collect();
-        // Sort by wins (most first), then proven, then checked count, then decoded count
-        sorted.sort_by(|a, b| {
-            b.9.cmp(&a.9) // wins descending
-                .then(b.10.cmp(&a.10)) // proven descending
-                .then(b.8.cmp(&a.8)) // checked descending
-                .then(b.7.cmp(&a.7)) // decoded descending
-        });
-        let total_blk: usize = sorted.iter().map(|s| s.1).sum();
-
-        // Move cursor up to overwrite previous table (epoch > 0)
-        // table_lines = 1 (epoch) + 1 (header) + 1 (separator) + file_count + 1 (separator)
-        let table_lines = 1 + 1 + 1 + sorted.len() + 1;
-        if epoch > 0 && prev_table_lines > 0 {
-            eprint!("\x1B[{}A", prev_table_lines);
+            stale_epochs += 1;
         }
+
+        let marker = if improved { " *" } else { "" };
+        let conv_info = if stale_epochs >= sup_config.patience {
+            " | converged (early stop)"
+        } else if stale_epochs >= 2 {
+            " | plateau"
+        } else if improved {
+            " | improving"
+        } else {
+            ""
+        };
 
         eprintln!(
-            "\r  epoch {}/{} | decoded {}/{} | checked {}{} | {:.1}s{}{}\x1B[K",
+            "  epoch {}/{} | loss: {:.4}{} | {:.1}s{}",
             epoch + 1,
             args.epochs,
-            epoch_decoded,
-            total_blk,
-            epoch_checked,
-            ver_info,
+            result.avg_loss,
+            marker,
             epoch_elapsed.as_secs_f64(),
-            trend,
             conv_info,
         );
 
-        // Table header
-        eprintln!(
-            "  {:<60} | {:>9} | {:>7} {:>8} {:>7} {:>5} | {:>15}\x1B[K",
-            "Module", "Blocks", "Decoded", "Checked", "Proven", "Won", "Cost (ratio)"
-        );
-        eprintln!("  {}\x1B[K", "-".repeat(122));
-
-        for &(path, total, trainable, _dc, _db, vc, vb, decoded, checked, wins, proven) in &sorted {
-            let blocks_col = format!("{}/{}", trainable, total);
-            let cost_col = if checked > 0 {
-                let vr = vc as f64 / vb.max(1) as f64;
-                format!("{}/{} ({:.2}x)", vc, vb, vr)
-            } else {
-                "\u{2013}".to_string()
-            };
+        // Early stopping
+        if stale_epochs >= sup_config.patience {
             eprintln!(
-                "  {:<60} | {:>9} | {:>7} {:>8} {:>7} {:>5} | {:>15}\x1B[K",
-                path, blocks_col, decoded, checked, proven, wins, cost_col,
+                "  early stopping: no improvement for {} epochs",
+                sup_config.patience,
             );
+            break;
         }
-        eprintln!("  {}\x1B[K", "-".repeat(122));
-
-        // Print diagnostics: first few decoded-but-not-checked blocks
-        let mut diag_lines = 0;
-        let max_diag_files = 2;
-        let max_diag_blocks = 2;
-        for (path, diags) in epoch_diagnostics.iter().take(max_diag_files) {
-            eprintln!("  diag: {}\x1B[K", path);
-            diag_lines += 1;
-            for d in diags.iter().take(max_diag_blocks) {
-                eprintln!("    block {} | {}\x1B[K", d.block_idx, d.reason);
-                diag_lines += 1;
-                let bl_summary: Vec<&str> = d.baseline.iter().take(5).map(|s| s.as_str()).collect();
-                let cd_summary: Vec<&str> =
-                    d.candidate.iter().take(5).map(|s| s.as_str()).collect();
-                eprintln!(
-                    "      baseline({}): {}{}\x1B[K",
-                    d.baseline.len(),
-                    bl_summary.join(" | "),
-                    if d.baseline.len() > 5 { " ..." } else { "" },
-                );
-                eprintln!(
-                    "      candidate({}): {}{}\x1B[K",
-                    d.candidate.len(),
-                    cd_summary.join(" | "),
-                    if d.candidate.len() > 5 { " ..." } else { "" },
-                );
-                diag_lines += 2;
-            }
-        }
-
-        prev_table_lines = table_lines + diag_lines;
     }
 
     let elapsed = start.elapsed();
-    let meta = weights::load_best_meta().ok();
-    let gen_end = meta.as_ref().map_or(0, |m| m.generation);
 
-    // Corpus-level final cost (last epoch)
-    // Last epoch's checked totals for summary
-    let final_chk_cost = epoch_history.last().copied().unwrap_or(0);
-
-    // Save corpus-level meta
-    {
-        let dummy_root = std::path::Path::new(".");
-        let best_weights = weights::load_best_weights().ok();
-        let weight_hash = best_weights
-            .as_ref()
-            .map(|w| weights::hash_weights(w))
-            .unwrap_or_default();
-        let new_meta = weights::OptimizerMeta {
-            generation: gen_end,
-            weight_hash,
-            best_score: final_chk_cost,
-            prev_score: total_baseline,
-            baseline_score: total_baseline,
-            status: weights::OptimizerStatus::Improving,
-        };
-        let _ = weights::save_meta(&new_meta, &weights::meta_path(dummy_root));
-    }
-
+    eprintln!();
     eprintln!("done");
     eprintln!(
-        "  generations  {} -> {} (+{})",
-        gen_start,
-        gen_end,
-        gen_end - gen_start
+        "  trained      {} pairs in {:.1}s",
+        pairs.len(),
+        elapsed.as_secs_f64(),
     );
-    eprintln!(
-        "  trained      {} file-passes in {:.1}s",
-        total_trained,
-        elapsed.as_secs_f64()
-    );
-    if let Some(rate) = ema_rate {
-        let vol = ema_volatility.unwrap_or(0.0);
-        let (label, hint) = if vol > 0.02 {
-            ("unstable", "high variance — model exploring, keep training")
-        } else if vol > 0.005 {
-            ("searching", "moderate variance — model still exploring")
-        } else if rate < 0.001 {
-            ("converged", "further training unlikely to help")
-        } else if rate < 0.005 {
-            ("plateau", "diminishing returns, may stop soon")
-        } else {
-            ("improving", "model still learning, keep training")
-        };
-        eprintln!(
-            "  convergence  {} ({:.2}%/ep, {:.1}% swing) — {}",
-            label,
-            rate * 100.0,
-            vol * 100.0,
-            hint,
-        );
-    }
-    if let Some(meta) = meta {
-        eprintln!("  weights      {}", meta.weight_hash);
-    }
+    eprintln!("  best loss    {:.4}", best_loss);
 }
 
 fn cmd_train_reset() {
-    use trident::ir::tir::neural::weights;
-
     let repo_root = find_repo_root();
     let mut deleted = 0usize;
 
-    // Delete weights (data/neural/)
-    let weights_dir = weights::weights_path(Path::new("."))
-        .parent()
-        .unwrap()
-        .to_path_buf();
+    // Delete v2 weights (data/neural/v2/)
+    let weights_dir = repo_root.join("data").join("neural").join("v2");
     if weights_dir.exists() {
         if let Err(e) = std::fs::remove_dir_all(&weights_dir) {
             eprintln!("error: failed to delete {}: {}", weights_dir.display(), e);
@@ -483,6 +175,27 @@ fn cmd_train_reset() {
             weights_dir
                 .strip_prefix(&repo_root)
                 .unwrap_or(&weights_dir)
+                .display()
+        );
+        deleted += 1;
+    }
+
+    // Also delete legacy v1 weights (data/neural/)
+    let legacy_weights_dir = repo_root.join("data").join("neural");
+    if legacy_weights_dir.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&legacy_weights_dir) {
+            eprintln!(
+                "error: failed to delete {}: {}",
+                legacy_weights_dir.display(),
+                e
+            );
+            process::exit(1);
+        }
+        eprintln!(
+            "  deleted {}",
+            legacy_weights_dir
+                .strip_prefix(&repo_root)
+                .unwrap_or(&legacy_weights_dir)
                 .display()
         );
         deleted += 1;
@@ -541,7 +254,7 @@ fn walkdir_recursive(dir: &Path, result: &mut Vec<std::path::PathBuf>, depth: us
     }
 }
 
-/// Compile all files once, return only those with trainable blocks.
+/// Compile all files once, return only those with compilable TIR.
 fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
     let options = super::resolve_options("triton", "debug", None);
     let mut compiled = Vec::new();
@@ -551,433 +264,31 @@ fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
             Ok(ir) => ir,
             Err(_) => continue,
         };
-        let blocks = trident::ir::tir::encode::encode_blocks(&ir);
-        if blocks.is_empty() {
+        if ir.is_empty() {
             continue;
         }
 
         let lowering = trident::ir::tir::lower::create_stack_lowering(&options.target_config.name);
-        let compiled_tasm = lowering.lower(&ir).join("\n");
+        let tasm_lines = lowering.lower(&ir);
 
-        let mut per_block_baselines: Vec<u64> = Vec::new();
-        let mut per_block_tasm: Vec<Vec<String>> = Vec::new();
-        for block in &blocks {
-            let block_ops = &ir[block.start_idx..block.end_idx];
-            if block_ops.is_empty() {
-                per_block_baselines.push(1);
-                per_block_tasm.push(Vec::new());
-                continue;
-            }
-            let block_tasm = lowering.lower(block_ops);
-            if block_tasm.is_empty() {
-                per_block_baselines.push(1);
-                per_block_tasm.push(Vec::new());
-                continue;
-            }
-            let profile = trident::cost::scorer::profile_tasm(
-                &block_tasm.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
-            );
-            per_block_baselines.push(profile.cost().max(1));
-            per_block_tasm.push(block_tasm);
+        if tasm_lines.is_empty() {
+            continue;
         }
 
-        let baseline_cost: u64 = per_block_baselines.iter().sum();
-
-        // All non-empty blocks are trainable — the verifier now handles
-        // side-effect ops (write_io, halt, assert, divine, split) via
-        // side-channel comparison.
-        let per_block_verifiable: Vec<bool> =
-            per_block_tasm.iter().map(|tasm| !tasm.is_empty()).collect();
+        let profile = trident::cost::scorer::profile_tasm(
+            &tasm_lines.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        );
+        let baseline_cost = profile.cost().max(1);
 
         compiled.push(CompiledFile {
             path: short_path(file),
-            blocks,
-            per_block_baselines,
-            per_block_tasm,
-            per_block_verifiable,
+            tir_ops: ir,
+            tasm_lines,
             baseline_cost,
-            compiled_tasm,
         });
     }
 
     compiled
-}
-
-/// Result of training a single file: cost + optional per-block neural TASM.
-struct TrainResult {
-    cost: u64,
-    /// Per-block TASM for every block in the file.
-    neural_tasm: Option<Vec<Vec<String>>>,
-    /// Number of blocks where neural candidate was cheaper than baseline.
-    neural_wins: usize,
-    /// Number of blocks where neural candidate passed stack check (heuristic, not proof).
-    neural_checked: usize,
-    /// Number of blocks proven via Triton VM execution (ground truth). Set post-training.
-    neural_proven: usize,
-    /// Number of blocks where model produced a non-empty decodable candidate.
-    neural_decoded: usize,
-    /// Sum of neural costs for decoded blocks (unchecked — shows what model produces).
-    decoded_cost: u64,
-    /// Sum of baselines for decoded blocks (same set as decoded_cost).
-    decoded_baseline: u64,
-    /// Sum of neural costs for checked blocks only.
-    checked_cost: u64,
-    /// Sum of baselines for checked blocks only.
-    checked_baseline: u64,
-    /// Total number of blocks in this file.
-    total_blocks: usize,
-    /// Diagnostic examples: decoded-but-not-checked blocks (up to 3 per file).
-    diagnostics: Vec<BlockDiagnostic>,
-}
-
-/// Diagnostic info for a single block that decoded but failed stack check.
-struct BlockDiagnostic {
-    block_idx: usize,
-    baseline: Vec<String>,
-    candidate: Vec<String>,
-    reason: String,
-}
-
-/// Result of evaluating one individual across all blocks.
-struct EvalResult {
-    fitness: i64,
-    per_block: Vec<Vec<String>>,
-    honest_cost: u64,
-    wins: usize,
-    checked: usize,
-    decoded: usize,
-    decoded_cost: u64,
-    decoded_bl: u64,
-    checked_cost: u64,
-    checked_bl: u64,
-    diagnostics: Vec<BlockDiagnostic>,
-}
-
-/// Train on a pre-compiled file. Returns cost + captured neural TASM.
-fn train_one_compiled(
-    cf: &CompiledFile,
-    generations: u64,
-    gpu_accel: &mut Option<trident::gpu::neural_accel::NeuralAccelerator>,
-) -> TrainResult {
-    use trident::ir::tir::neural::evolve::Population;
-    use trident::ir::tir::neural::model::NeuralModel;
-    use trident::ir::tir::neural::weights::{self, OptimizerMeta, OptimizerStatus};
-
-    let default_meta = OptimizerMeta {
-        generation: 0,
-        weight_hash: String::new(),
-        best_score: 0,
-        prev_score: 0,
-        baseline_score: 0,
-        status: OptimizerStatus::Improving,
-    };
-
-    let (current_weights, meta) = match weights::load_best_weights() {
-        Ok(w) => {
-            let meta = weights::load_best_meta().unwrap_or_else(|_| {
-                let mut m = default_meta.clone();
-                m.weight_hash = weights::hash_weights(&w);
-                m
-            });
-            (w, meta)
-        }
-        Err(_) => {
-            let w = NeuralModel::zeros().to_weight_vec();
-            (w, default_meta)
-        }
-    };
-
-    let gen_start = meta.generation;
-    let weight_count = current_weights.len();
-    let mut pop = if current_weights.iter().all(|w| w.to_f64() == 0.0) {
-        Population::new_random_with_size(weight_count, gen_start.wrapping_add(42))
-    } else {
-        Population::from_weights(&current_weights, gen_start.wrapping_add(42))
-    };
-
-    let score_before = if meta.best_score > 0 {
-        meta.best_score
-    } else {
-        cf.baseline_cost
-    };
-
-    // Upload this file's blocks to the shared GPU accelerator
-    if let Some(ref mut accel) = gpu_accel {
-        accel.upload_blocks(&cf.blocks);
-    }
-
-    let mut best_seen = i64::MIN;
-    let mut best_captured: Option<EvalResult> = None;
-    for gen in 0..generations {
-        let evals: Vec<EvalResult> = if let Some(ref accel) = gpu_accel {
-            let weight_vecs: Vec<Vec<trident::field::fixed::Fixed>> = pop
-                .individuals
-                .iter()
-                .map(|ind| ind.weights.clone())
-                .collect();
-            let gpu_outputs = accel.batch_forward(&weight_vecs);
-            let baselines = &cf.per_block_baselines;
-            let block_tasm = &cf.per_block_tasm;
-            std::thread::scope(|s| {
-                let handles: Vec<_> = gpu_outputs
-                    .iter()
-                    .map(|ind_outputs| {
-                        let verifiable = &cf.per_block_verifiable;
-                        s.spawn(move || {
-                            eval_individual_gpu(ind_outputs, baselines, block_tasm, verifiable)
-                        })
-                    })
-                    .collect();
-                handles.into_iter().map(|h| h.join().unwrap()).collect()
-            })
-        } else {
-            std::thread::scope(|s| {
-                let handles: Vec<_> = pop
-                    .individuals
-                    .iter()
-                    .map(|individual| s.spawn(move || eval_individual_cpu(individual, cf)))
-                    .collect();
-                handles
-                    .into_iter()
-                    .map(|h| h.join().expect("evaluate thread panicked"))
-                    .collect()
-            })
-        };
-
-        for (i, eval) in evals.iter().enumerate() {
-            pop.individuals[i].fitness = eval.fitness;
-        }
-        pop.update_best();
-
-        if let Some((idx, best)) = evals.iter().enumerate().max_by_key(|(_, e)| e.fitness) {
-            if best.fitness > best_seen {
-                best_seen = best.fitness;
-                best_captured = Some(evals.into_iter().nth(idx).unwrap());
-            }
-        }
-        pop.evolve(gen_start.wrapping_add(gen));
-    }
-
-    let best = pop.best_weights();
-    // best_seen = total improvement (baseline - cost). Cost = baseline - improvement.
-    let score_after = if best_seen > 0 {
-        cf.baseline_cost.saturating_sub(best_seen as u64)
-    } else {
-        cf.baseline_cost
-    };
-
-    let weight_hash = weights::hash_weights(best);
-    let dummy_root = Path::new(".");
-    let _ = weights::save_weights(best, &weights::weights_path(dummy_root));
-
-    let mut tracker = weights::ConvergenceTracker::new();
-    let status = tracker.record(score_after);
-    let new_meta = OptimizerMeta {
-        generation: gen_start + generations,
-        weight_hash,
-        best_score: score_after,
-        prev_score: score_before,
-        baseline_score: cf.baseline_cost,
-        status,
-    };
-    let _ = weights::save_meta(&new_meta, &weights::meta_path(dummy_root));
-
-    if let Some(ev) = best_captured {
-        TrainResult {
-            cost: ev.honest_cost,
-            neural_tasm: if ev.checked > 0 {
-                Some(ev.per_block)
-            } else {
-                None
-            },
-            neural_wins: ev.wins,
-            neural_checked: ev.checked,
-            neural_proven: 0,
-            neural_decoded: ev.decoded,
-            decoded_cost: ev.decoded_cost,
-            decoded_baseline: ev.decoded_bl,
-            checked_cost: ev.checked_cost,
-            checked_baseline: ev.checked_bl,
-            total_blocks: cf.blocks.len(),
-            diagnostics: ev.diagnostics,
-        }
-    } else {
-        TrainResult {
-            cost: cf.baseline_cost,
-            neural_tasm: None,
-            neural_wins: 0,
-            neural_checked: 0,
-            neural_proven: 0,
-            neural_decoded: 0,
-            decoded_cost: 0,
-            decoded_baseline: 0,
-            checked_cost: 0,
-            checked_baseline: 0,
-            total_blocks: cf.blocks.len(),
-            diagnostics: Vec::new(),
-        }
-    }
-}
-
-/// Bootstrap model weights by evolving to reproduce compiler output.
-///
-/// Fitness = number of output tokens matching the compiler's own TASM.
-/// Runs across all trainable blocks in the corpus. Once match rate
-/// stabilizes, saves weights and returns.
-fn bootstrap_from_compiler(
-    compiled: &[CompiledFile],
-    _gpu_accel: &mut Option<trident::gpu::neural_accel::NeuralAccelerator>,
-) {
-    use trident::ir::tir::lower::encode_tasm_block;
-    use trident::ir::tir::neural::evolve::Population;
-    use trident::ir::tir::neural::model::NeuralModel;
-    use trident::ir::tir::neural::weights;
-
-    // Collect all trainable (block, expected_codes) pairs
-    let mut all_blocks: Vec<&trident::ir::tir::encode::TIRBlock> = Vec::new();
-    let mut all_expected: Vec<Vec<u64>> = Vec::new();
-    for cf in compiled {
-        for (i, block) in cf.blocks.iter().enumerate() {
-            if !cf.per_block_verifiable.get(i).copied().unwrap_or(false) {
-                continue;
-            }
-            let codes = encode_tasm_block(&cf.per_block_tasm[i]);
-            if codes.is_empty() {
-                continue;
-            }
-            all_blocks.push(block);
-            all_expected.push(codes);
-        }
-    }
-
-    if all_blocks.is_empty() {
-        eprintln!("  bootstrap: no trainable blocks, skipping");
-        return;
-    }
-
-    let weight_count = NeuralModel::zeros().to_weight_vec().len();
-    let mut pop = Population::new_random_with_size(weight_count, 7777);
-    let max_gens: u64 = 500;
-    let mut best_match_rate = 0.0f64;
-    // Sample up to 128 blocks per generation for speed
-    let sample_size = all_blocks.len().min(128);
-
-    eprintln!(
-        "  bootstrap: {} blocks, {} tokens, sampling {} per gen",
-        all_blocks.len(),
-        all_expected.iter().map(|e| e.len()).sum::<usize>(),
-        sample_size,
-    );
-
-    let bs_start = std::time::Instant::now();
-
-    for gen in 0..max_gens {
-        // Select a random subset of blocks for this generation
-        let mut sample_indices: Vec<usize> = (0..all_blocks.len()).collect();
-        shuffle(&mut sample_indices, gen.wrapping_add(7777));
-        sample_indices.truncate(sample_size);
-
-        // Evaluate individuals in parallel
-        let fitnesses: Vec<i64> = std::thread::scope(|s| {
-            let handles: Vec<_> = pop
-                .individuals
-                .iter()
-                .map(|ind| {
-                    let indices = &sample_indices;
-                    let blocks = &all_blocks;
-                    let expected = &all_expected;
-                    s.spawn(move || {
-                        let mut model = NeuralModel::from_weight_vec(&ind.weights);
-                        let mut score = 0i64;
-                        for &idx in indices {
-                            let output = model.forward(blocks[idx]);
-                            let exp = &expected[idx];
-                            for (pos, &code) in output.iter().enumerate() {
-                                if pos < exp.len() && code == exp[pos] {
-                                    score += 10;
-                                }
-                            }
-                            if output.len() == exp.len() {
-                                score += 5;
-                            }
-                        }
-                        score
-                    })
-                })
-                .collect();
-            handles.into_iter().map(|h| h.join().unwrap()).collect()
-        });
-
-        for (i, fitness) in fitnesses.into_iter().enumerate() {
-            pop.individuals[i].fitness = fitness;
-        }
-        pop.update_best();
-
-        // Compute match rate on full set every 25 gens
-        if gen % 25 == 0 || gen + 1 == max_gens {
-            let best_w = pop.best_weights().to_vec();
-            let mut model = NeuralModel::from_weight_vec(&best_w);
-            let mut total_tokens = 0usize;
-            let mut matched_tokens = 0usize;
-            for (block, expected) in all_blocks.iter().zip(&all_expected) {
-                let output = model.forward(block);
-                total_tokens += expected.len();
-                for (pos, &code) in output.iter().enumerate() {
-                    if pos < expected.len() && code == expected[pos] {
-                        matched_tokens += 1;
-                    }
-                }
-            }
-            let rate = if total_tokens > 0 {
-                matched_tokens as f64 / total_tokens as f64
-            } else {
-                0.0
-            };
-
-            eprint!(
-                "\r  bootstrap gen {}/{} | {}/{} tokens ({:.1}%)     ",
-                gen + 1,
-                max_gens,
-                matched_tokens,
-                total_tokens,
-                rate * 100.0,
-            );
-            use std::io::Write;
-            let _ = std::io::stderr().flush();
-
-            if rate > best_match_rate {
-                best_match_rate = rate;
-            }
-
-            if rate > 0.80 {
-                break;
-            }
-        }
-
-        pop.evolve(gen.wrapping_add(7777));
-    }
-
-    // Save bootstrapped weights
-    let best = pop.best_weights();
-    let dummy_root = Path::new(".");
-    let _ = weights::save_weights(best, &weights::weights_path(dummy_root));
-    let weight_hash = weights::hash_weights(best);
-    let meta = weights::OptimizerMeta {
-        generation: 0,
-        weight_hash,
-        best_score: 0,
-        prev_score: 0,
-        baseline_score: 0,
-        status: weights::OptimizerStatus::Improving,
-    };
-    let _ = weights::save_meta(&meta, &weights::meta_path(dummy_root));
-
-    let elapsed = bs_start.elapsed();
-    eprintln!(
-        "\r  bootstrap done | {:.1}% match | {:.1}s                              ",
-        best_match_rate * 100.0,
-        elapsed.as_secs_f64(),
-    );
 }
 
 fn discover_corpus() -> Vec<std::path::PathBuf> {
@@ -1005,19 +316,6 @@ fn find_repo_root() -> std::path::PathBuf {
     }
 }
 
-fn shuffle(indices: &mut Vec<usize>, seed: u64) {
-    let n = indices.len();
-    if n <= 1 {
-        return;
-    }
-    let mut state = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
-    for i in (1..n).rev() {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-        let j = (state >> 33) as usize % (i + 1);
-        indices.swap(i, j);
-    }
-}
-
 fn short_path(path: &Path) -> String {
     let s = path.to_string_lossy();
     for prefix in &["vm/", "std/", "os/"] {
@@ -1026,262 +324,4 @@ fn short_path(path: &Path) -> String {
         }
     }
     s.to_string()
-}
-
-/// Splice neural blocks into the full compiler output, producing a complete TASM program.
-///
-/// For each block where the neural candidate differs from baseline,
-/// find the baseline block text in the full TASM and substitute it.
-/// Non-substituted regions (labels, control flow, subroutines) are preserved.
-fn splice_neural_tasm(cf: &CompiledFile, per_block: &[Vec<String>]) -> String {
-    let mut result = cf.compiled_tasm.clone();
-    for (i, neural_block) in per_block.iter().enumerate() {
-        let classical_block = &cf.per_block_tasm[i];
-        if classical_block.is_empty() || neural_block == classical_block {
-            continue;
-        }
-        let needle = classical_block.join("\n");
-        let replacement = neural_block.join("\n");
-        if let Some(pos) = result.find(&needle) {
-            result = format!(
-                "{}{}{}",
-                &result[..pos],
-                replacement,
-                &result[pos + needle.len()..],
-            );
-        }
-    }
-    result
-}
-
-/// Write captured neural TASM to disk at benches/<path>.neural.tasm.
-///
-/// Produces a complete, executable TASM program by splicing neural blocks
-/// into the full compiler output. Only straight-line blocks (no labels,
-/// no control flow) are substituted — the rest of the program (function
-/// labels, loops, subroutines, memory ops) is preserved from the compiler.
-fn write_neural_tasm(cf: &CompiledFile, per_block: &[Vec<String>], repo_root: &Path) {
-    let benches_dir = repo_root.join("benches");
-    let neural_path = benches_dir.join(cf.path.replace(".tri", ".neural.tasm"));
-    if let Some(parent) = neural_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-
-    let result = splice_neural_tasm(cf, per_block);
-    let substitutions = per_block
-        .iter()
-        .enumerate()
-        .filter(|(i, nb)| {
-            let cb = &cf.per_block_tasm[*i];
-            !cb.is_empty() && *nb != cb
-        })
-        .count();
-
-    if std::fs::write(&neural_path, &result).is_ok() {
-        let tag = if substitutions > 0 {
-            format!(" ({} blocks substituted)", substitutions)
-        } else {
-            " (no substitutions)".into()
-        };
-        eprintln!(
-            "\r  wrote {}{}{}",
-            neural_path
-                .strip_prefix(repo_root)
-                .unwrap_or(&neural_path)
-                .display(),
-            tag,
-            " ".repeat(20),
-        );
-    }
-}
-
-/// Evaluate one individual on GPU outputs.
-fn eval_individual_gpu(
-    ind_outputs: &[Vec<u32>],
-    baselines: &[u64],
-    block_tasm: &[Vec<String>],
-    verifiable: &[bool],
-) -> EvalResult {
-    use trident::cost::{scorer, stack_verifier};
-    use trident::ir::tir::lower::decode_output;
-
-    let mut fitness = 0i64;
-    let mut per_block: Vec<Vec<String>> = Vec::with_capacity(ind_outputs.len());
-    let mut honest_cost = 0u64;
-    let mut wins = 0usize;
-    let mut checked = 0usize;
-    let mut decoded = 0usize;
-    let mut decoded_cost = 0u64;
-    let mut decoded_bl = 0u64;
-    let mut checked_cost = 0u64;
-    let mut checked_bl = 0u64;
-    let mut diagnostics = Vec::new();
-
-    for (b, block_out) in ind_outputs.iter().enumerate() {
-        let baseline = baselines[b];
-        let baseline_lines = &block_tasm[b];
-
-        if !verifiable.get(b).copied().unwrap_or(false) {
-            honest_cost += baseline;
-            per_block.push(baseline_lines.clone());
-            continue;
-        }
-
-        let codes: Vec<u64> = block_out
-            .iter()
-            .take_while(|&&c| c != 0)
-            .map(|&c| c as u64)
-            .collect();
-        if !codes.is_empty() {
-            let candidate = decode_output(&codes);
-            if !candidate.is_empty() && !baseline_lines.is_empty() {
-                decoded += 1;
-                let profile =
-                    scorer::profile_tasm(&candidate.iter().map(|s| s.as_str()).collect::<Vec<_>>());
-                let cost = profile.cost();
-                decoded_cost += cost;
-                decoded_bl += baseline;
-
-                let shape = stack_verifier::score_candidate(baseline_lines, &candidate, b as u64);
-                if shape >= 900
-                    && stack_verifier::verify_equivalent(baseline_lines, &candidate, b as u64)
-                {
-                    checked += 1;
-                    checked_cost += cost;
-                    checked_bl += baseline;
-                    honest_cost += cost;
-                    fitness += 1000
-                        + if cost < baseline {
-                            wins += 1;
-                            (baseline as i64) - (cost as i64)
-                        } else {
-                            0
-                        };
-                    per_block.push(candidate);
-                    continue;
-                }
-                // Partial credit from shaped fitness
-                fitness += shape;
-                // Collect diagnostic for decoded-but-not-checked
-                if diagnostics.len() < 3 {
-                    let reason =
-                        stack_verifier::diagnose_failure(baseline_lines, &candidate, b as u64);
-                    diagnostics.push(BlockDiagnostic {
-                        block_idx: b,
-                        baseline: baseline_lines.clone(),
-                        candidate,
-                        reason,
-                    });
-                }
-            }
-        }
-        honest_cost += baseline;
-        per_block.push(baseline_lines.clone());
-    }
-
-    EvalResult {
-        fitness,
-        per_block,
-        honest_cost,
-        wins,
-        checked,
-        decoded,
-        decoded_cost,
-        decoded_bl,
-        checked_cost,
-        checked_bl,
-        diagnostics,
-    }
-}
-
-fn eval_individual_cpu(
-    individual: &trident::ir::tir::neural::evolve::Individual,
-    cf: &CompiledFile,
-) -> EvalResult {
-    use trident::cost::{scorer, stack_verifier};
-    use trident::ir::tir::lower::decode_output;
-    use trident::ir::tir::neural::model::NeuralModel;
-
-    let mut model = NeuralModel::from_weight_vec(&individual.weights);
-    let mut fitness = 0i64;
-    let mut per_block: Vec<Vec<String>> = Vec::with_capacity(cf.blocks.len());
-    let mut honest_cost = 0u64;
-    let mut wins = 0usize;
-    let mut checked = 0usize;
-    let mut decoded = 0usize;
-    let mut decoded_cost = 0u64;
-    let mut decoded_bl = 0u64;
-    let mut checked_cost = 0u64;
-    let mut checked_bl = 0u64;
-    let mut diagnostics = Vec::new();
-
-    for (i, block) in cf.blocks.iter().enumerate() {
-        let baseline = cf.per_block_baselines[i];
-        let baseline_tasm = &cf.per_block_tasm[i];
-
-        if !cf.per_block_verifiable.get(i).copied().unwrap_or(false) {
-            honest_cost += baseline;
-            per_block.push(baseline_tasm.clone());
-            continue;
-        }
-
-        let output = model.forward(block);
-        if !output.is_empty() {
-            let candidate = decode_output(&output);
-            if !candidate.is_empty() && !baseline_tasm.is_empty() {
-                decoded += 1;
-                let profile =
-                    scorer::profile_tasm(&candidate.iter().map(|s| s.as_str()).collect::<Vec<_>>());
-                let cost = profile.cost();
-                decoded_cost += cost;
-                decoded_bl += baseline;
-
-                let shape = stack_verifier::score_candidate(baseline_tasm, &candidate, i as u64);
-                if shape >= 900
-                    && stack_verifier::verify_equivalent(baseline_tasm, &candidate, i as u64)
-                {
-                    checked += 1;
-                    checked_cost += cost;
-                    checked_bl += baseline;
-                    honest_cost += cost;
-                    fitness += 1000
-                        + if cost < baseline {
-                            wins += 1;
-                            (baseline as i64) - (cost as i64)
-                        } else {
-                            0
-                        };
-                    per_block.push(candidate);
-                    continue;
-                }
-                fitness += shape;
-                if diagnostics.len() < 3 {
-                    let reason =
-                        stack_verifier::diagnose_failure(baseline_tasm, &candidate, i as u64);
-                    diagnostics.push(BlockDiagnostic {
-                        block_idx: i,
-                        baseline: baseline_tasm.clone(),
-                        candidate,
-                        reason,
-                    });
-                }
-            }
-        }
-        honest_cost += baseline;
-        per_block.push(baseline_tasm.clone());
-    }
-
-    EvalResult {
-        fitness,
-        per_block,
-        honest_cost,
-        wins,
-        checked,
-        decoded,
-        decoded_cost,
-        decoded_bl,
-        checked_cost,
-        checked_bl,
-        diagnostics,
-    }
 }

@@ -51,8 +51,8 @@ pub struct BuildArgs {
     /// Run neural optimizer analysis (shows per-block decisions)
     #[arg(long)]
     pub neural: bool,
-    /// Train the neural optimizer for N generations (implies --neural)
-    #[arg(long, value_name = "GENERATIONS")]
+    /// Train the neural optimizer for N epochs (implies --neural)
+    #[arg(long, value_name = "EPOCHS")]
     pub train: Option<u64>,
 }
 
@@ -163,42 +163,16 @@ pub fn cmd_build(args: BuildArgs) {
 fn run_neural_analysis(
     entry: &std::path::Path,
     options: &trident::CompileOptions,
-    train_generations: Option<u64>,
+    train_epochs: Option<u64>,
 ) {
-    use trident::ir::tir::encode;
-    use trident::ir::tir::lower::{create_speculative_lowering, decode_output, StackLowering};
-    use trident::ir::tir::neural::evolve::Population;
-    use trident::ir::tir::neural::model::NeuralModel;
-    use trident::ir::tir::neural::report::OptimizerReport;
-    use trident::ir::tir::neural::weights::{self, OptimizerMeta, OptimizerStatus};
-
-    let project_root = entry.parent().unwrap_or(std::path::Path::new("."));
-    let save_weights_path = weights::weights_path(project_root);
-    let save_meta_path = weights::meta_path(project_root);
-    let (model, meta) = match weights::load_best_weights() {
-        Ok(w) => {
-            let meta = weights::load_best_meta().unwrap_or(OptimizerMeta {
-                generation: 0,
-                weight_hash: weights::hash_weights(&w),
-                best_score: 0,
-                prev_score: 0,
-                baseline_score: 0,
-                status: OptimizerStatus::Improving,
-            });
-            (NeuralModel::from_weight_vec(&w), meta)
-        }
-        Err(_) => {
-            let meta = OptimizerMeta {
-                generation: 0,
-                weight_hash: String::new(),
-                best_score: 0,
-                prev_score: 0,
-                baseline_score: 0,
-                status: OptimizerStatus::Improving,
-            };
-            (NeuralModel::zeros(), meta)
-        }
-    };
+    use trident::ir::tir::lower::create_speculative_lowering;
+    use trident::ir::tir::neural::report::{OptimizerReport, OptimizerStatus};
+    use trident::neural::data::tir_graph::TirGraph;
+    use trident::neural::inference::beam::{beam_search, BeamConfig};
+    use trident::neural::inference::execute::validate_and_rank;
+    use trident::neural::model::composite::NeuralCompilerConfig;
+    use trident::neural::model::vocab::Vocab;
+    use trident::neural::training::supervised;
 
     // Build TIR for neural analysis
     let ir = match build_tir(entry, options) {
@@ -209,300 +183,139 @@ fn run_neural_analysis(
         }
     };
 
-    // Training mode
-    if let Some(generations) = train_generations {
-        let blocks = encode::encode_blocks(&ir);
-        if blocks.is_empty() {
-            eprintln!("No blocks to train on.");
+    // Compute classical baseline
+    let lowering = trident::ir::tir::lower::create_stack_lowering(&options.target_config.name);
+    let baseline_tasm = lowering.lower(&ir);
+    let baseline_profile = trident::cost::scorer::profile_tasm_str(&baseline_tasm.join("\n"));
+    let baseline_cost = baseline_profile.cost();
+
+    // Build TirGraph from IR
+    let graph = TirGraph::from_tir_ops(&ir);
+    let vocab = Vocab::new();
+
+    // Training mode (--train N): run N epochs of supervised training
+    if let Some(epochs) = train_epochs {
+        use burn::backend::Autodiff;
+        use burn::backend::NdArray;
+
+        type TrainBackend = Autodiff<NdArray>;
+        let device = Default::default();
+
+        let config = NeuralCompilerConfig::new();
+        let model = config.init::<TrainBackend>(&device);
+
+        let blocks = vec![(
+            ir.clone(),
+            baseline_tasm.clone(),
+            entry.to_string_lossy().to_string(),
+            baseline_cost,
+        )];
+        let pairs = trident::neural::data::pairs::extract_pairs(&blocks, &vocab);
+        if pairs.is_empty() {
+            eprintln!("No training pairs extracted.");
             return;
         }
 
-        let start_time = std::time::Instant::now();
-        let gen_start = meta.generation;
+        let sup_config = supervised::SupervisedConfig::default();
+        let mut optimizer = supervised::create_optimizer::<TrainBackend>(&sup_config);
+        let lr = sup_config.lr;
 
-        // Create population from current weights
-        let current_weights = model.to_weight_vec();
-        let mut pop = if current_weights.iter().all(|w| w.to_f64() == 0.0) {
-            Population::new_random(gen_start.wrapping_add(42))
-        } else {
-            Population::from_weights(&current_weights, gen_start.wrapping_add(42))
-        };
-
-        // Compute baseline cost (classical lowering)
-        let lowering = trident::ir::tir::lower::create_stack_lowering(&options.target_config.name);
-        let baseline_tasm = lowering.lower(&ir);
-        let baseline_profile = trident::cost::scorer::profile_tasm_str(&baseline_tasm.join("\n"));
-        let baseline_cost = baseline_profile.cost();
-
-        let score_before = if meta.best_score > 0 {
-            meta.best_score
-        } else {
-            baseline_cost
-        };
-
-        // Compute per-block baselines and TASM by lowering each block independently.
-        let mut per_block_baselines: Vec<u64> = Vec::new();
-        let per_block_tasm: Vec<Vec<String>> = blocks
-            .iter()
-            .map(|block| {
-                let block_ops = &ir[block.start_idx..block.end_idx];
-                if block_ops.is_empty() {
-                    per_block_baselines.push(1);
-                    return Vec::new();
-                }
-                let block_tasm = lowering.lower(block_ops);
-                if block_tasm.is_empty() {
-                    per_block_baselines.push(1);
-                    return Vec::new();
-                }
-                let profile = trident::cost::scorer::profile_tasm(
-                    &block_tasm.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
-                );
-                per_block_baselines.push(profile.cost().max(1));
-                block_tasm
-            })
-            .collect();
-        let total_block_baseline: u64 = per_block_baselines.iter().sum();
+        let start = std::time::Instant::now();
+        let mut model = model;
+        let mut best_loss = f32::INFINITY;
 
         eprintln!(
-            "Training neural optimizer on {} blocks ({} weights), baseline cost: {} (per-block sum: {})",
-            blocks.len(),
-            pop.individuals[0].weights.len(),
-            baseline_cost,
-            total_block_baseline,
+            "Training v2 neural optimizer: {} pairs, {} epochs, ~{}M params",
+            pairs.len(),
+            epochs,
+            config.param_estimate() / 1_000_000,
         );
 
-        // GPU acceleration (default)
-        let gpu_accel = {
-            let max_blocks = blocks.len() as u32;
-            let pop_size = trident::ir::tir::neural::evolve::POP_SIZE as u32;
-            trident::gpu::neural_accel::NeuralAccelerator::try_create(max_blocks, pop_size)
-        };
-        let gpu_accel = gpu_accel.map(|mut a| {
-            a.upload_blocks(&blocks);
-            eprintln!("  using GPU acceleration");
-            a
-        });
-
-        // Train for N generations with live progress
-        let mut best_seen = i64::MIN;
-        for gen in 0..generations {
-            if let Some(ref accel) = gpu_accel {
-                // GPU path: batch all forward passes in one dispatch
-                let weight_vecs: Vec<Vec<trident::field::fixed::Fixed>> = pop
-                    .individuals
-                    .iter()
-                    .map(|ind| ind.weights.clone())
-                    .collect();
-                let gpu_outputs = accel.batch_forward(&weight_vecs);
-
-                let baselines = &per_block_baselines;
-                let btasm = &per_block_tasm;
-                let fitnesses: Vec<i64> = std::thread::scope(|s| {
-                    let handles: Vec<_> = gpu_outputs
-                        .iter()
-                        .map(|ind_outputs| {
-                            s.spawn(move || {
-                                let mut total = 0i64;
-                                for (b, block_out) in ind_outputs.iter().enumerate() {
-                                    total -= score_neural_output(
-                                        block_out,
-                                        baselines[b],
-                                        &btasm[b],
-                                        b as u64,
-                                    ) as i64;
-                                }
-                                total
-                            })
-                        })
-                        .collect();
-                    handles.into_iter().map(|h| h.join().unwrap()).collect()
-                });
-                for (i, ind) in pop.individuals.iter_mut().enumerate() {
-                    ind.fitness = fitnesses[i];
-                }
-                pop.update_best();
-            } else {
-                // CPU fallback
-                let blk_ref = &blocks;
-                let baselines = &per_block_baselines;
-                let btasm = &per_block_tasm;
-                let fitnesses: Vec<i64> = std::thread::scope(|s| {
-                    let handles: Vec<_> = pop
-                        .individuals
-                        .iter()
-                        .map(|individual| {
-                            s.spawn(move || {
-                                use trident::cost::stack_verifier;
-                                let mut model = NeuralModel::from_weight_vec(&individual.weights);
-                                let mut total = 0i64;
-                                for (i, block) in blk_ref.iter().enumerate() {
-                                    let baseline = baselines[i];
-                                    let output = model.forward(block);
-                                    if output.is_empty() {
-                                        total -= baseline as i64;
-                                        continue;
-                                    }
-                                    let candidate_lines = decode_output(&output);
-                                    if candidate_lines.is_empty() {
-                                        total -= baseline as i64;
-                                        continue;
-                                    }
-                                    // Correctness check
-                                    let baseline_tasm = &btasm[i];
-                                    if !baseline_tasm.is_empty()
-                                        && !stack_verifier::verify_equivalent(
-                                            baseline_tasm,
-                                            &candidate_lines,
-                                            i as u64,
-                                        )
-                                    {
-                                        total -= baseline as i64;
-                                        continue;
-                                    }
-                                    let profile = trident::cost::scorer::profile_tasm(
-                                        &candidate_lines
-                                            .iter()
-                                            .map(|s| s.as_str())
-                                            .collect::<Vec<_>>(),
-                                    );
-                                    total -= profile.cost().min(baseline) as i64;
-                                }
-                                total
-                            })
-                        })
-                        .collect();
-                    handles
-                        .into_iter()
-                        .map(|h| h.join().expect("evaluate thread panicked"))
-                        .collect()
-                });
-                for (i, ind) in pop.individuals.iter_mut().enumerate() {
-                    ind.fitness = fitnesses[i];
-                }
-                pop.update_best();
-            }
-
-            let gen_best = pop
-                .individuals
-                .iter()
-                .map(|i| i.fitness)
-                .max()
-                .unwrap_or(i64::MIN);
-            let improved = gen_best > best_seen;
+        for epoch in 0..epochs {
+            let (updated, result) =
+                supervised::train_epoch(model, &pairs, &mut optimizer, lr, &device);
+            model = updated;
+            let improved = result.avg_loss < best_loss;
             if improved {
-                best_seen = gen_best;
+                best_loss = result.avg_loss;
             }
-
-            // Print progress: every gen for <=20, every 5 for <=100, every 10 otherwise
-            let print_interval = if generations <= 20 {
-                1
-            } else if generations <= 100 {
-                5
-            } else {
-                10
-            };
-            let is_last = gen + 1 == generations;
-            if gen % print_interval == 0 || is_last || improved {
-                let elapsed_so_far = start_time.elapsed();
-                let cost_est = (-gen_best) as u64;
-                let marker = if improved { " *" } else { "" };
-                eprint!(
-                    "\r  gen {}/{}  cost: {}  ({:.1}s){}          ",
-                    gen_start + gen + 1,
-                    gen_start + generations,
-                    cost_est,
-                    elapsed_so_far.as_secs_f64(),
-                    marker,
-                );
-                use std::io::Write;
-                let _ = std::io::stderr().flush();
-            }
-
-            pop.evolve(gen_start.wrapping_add(gen));
-        }
-        eprintln!(); // newline after progress line
-
-        let elapsed = start_time.elapsed();
-        let best = pop.best_weights();
-        let best_model = NeuralModel::from_weight_vec(best);
-
-        // Evaluate best model via speculative lowering on the real IR
-        let spec = create_speculative_lowering(
-            &options.target_config.name,
-            Some(best_model),
-            gen_start + generations,
-            String::new(),
-            OptimizerStatus::Improving,
-        );
-        let _ = spec.lower(&ir);
-        let report = spec.report();
-
-        // Use the best evolutionary cost as the score (more accurate than report total)
-        let best_evo_cost = if best_seen > i64::MIN {
-            (-best_seen) as u64
-        } else {
-            baseline_cost
-        };
-        let score_after =
-            if report.total_neural_cost > 0 && report.total_neural_cost < best_evo_cost {
-                report.total_neural_cost
-            } else {
-                best_evo_cost
-            };
-
-        // Save weights
-        let weight_hash = weights::hash_weights(best);
-        if let Err(e) = weights::save_weights(best, &save_weights_path) {
-            eprintln!("warning: could not save weights: {}", e);
+            let marker = if improved { " *" } else { "" };
+            eprintln!(
+                "  epoch {}/{} | loss: {:.4}{}",
+                epoch + 1,
+                epochs,
+                result.avg_loss,
+                marker,
+            );
         }
 
-        let mut tracker = weights::ConvergenceTracker::new();
-        let status = tracker.record(score_after);
-
-        let new_meta = OptimizerMeta {
-            generation: gen_start + generations,
-            weight_hash: weight_hash.clone(),
-            best_score: score_after,
-            prev_score: score_before,
-            baseline_score: baseline_cost,
-            status: status.clone(),
-        };
-        if let Err(e) = weights::save_meta(&new_meta, &save_meta_path) {
-            eprintln!("warning: could not save meta: {}", e);
-        }
-
-        // Display training progress
+        let elapsed = start.elapsed();
         eprintln!(
             "\n{}",
             OptimizerReport::format_training(
-                gen_start,
-                gen_start + generations,
+                0,
+                epochs,
                 elapsed.as_micros() as u64,
-                score_before,
-                score_after,
-                &status,
-            )
-        );
-        eprintln!(
-            "  weights: {} -> {}",
-            save_weights_path.display(),
-            weight_hash
+                baseline_cost,
+                baseline_cost,
+                &OptimizerStatus::Improving
+            ),
         );
         return;
     }
 
-    // Analysis mode (--neural without --train): run speculative lowering and show report
+    // Analysis mode (--neural without --train): run v2 beam search
+    use burn::backend::NdArray;
+    type InferBackend = NdArray;
+    let device = Default::default();
+
+    let config = NeuralCompilerConfig::new();
+    let model = config.init::<InferBackend>(&device);
+
+    let node_features = supervised::graph_to_features::<InferBackend>(&graph, &device);
+    let (edge_src, edge_dst, edge_types) =
+        supervised::graph_to_edges::<InferBackend>(&graph, &device);
+
+    let beam_config = BeamConfig {
+        k: 32,
+        max_steps: 256,
+    };
+    let result = beam_search(
+        &model.encoder,
+        &model.decoder,
+        node_features,
+        edge_src,
+        edge_dst,
+        edge_types,
+        &beam_config,
+        0,
+        &device,
+    );
+
+    // Validate candidates against baseline
+    let ranked = validate_and_rank(&result.sequences, &vocab, &baseline_tasm, 0);
+
+    // Build report via speculative lowering
     let spec = create_speculative_lowering(
         &options.target_config.name,
-        Some(model),
-        meta.generation,
-        meta.weight_hash.clone(),
-        meta.status.clone(),
+        0,
+        String::new(),
+        OptimizerStatus::Improving,
     );
-    let _ = spec.lower(&ir);
+
+    if let Some(r) = ranked {
+        spec.inject_neural_candidate("full_ir", &r.tasm_lines, baseline_cost);
+        eprintln!(
+            "\nNeural v2: {}/{} candidates valid, best cost: {} (baseline: {})",
+            r.valid_count, r.total_count, r.cost, baseline_cost,
+        );
+    } else {
+        spec.inject_neural_candidate("full_ir", &[], baseline_cost);
+        eprintln!("\nNeural v2: no valid candidates (fallback to compiler)");
+    }
+
     let report = spec.report();
-    eprintln!("\n{}", report.format_report());
+    eprintln!("{}", report.format_report());
 }
 
 /// Build TIR from a source entry point (for neural analysis).
@@ -512,22 +325,6 @@ fn build_tir(
     options: &trident::CompileOptions,
 ) -> Option<Vec<trident::tir::TIROp>> {
     trident::build_tir_project(entry, options).ok()
-}
-
-/// Score a neural output against a per-block baseline.
-/// Returns the cost to subtract from fitness (lower is better for the model).
-fn score_neural_output(
-    raw_codes: &[u32],
-    block_baseline: u64,
-    baseline_tasm: &[String],
-    block_seed: u64,
-) -> u64 {
-    trident::cost::stack_verifier::score_neural_output(
-        raw_codes,
-        block_baseline,
-        baseline_tasm,
-        block_seed,
-    )
 }
 
 fn print_hints(cost: &trident::cost::ProgramCost) {

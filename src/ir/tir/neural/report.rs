@@ -3,7 +3,23 @@
 //! Shows per-block decisions (neural vs classical), scores, reasons,
 //! and convergence status.
 
-use super::weights::OptimizerStatus;
+/// Convergence status of the optimizer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OptimizerStatus {
+    Improving,
+    Plateaued,
+    Converged,
+}
+
+impl std::fmt::Display for OptimizerStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OptimizerStatus::Improving => write!(f, "improving"),
+            OptimizerStatus::Plateaued => write!(f, "plateaued"),
+            OptimizerStatus::Converged => write!(f, "converged"),
+        }
+    }
+}
 
 /// Why a particular path was chosen.
 #[derive(Clone, Debug)]

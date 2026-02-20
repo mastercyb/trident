@@ -1,9 +1,9 @@
 //! GPU compute infrastructure.
 //!
 //! Uses wgpu for cross-platform GPU acceleration (Metal, Vulkan, DX12).
-//! Currently provides neural optimizer batch forward pass.
+//! Provides device initialization and shader constants for grammar mask
+//! and field arithmetic.
 
-pub mod neural_accel;
 pub(crate) mod shaders;
 
 /// Try to create a wgpu device and queue.

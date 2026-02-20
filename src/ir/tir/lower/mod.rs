@@ -2,16 +2,15 @@
 //!
 //! Each target implements `StackLowering` to control instruction selection
 //! and control-flow structure. The speculative lowering wraps the classical
-//! path with an optional neural optimizer.
+//! path with an optional neural v2 optimizer.
 
 #[cfg(test)]
 mod tests;
 mod triton;
 
-use super::encode;
-use super::neural::model::NeuralModel;
-use super::neural::report::{BlockDecision, DecisionReason, OptimizerReport, Winner};
-use super::neural::weights::OptimizerStatus;
+use super::neural::report::{
+    BlockDecision, DecisionReason, OptimizerReport, OptimizerStatus, Winner,
+};
 use super::TIROp;
 use crate::cost::scorer;
 
@@ -28,17 +27,18 @@ pub fn create_stack_lowering(_target: &str) -> Box<dyn StackLowering> {
     Box::new(TritonLowering::new())
 }
 
-/// Create a speculative stack lowering with an optional neural model.
+/// Create a speculative stack lowering that can accept neural v2 candidates.
+///
+/// The v2 neural model runs externally (beam search) and injects results
+/// via `inject_neural_candidate`. This replaces the v1 inline MLP approach.
 pub fn create_speculative_lowering(
     _target: &str,
-    model: Option<NeuralModel>,
     meta_generation: u64,
     meta_hash: String,
     meta_status: OptimizerStatus,
 ) -> SpeculativeLowering {
     SpeculativeLowering {
         classical: TritonLowering::new(),
-        neural: std::cell::RefCell::new(model),
         report: std::cell::RefCell::new(OptimizerReport {
             status: meta_status,
             generation: meta_generation,
@@ -50,10 +50,9 @@ pub fn create_speculative_lowering(
     }
 }
 
-/// Speculative lowering: classical path always runs, neural path is pure upside.
+/// Speculative lowering: classical path always runs, neural candidates injected externally.
 pub struct SpeculativeLowering {
     classical: TritonLowering,
-    neural: std::cell::RefCell<Option<NeuralModel>>,
     report: std::cell::RefCell<OptimizerReport>,
 }
 
@@ -62,109 +61,73 @@ impl SpeculativeLowering {
     pub fn report(&self) -> OptimizerReport {
         self.report.borrow().clone()
     }
+
+    /// Inject a neural v2 candidate result for a block.
+    ///
+    /// Called after beam search + validation. Records the decision
+    /// (neural win or classical win) in the report.
+    pub fn inject_neural_candidate(
+        &self,
+        block_id: &str,
+        candidate_tasm: &[String],
+        baseline_cost: u64,
+    ) {
+        let mut report = self.report.borrow_mut();
+
+        if candidate_tasm.is_empty() {
+            report.decisions.push(BlockDecision {
+                block_id: block_id.to_string(),
+                winner: Winner::Classical,
+                winner_cost: baseline_cost,
+                loser_cost: baseline_cost,
+                reason: DecisionReason::NoCandidate,
+            });
+            return;
+        }
+
+        let candidate_profile = scorer::profile_tasm(
+            &candidate_tasm
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>(),
+        );
+        let candidate_cost = candidate_profile.cost();
+
+        let baseline_profile = scorer::profile_tasm_str(&format!(
+            "push 0\n" // dummy for comparison (actual baseline cost passed in)
+        ));
+
+        if candidate_cost < baseline_cost {
+            let reason = if candidate_profile.is_cliff_jump(&baseline_profile) {
+                DecisionReason::CliffJump
+            } else {
+                DecisionReason::StackScheduling
+            };
+
+            report.decisions.push(BlockDecision {
+                block_id: block_id.to_string(),
+                winner: Winner::Neural,
+                winner_cost: candidate_cost,
+                loser_cost: baseline_cost,
+                reason,
+            });
+        } else {
+            report.decisions.push(BlockDecision {
+                block_id: block_id.to_string(),
+                winner: Winner::Classical,
+                winner_cost: baseline_cost,
+                loser_cost: baseline_cost,
+                reason: DecisionReason::NeuralWorse(candidate_cost),
+            });
+        }
+    }
 }
 
 impl StackLowering for SpeculativeLowering {
     fn lower(&self, ops: &[TIROp]) -> Vec<String> {
-        // Classical path always runs
-        let baseline = self.classical.lower(ops);
-
-        let mut neural_ref = self.neural.borrow_mut();
-        let neural = match neural_ref.as_mut() {
-            Some(model) => model,
-            None => return baseline,
-        };
-
-        // Encode TIR blocks for neural inference
-        let blocks = encode::encode_blocks(ops);
-        if blocks.is_empty() {
-            return baseline;
-        }
-
-        let baseline_profile = scorer::profile_tasm_str(&baseline.join("\n"));
-        let baseline_cost = baseline_profile.cost();
-
-        let mut report = self.report.borrow_mut();
-        report.total_classical_cost += baseline_cost;
-
-        // Try neural path on each block
-        let mut any_neural_win = false;
-        for block in &blocks {
-            let output_codes = neural.forward(block);
-
-            if output_codes.is_empty() {
-                report.decisions.push(BlockDecision {
-                    block_id: block.block_id(),
-                    winner: Winner::Classical,
-                    winner_cost: baseline_cost,
-                    loser_cost: baseline_cost,
-                    reason: DecisionReason::NoCandidate,
-                });
-                continue;
-            }
-
-            // Decode output codes to TASM instructions
-            let candidate_lines = decode_output(&output_codes);
-            if candidate_lines.is_empty() {
-                report.decisions.push(BlockDecision {
-                    block_id: block.block_id(),
-                    winner: Winner::Classical,
-                    winner_cost: baseline_cost,
-                    loser_cost: baseline_cost,
-                    reason: DecisionReason::NoCandidate,
-                });
-                continue;
-            }
-
-            let candidate_profile = scorer::profile_tasm(
-                &candidate_lines
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>(),
-            );
-            let candidate_cost = candidate_profile.cost();
-
-            if candidate_cost < baseline_cost {
-                // Determine the reason
-                let reason = if candidate_profile.is_cliff_jump(&baseline_profile) {
-                    DecisionReason::CliffJump
-                } else if candidate_profile.is_table_rebalance(&baseline_profile) {
-                    DecisionReason::TableRebalance
-                } else {
-                    DecisionReason::StackScheduling
-                };
-
-                report.decisions.push(BlockDecision {
-                    block_id: block.block_id(),
-                    winner: Winner::Neural,
-                    winner_cost: candidate_cost,
-                    loser_cost: baseline_cost,
-                    reason,
-                });
-                any_neural_win = true;
-            } else {
-                report.decisions.push(BlockDecision {
-                    block_id: block.block_id(),
-                    winner: Winner::Classical,
-                    winner_cost: baseline_cost,
-                    loser_cost: baseline_cost,
-                    reason: DecisionReason::NeuralWorse(candidate_cost),
-                });
-            }
-        }
-
-        // For now, always return classical output.
-        // Neural output substitution requires full semantic equivalence verification,
-        // which will be wired in when the verify pipeline is connected.
-        // The report still tracks what WOULD have happened.
-        report.total_neural_cost += if any_neural_win {
-            // Sum up the best cost per block
-            report.decisions.iter().map(|d| d.winner_cost).sum::<u64>()
-        } else {
-            baseline_cost
-        };
-
-        baseline
+        // Classical path always runs. Neural v2 candidates are injected
+        // externally via inject_neural_candidate after beam search.
+        self.classical.lower(ops)
     }
 }
 

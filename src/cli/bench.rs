@@ -584,115 +584,24 @@ fn run_rust_reference(ref_path: &str) -> Option<u64> {
 /// have lower cost than classical lowering.
 #[allow(dead_code)]
 fn compile_neural_tasm(
-    source_path: &Path,
-    classical_tasm: &str,
-    options: &trident::CompileOptions,
+    _source_path: &Path,
+    _classical_tasm: &str,
+    _options: &trident::CompileOptions,
 ) -> Option<String> {
-    use trident::cost::{scorer, stack_verifier};
-    use trident::ir::tir::encode::encode_blocks;
-    use trident::ir::tir::lower::{create_stack_lowering, decode_output};
-    use trident::ir::tir::neural::model::NeuralModel;
-    use trident::ir::tir::neural::weights;
+    // v2 neural model uses beam search via crate::neural.
+    // This function is a placeholder — neural TASM compilation
+    // will be integrated via the v2 inference pipeline.
+    None
+}
 
-    // Load neural weights
-    let weight_data = weights::load_best_weights().ok()?;
-    if weight_data.iter().all(|w| w.to_f64() == 0.0) {
-        return None; // Zero weights = untrained model
-    }
-    let mut model = NeuralModel::from_weight_vec(&weight_data);
-
-    // Build TIR for the module
-    let _guard = trident::diagnostic::suppress_warnings();
-    let ir = trident::build_tir_project(source_path, options).ok()?;
-    drop(_guard);
-
-    let lowering = create_stack_lowering(&options.target_config.name);
-
-    // Encode blocks for neural inference
-    let blocks = encode_blocks(&ir);
-    if blocks.is_empty() {
-        return None;
-    }
-
-    // For each block, try neural substitution
-    // Map: block start_idx -> (classical TASM lines, neural candidate lines)
-    let mut substitutions: Vec<(usize, usize, Vec<String>)> = Vec::new(); // (start, end, neural_lines)
-
-    for block in &blocks {
-        let output = model.forward(block);
-        if output.is_empty() {
-            continue;
-        }
-
-        let candidate_lines = decode_output(&output);
-        if candidate_lines.is_empty() {
-            continue;
-        }
-
-        // Get classical TASM for this block's ops
-        let block_ops = &ir[block.start_idx..block.end_idx];
-        if block_ops.is_empty() {
-            continue;
-        }
-        let classical_block = lowering.lower(block_ops);
-        if classical_block.is_empty() {
-            continue;
-        }
-
-        // Stack verification: neural candidate must produce same stack effect
-        if !stack_verifier::verify_equivalent(
-            &classical_block,
-            &candidate_lines,
-            block.start_idx as u64,
-        ) {
-            continue;
-        }
-
-        // Cost comparison: only substitute if neural is cheaper
-        let classical_profile = scorer::profile_tasm(
-            &classical_block
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>(),
-        );
-        let candidate_profile = scorer::profile_tasm(
-            &candidate_lines
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>(),
-        );
-
-        if candidate_profile.cost() < classical_profile.cost() {
-            substitutions.push((block.start_idx, block.end_idx, candidate_lines));
-        }
-    }
-
-    if substitutions.is_empty() {
-        return None;
-    }
-    // Splice neural blocks into classical TASM by text matching.
-    let mut result = classical_tasm.to_string();
-    for (start, end, neural_lines) in &substitutions {
-        let block_ops = &ir[*start..*end];
-        let block_classical = lowering.lower(block_ops);
-        if block_classical.is_empty() {
-            continue;
-        }
-        let needle = block_classical.join("\n");
-        let replacement: Vec<String> = neural_lines.iter().map(|l| format!("    {}", l)).collect();
-        let replacement_str = replacement.join("\n");
-        // Replace first occurrence only (blocks are unique sequences)
-        if let Some(pos) = result.find(&needle) {
-            result = format!(
-                "{}{}{}",
-                &result[..pos],
-                replacement_str,
-                &result[pos + needle.len()..],
-            );
-        }
-    }
-
-    Some(result)
+#[allow(dead_code)]
+fn compile_neural_tasm_v1_removed(
+    _source_path: &Path,
+    _classical_tasm: &str,
+    _options: &trident::CompileOptions,
+) -> Option<String> {
+    // v1 code removed.
+    None
 }
 
 /// Recursively find all .baseline.tasm files in a directory (depth-limited).
