@@ -173,8 +173,6 @@ pub fn cmd_train(args: TrainArgs) {
         }
 
         let epoch_elapsed = epoch_start.elapsed();
-        let epoch_dec_cost: u64 = epoch_costs.iter().map(|e| e.6).sum();
-        let epoch_dec_bl: u64 = epoch_costs.iter().map(|e| e.7).sum();
         let epoch_ver_cost: u64 = epoch_costs.iter().map(|e| e.8).sum();
         let epoch_ver_bl: u64 = epoch_costs.iter().map(|e| e.9).sum();
 
@@ -237,16 +235,6 @@ pub fn cmd_train(args: TrainArgs) {
         let total_blk: usize = epoch_costs.iter().map(|e| e.3).sum();
         let epoch_verified: usize = epoch_costs.iter().map(|e| e.4).sum();
         let epoch_decoded: usize = epoch_costs.iter().map(|e| e.5).sum();
-        let dec_ratio = if epoch_dec_bl > 0 {
-            format!(
-                " {}/{} ({:.2}x)",
-                epoch_dec_cost,
-                epoch_dec_bl,
-                epoch_dec_cost as f64 / epoch_dec_bl as f64
-            )
-        } else {
-            String::new()
-        };
         let ver_info = if epoch_ver_bl > 0 {
             format!(
                 " | verified {} {}/{} ({:.2}x) | won {}",
@@ -257,15 +245,14 @@ pub fn cmd_train(args: TrainArgs) {
                 epoch_wins
             )
         } else {
-            " | verified 0 | won 0".to_string()
+            format!(" | verified 0 | won 0")
         };
         eprintln!(
-            "\r  epoch {}/{} | decoded {}/{}{}{} | {:.1}s{}{}",
+            "\r  epoch {}/{} | decoded {}/{}{} | {:.1}s{}{}",
             epoch + 1,
             args.epochs,
             epoch_decoded,
             total_blk,
-            dec_ratio,
             ver_info,
             epoch_elapsed.as_secs_f64(),
             trend,
@@ -292,19 +279,11 @@ pub fn cmd_train(args: TrainArgs) {
                     )
                 })
                 .collect();
-            // Sort by decoded cost ratio (lower = model produces cheaper output)
+            // Sort by verified wins (most first), then verified count, then decoded count
             sorted.sort_by(|a, b| {
-                let ra = if a.3 > 0 {
-                    a.2 as f64 / a.3 as f64
-                } else {
-                    f64::MAX
-                };
-                let rb = if b.3 > 0 {
-                    b.2 as f64 / b.3 as f64
-                } else {
-                    f64::MAX
-                };
-                ra.partial_cmp(&rb).unwrap()
+                b.8.cmp(&a.8) // wins descending
+                    .then(b.7.cmp(&a.7)) // verified descending
+                    .then(b.6.cmp(&a.6)) // decoded descending
             });
             let label = if epoch == 0 { "initial" } else { "final" };
             let total_dec: usize = sorted.iter().map(|s| s.6).sum();
@@ -315,21 +294,20 @@ pub fn cmd_train(args: TrainArgs) {
                 "    {} per-file (decoded {}, verified {}, won {} / {} blocks):",
                 label, total_dec, total_ver, total_wins, total_blk,
             );
-            for &(path, blocks, dc, db, vc, vb, decoded, verified, wins) in &sorted {
+            for &(path, blocks, _dc, _db, vc, vb, decoded, verified, wins) in &sorted {
                 if decoded > 0 {
-                    let dr = dc as f64 / db.max(1) as f64;
                     let ver_tag = if verified > 0 {
                         let vr = vc as f64 / vb.max(1) as f64;
-                        format!(" v:{} w:{} | {}/{} ({:.2}x)", verified, wins, vc, vb, vr)
+                        format!(" | {}/{} ({:.2}x)", vc, vb, vr)
                     } else {
-                        " v:0 w:0".to_string()
+                        String::new()
                     };
                     eprintln!(
-                        "      {:<42} {:>3} blk  {:>6}/{:<6} ({:.2}x) d:{}{}",
-                        path, blocks, dc, db, dr, decoded, ver_tag,
+                        "      {:<42} {:>3} blk  d:{} v:{} w:{}{}",
+                        path, blocks, decoded, verified, wins, ver_tag,
                     );
                 } else {
-                    eprintln!("      {:<42} {:>3} blk  (no output)", path, blocks,);
+                    eprintln!("      {:<42} {:>3} blk  d:0", path, blocks);
                 }
             }
             eprintln!();
