@@ -172,12 +172,9 @@ fn run_neural_analysis(
     use trident::ir::tir::neural::report::OptimizerReport;
     use trident::ir::tir::neural::weights::{self, OptimizerMeta, OptimizerStatus};
 
-    // Determine project root for weight storage (saves go to ~/.trident/neural/)
     let project_root = entry.parent().unwrap_or(std::path::Path::new("."));
     let save_weights_path = weights::weights_path(project_root);
     let save_meta_path = weights::meta_path(project_root);
-
-    // Load existing weights: user-local first, then bundled with compiler
     let (model, meta) = match weights::load_best_weights() {
         Ok(w) => {
             let meta = weights::load_best_meta().unwrap_or(OptimizerMeta {
