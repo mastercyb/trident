@@ -89,7 +89,7 @@ pub fn cmd_train(args: TrainArgs) {
         })
         .collect();
     let pairs = extract_pairs(&blocks, &vocab);
-    let total_blocks: usize = compiled.iter().map(|c| c.tasm_lines.len()).sum();
+    let total_blocks: usize = compiled.len();
 
     if pairs.is_empty() {
         eprintln!("error: no training pairs extracted from corpus");
@@ -724,6 +724,8 @@ fn walkdir_recursive(dir: &Path, result: &mut Vec<std::path::PathBuf>, depth: us
 }
 
 fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
+    use trident::neural::data::pairs::split_tir_by_function;
+
     let options = super::resolve_options("triton", "debug", None);
     let mut compiled = Vec::new();
 
@@ -736,24 +738,53 @@ fn compile_corpus(files: &[std::path::PathBuf]) -> Vec<CompiledFile> {
             continue;
         }
 
-        let lowering = trident::ir::tir::lower::create_stack_lowering(&options.target_config.name);
-        let tasm_lines = lowering.lower(&ir);
+        let file_path = short_path(file);
 
-        if tasm_lines.is_empty() {
-            continue;
+        // Split TIR into per-function chunks and lower each independently.
+        // This produces many shorter training pairs (50-300 tokens) instead of
+        // one huge per-file pair (500-2000 tokens).
+        let functions = split_tir_by_function(&ir);
+
+        for (fn_name, fn_tir) in &functions {
+            // Skip entry/trailing scaffolding — not useful training data
+            if fn_name.starts_with("__") {
+                continue;
+            }
+            if fn_tir.is_empty() {
+                continue;
+            }
+
+            // Lower this function's TIR to TASM
+            let lowering =
+                trident::ir::tir::lower::create_stack_lowering(&options.target_config.name);
+            let tasm_lines = lowering.lower(fn_tir);
+
+            // Filter out labels and empty lines — keep only instructions
+            let tasm_lines: Vec<String> = tasm_lines
+                .into_iter()
+                .filter(|l| {
+                    let t = l.trim();
+                    !t.is_empty() && !t.ends_with(':') && !t.starts_with("//")
+                })
+                .map(|l| l.trim().to_string())
+                .collect();
+
+            if tasm_lines.is_empty() {
+                continue;
+            }
+
+            let profile = trident::cost::scorer::profile_tasm(
+                &tasm_lines.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            );
+            let baseline_cost = profile.cost().max(1);
+
+            compiled.push(CompiledFile {
+                path: format!("{}:{}", file_path, fn_name),
+                tir_ops: fn_tir.clone(),
+                tasm_lines,
+                baseline_cost,
+            });
         }
-
-        let profile = trident::cost::scorer::profile_tasm(
-            &tasm_lines.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
-        );
-        let baseline_cost = profile.cost().max(1);
-
-        compiled.push(CompiledFile {
-            path: short_path(file),
-            tir_ops: ir,
-            tasm_lines,
-            baseline_cost,
-        });
     }
 
     compiled
