@@ -4,4 +4,5 @@
 //! architecture trained via supervised learning + GFlowNets.
 
 pub mod data;
+pub mod inference;
 pub mod model;
