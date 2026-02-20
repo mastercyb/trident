@@ -8,6 +8,7 @@ pub mod field;
 pub mod gpu;
 pub mod ir;
 pub mod lsp;
+pub mod neural;
 pub mod package;
 pub mod runtime;
 pub mod syntax;
