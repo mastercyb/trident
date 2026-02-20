@@ -1,10 +1,12 @@
 use std::path::Path;
 use std::process;
 
-use clap::Args;
+use clap::{Args, Subcommand};
 
 #[derive(Args)]
 pub struct TrainArgs {
+    #[command(subcommand)]
+    pub action: Option<TrainAction>,
     /// Epochs over the full corpus (default: 10)
     #[arg(short, long, default_value = "10")]
     pub epochs: u64,
@@ -14,6 +16,12 @@ pub struct TrainArgs {
     /// Disable GPU (use CPU parallel instead)
     #[arg(long)]
     pub cpu: bool,
+}
+
+#[derive(Subcommand)]
+pub enum TrainAction {
+    /// Delete all neural weights and generated .neural.tasm files
+    Reset,
 }
 
 /// Pre-compiled file data — TIR + blocks + baselines, computed once.
@@ -31,6 +39,11 @@ struct CompiledFile {
 }
 
 pub fn cmd_train(args: TrainArgs) {
+    if let Some(TrainAction::Reset) = args.action {
+        cmd_train_reset();
+        return;
+    }
+
     use trident::ir::tir::neural::weights;
 
     let corpus = discover_corpus();
@@ -351,6 +364,90 @@ pub fn cmd_train(args: TrainArgs) {
     }
     if let Some(meta) = meta {
         eprintln!("  weights      {}", meta.weight_hash);
+    }
+}
+
+fn cmd_train_reset() {
+    use trident::ir::tir::neural::weights;
+
+    let repo_root = find_repo_root();
+    let mut deleted = 0usize;
+
+    // Delete user-local weights (~/.trident/neural/)
+    let weights_dir = weights::weights_path(Path::new("."))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    if weights_dir.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&weights_dir) {
+            eprintln!("error: failed to delete {}: {}", weights_dir.display(), e);
+            process::exit(1);
+        }
+        eprintln!("  deleted {}", weights_dir.display());
+        deleted += 1;
+    }
+
+    // Delete bundled weights (data/neural/)
+    let bundled_dir = repo_root.join("data").join("neural");
+    if bundled_dir.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&bundled_dir) {
+            eprintln!("error: failed to delete {}: {}", bundled_dir.display(), e);
+            process::exit(1);
+        }
+        eprintln!("  deleted {}", bundled_dir.display());
+        deleted += 1;
+    }
+
+    // Delete all .neural.tasm files under benches/
+    let benches_dir = repo_root.join("benches");
+    if benches_dir.exists() {
+        for entry in walkdir(&benches_dir) {
+            if entry.extension().and_then(|e| e.to_str()) == Some("tasm") {
+                let name = entry.file_name().unwrap_or_default().to_string_lossy();
+                if name.ends_with(".neural.tasm") {
+                    if let Err(e) = std::fs::remove_file(&entry) {
+                        eprintln!("  warning: failed to delete {}: {}", entry.display(), e);
+                    } else {
+                        eprintln!(
+                            "  deleted {}",
+                            entry.strip_prefix(&repo_root).unwrap_or(&entry).display()
+                        );
+                        deleted += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if deleted == 0 {
+        eprintln!("trident train reset: nothing to delete (already clean)");
+    } else {
+        eprintln!("trident train reset: deleted {} artifacts", deleted);
+    }
+}
+
+/// Recursively collect all files under a directory.
+fn walkdir(dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut result = Vec::new();
+    walkdir_recursive(dir, &mut result, 0);
+    result
+}
+
+fn walkdir_recursive(dir: &Path, result: &mut Vec<std::path::PathBuf>, depth: usize) {
+    if depth >= 32 {
+        return;
+    }
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            walkdir_recursive(&path, result, depth + 1);
+        } else {
+            result.push(path);
+        }
     }
 }
 
