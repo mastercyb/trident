@@ -486,7 +486,7 @@ fn eval_files<B: burn::prelude::Backend>(
             edge_dst,
             edge_types,
             beam_config,
-            16, // permissive initial depth — model trained without grammar masks
+            0, // must match training initial_stack_depth
             device,
         );
 
@@ -502,6 +502,19 @@ fn eval_files<B: burn::prelude::Backend>(
             .iter()
             .filter(|s| !s.is_empty())
             .count();
+
+        // Diagnostic: show first file's top beam for debugging
+        if file_idx == 0 && !beam_result.sequences.is_empty() {
+            let top = &beam_result.sequences[0];
+            let tasm = vocab.decode_sequence(top);
+            let preview: Vec<&str> = tasm.iter().map(|s| s.as_str()).take(8).collect();
+            eprintln!(
+                "    beam[0] {} tokens: [{}]{}",
+                top.len(),
+                preview.join(", "),
+                if tasm.len() > 8 { " ..." } else { "" },
+            );
+        }
 
         if let Some(r) = ranked {
             let wins = if r.cost < cf.baseline_cost { 1 } else { 0 };

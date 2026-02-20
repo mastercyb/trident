@@ -8,7 +8,6 @@ use burn::prelude::*;
 
 use crate::neural::model::decoder::StackAwareDecoder;
 use crate::neural::model::encoder::GnnEncoder;
-use crate::neural::model::grammar::StackStateMachine;
 use crate::neural::model::vocab::VOCAB_SIZE;
 
 /// Beam search configuration.
@@ -44,9 +43,14 @@ pub struct BeamResult {
 /// - `edge_src`, `edge_dst`: [E] edge endpoint indices
 /// - `edge_types`: [E] edge type IDs (0=DataDep, 1=ControlFlow, 2=MemOrder)
 /// - `config`: beam search parameters
-/// - `initial_stack_depth`: initial stack depth for grammar mask
+/// - `initial_stack_depth`: initial stack depth for depth/type features
+///   (must match training — typically 0)
 ///
 /// Returns K candidate token sequences ranked by log-probability.
+///
+/// No grammar mask is applied during decoding. The model was trained
+/// without grammar masks (teacher forcing with ground truth), so the
+/// learned distribution should naturally avoid invalid tokens.
 pub fn beam_search<B: Backend>(
     encoder: &GnnEncoder<B>,
     decoder: &StackAwareDecoder<B>,
@@ -58,6 +62,8 @@ pub fn beam_search<B: Backend>(
     initial_stack_depth: i32,
     device: &B::Device,
 ) -> BeamResult {
+    use crate::neural::model::grammar::StackStateMachine;
+
     let k = config.k;
     let num_nodes = node_features.dims()[0];
 
@@ -75,15 +81,16 @@ pub fn beam_search<B: Backend>(
     let mut beam_sequences: Vec<Vec<u32>> = vec![vec![]; k];
     let mut beam_log_probs: Vec<f32> = vec![0.0; k];
     let mut beam_finished: Vec<bool> = vec![false; k];
-    let mut beam_state_machines: Vec<StackStateMachine> = (0..k)
-        .map(|_| StackStateMachine::new(initial_stack_depth))
-        .collect();
 
     // 3. Autoregressive decoding — pass full sequence history each step.
     //
     // The decoder uses self-attention over all previous positions, so we must
     // feed the entire generated sequence (not just the last token). At step t,
     // input shape is [K, t+1] and we take logits at position t.
+    //
+    // Stack depth/type features are replayed from the generated sequence using
+    // the same initial_stack_depth as training (typically 0). This ensures
+    // the decoder sees depth embeddings consistent with what it learned.
     for step in 0..config.max_steps {
         // Check if all beams are finished
         if beam_finished.iter().all(|&f| f) {
@@ -115,7 +122,7 @@ pub fn beam_search<B: Backend>(
                 pos_data.push(p as i32);
             }
 
-            // Stack depths: replay state machine for each position
+            // Stack depths: replay state machine from generated tokens
             let mut sm = StackStateMachine::new(initial_stack_depth);
             depth_data.push(sm.depth_for_embedding(65) as i32); // depth at EOS start
             for &t in &beam_sequences[b] {
@@ -157,7 +164,6 @@ pub fn beam_search<B: Backend>(
         );
 
         // Extract logits at the LAST position only: [K, VOCAB_SIZE]
-        // logits shape: [K, cur_len, VOCAB_SIZE] → select position step
         let logits_2d = logits
             .slice([0..k, step..step + 1, 0..VOCAB_SIZE])
             .squeeze_dim::<2>(1);
@@ -166,7 +172,9 @@ pub fn beam_search<B: Backend>(
         let logits_data = logits_2d.to_data();
         let logits_flat: Vec<f32> = logits_data.to_vec().unwrap();
 
-        // 4. Apply grammar masks and find top-K candidates across all beams
+        // 4. Score all (beam, token) candidates — no grammar mask.
+        // The model was trained without grammar mask penalties, so its learned
+        // distribution should naturally prefer valid continuations.
         let mut candidates: Vec<(usize, u32, f32)> = Vec::new(); // (beam_idx, token, log_prob)
 
         for b in 0..k {
@@ -176,33 +184,21 @@ pub fn beam_search<B: Backend>(
                 continue;
             }
 
-            let mask = beam_state_machines[b].valid_mask();
             let beam_offset = b * VOCAB_SIZE;
 
-            // Apply mask to logits and compute log-softmax
-            let mut masked_logits = Vec::with_capacity(VOCAB_SIZE);
-            for t in 0..VOCAB_SIZE {
-                masked_logits.push(logits_flat[beam_offset + t] + mask[t]);
-            }
-
             // Log-softmax for normalized scores
-            let max_logit = masked_logits
-                .iter()
-                .copied()
-                .fold(f32::NEG_INFINITY, f32::max);
-            let log_sum_exp: f32 = masked_logits
-                .iter()
-                .map(|&l| (l - max_logit).exp())
-                .sum::<f32>()
-                .ln()
-                + max_logit;
+            let raw: &[f32] = &logits_flat[beam_offset..beam_offset + VOCAB_SIZE];
+            let max_logit = raw.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let log_sum_exp: f32 =
+                raw.iter().map(|&l| (l - max_logit).exp()).sum::<f32>().ln() + max_logit;
 
             for t in 0..VOCAB_SIZE {
-                let log_prob = masked_logits[t] - log_sum_exp;
-                if mask[t] > -1e8 {
-                    // Only consider valid tokens
-                    candidates.push((b, t as u32, beam_log_probs[b] + log_prob));
+                // Don't allow EOS in the first 3 steps — force at least some output
+                if t == 0 && step < 3 {
+                    continue;
                 }
+                let log_prob = raw[t] - log_sum_exp;
+                candidates.push((b, t as u32, beam_log_probs[b] + log_prob));
             }
         }
 
@@ -214,7 +210,6 @@ pub fn beam_search<B: Backend>(
         let mut new_sequences: Vec<Vec<u32>> = Vec::with_capacity(k);
         let mut new_log_probs: Vec<f32> = Vec::with_capacity(k);
         let mut new_finished: Vec<bool> = Vec::with_capacity(k);
-        let mut new_state_machines: Vec<StackStateMachine> = Vec::with_capacity(k);
 
         for &(src_beam, token, log_prob) in candidates.iter().take(k) {
             let mut seq = beam_sequences[src_beam].clone();
@@ -224,17 +219,9 @@ pub fn beam_search<B: Backend>(
                 seq.push(token);
             }
 
-            // Clone state machine and advance
-            let mut sm = StackStateMachine::new(initial_stack_depth);
-            // Replay sequence to rebuild state (simpler than cloning SM internals)
-            for &t in &seq {
-                sm.step(t);
-            }
-
             new_sequences.push(seq);
             new_log_probs.push(log_prob);
             new_finished.push(finished);
-            new_state_machines.push(sm);
         }
 
         // Pad if fewer than K candidates
@@ -242,13 +229,11 @@ pub fn beam_search<B: Backend>(
             new_sequences.push(vec![]);
             new_log_probs.push(f32::NEG_INFINITY);
             new_finished.push(true);
-            new_state_machines.push(StackStateMachine::new(initial_stack_depth));
         }
 
         beam_sequences = new_sequences;
         beam_log_probs = new_log_probs;
         beam_finished = new_finished;
-        beam_state_machines = new_state_machines;
     }
 
     // Sort final results by log-prob

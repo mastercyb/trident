@@ -118,9 +118,9 @@ pub fn sample_sequence<B: Backend>(
     let num_nodes = node_emb.dims()[0];
     let memory = node_emb.unsqueeze_dim::<3>(0); // [1, N, d_model]
 
+    let initial_depth = 0i32; // must match training
     let mut tokens = Vec::new();
     let mut log_pf = 0.0f32;
-    let mut sm = StackStateMachine::new(16); // permissive initial depth
     let mut first_violation: Option<usize> = None;
 
     for step in 0..config.max_seq_len {
@@ -135,7 +135,7 @@ pub fn sample_sequence<B: Backend>(
 
         // Stack depths: replay state machine
         let mut depth_data = Vec::with_capacity(cur_len);
-        let mut sm_replay = StackStateMachine::new(16);
+        let mut sm_replay = StackStateMachine::new(initial_depth);
         depth_data.push(sm_replay.depth_for_embedding(65) as i32);
         for &t in &tokens {
             sm_replay.step(t);
@@ -144,7 +144,7 @@ pub fn sample_sequence<B: Backend>(
 
         // Type states: replay
         let mut type_data = Vec::with_capacity(cur_len * 24);
-        let mut sm_replay2 = StackStateMachine::new(16);
+        let mut sm_replay2 = StackStateMachine::new(initial_depth);
         type_data.extend(sm_replay2.type_encoding());
         for &t in &tokens {
             sm_replay2.step(t);
@@ -176,29 +176,25 @@ pub fn sample_sequence<B: Backend>(
             .squeeze_dim::<1>(0);
         let logits_data: Vec<f32> = logits_1d.to_data().to_vec().unwrap();
 
-        // Apply grammar mask
-        let mask = sm.valid_mask();
-        let mut masked_logits = Vec::with_capacity(VOCAB_SIZE);
-        for i in 0..VOCAB_SIZE {
-            masked_logits.push((logits_data[i] + mask[i]) / tau);
-        }
-
-        // Softmax + sample
-        let max_l = masked_logits
-            .iter()
-            .copied()
-            .fold(f32::NEG_INFINITY, f32::max);
-        let probs: Vec<f32> = masked_logits.iter().map(|&l| (l - max_l).exp()).collect();
+        // Temperature-scaled softmax — no grammar mask (matches training).
+        // Track violations via separate StackStateMachine for shaped reward.
+        let scaled: Vec<f32> = logits_data.iter().map(|&l| l / tau).collect();
+        let max_l = scaled.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let probs: Vec<f32> = scaled.iter().map(|&l| (l - max_l).exp()).collect();
         let sum: f32 = probs.iter().sum();
         let probs: Vec<f32> = probs.iter().map(|&p| p / sum).collect();
 
         // Sample from categorical distribution
         let token = sample_categorical(&probs);
 
-        // Track validity
+        // Track validity using a separate state machine (for shaped reward only)
         if first_violation.is_none() && token != 0 {
-            let mask_val = mask[token as usize];
-            if mask_val < -1e8 {
+            let mut sm_check = StackStateMachine::new(initial_depth);
+            for &t in &tokens {
+                sm_check.step(t);
+            }
+            let mask = sm_check.valid_mask();
+            if mask[token as usize] < -1e8 {
                 first_violation = Some(step);
             }
         }
@@ -211,7 +207,6 @@ pub fn sample_sequence<B: Backend>(
             break; // EOS
         }
 
-        sm.step(token);
         tokens.push(token);
     }
 
