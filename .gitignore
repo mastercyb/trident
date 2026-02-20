@@ -23,11 +23,8 @@ editor/zed/grammars/
 # OS
 .DS_Store
 
-# Neural optimizer weight artifacts (but keep bundled model in data/)
-**/neural/weights.bin
-**/neural/meta.toml
-!data/neural/weights.bin
-!data/neural/meta.toml
+# Neural weight artifacts — too large for git (v2 checkpoint ~30MB)
+data/neural/
 
 # Agent memory — keep plans/audits/reports, ignore scratch
 /.cortex/scratch/
