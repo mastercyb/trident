@@ -254,9 +254,12 @@ fn run_stage1<B: burn::tensor::backend::AutodiffBackend>(
 
     // Small beam for eval during training — full K=32 is too slow (197s/epoch).
     // K=4, max_steps=64 gives fast feedback; production inference uses K=32.
+    // min_tokens=1: many target functions are 1-2 instructions; forcing 5+ tokens
+    // prevents the model from outputting correct short sequences.
     let beam_config = BeamConfig {
         k: 4,
         max_steps: 64,
+        min_tokens: 1,
         ..Default::default()
     };
 
@@ -435,7 +438,13 @@ fn run_stage2<B: burn::tensor::backend::AutodiffBackend>(
         let tau = gflownet::temperature_at_step(global_step, &gf_config);
 
         // Display
-        let table_lines = 1 + 1 + 1 + file_evals.len() + 1;
+        let active_count2 = file_evals
+            .iter()
+            .filter(|e| e.decoded > 0 || e.checked > 0)
+            .count();
+        let skipped2 = file_evals.len() - active_count2;
+        let skipped_line2 = if skipped2 > 0 { 1 } else { 0 };
+        let table_lines = 1 + 1 + 1 + active_count2 + skipped_line2 + 1;
         if epoch > 0 && prev_table_lines > 0 {
             eprint!("\x1B[{}A", prev_table_lines);
         }
@@ -465,7 +474,12 @@ fn run_stage2<B: burn::tensor::backend::AutodiffBackend>(
     );
 }
 
-/// Evaluate all compiled files via beam search (no grads).
+/// Evaluate a subset of compiled files via beam search (no grads).
+///
+/// Only evaluates functions whose TASM target length is ≤ beam max_steps
+/// (longer targets can't be reproduced by the beam). Caps at 50 functions
+/// to keep eval under ~30s. Returns one FileEval per compiled file; skipped
+/// files get zeroed evals.
 fn eval_files<B: burn::prelude::Backend>(
     model: &trident::neural::model::composite::NeuralCompilerV2<B>,
     compiled: &[CompiledFile],
@@ -477,9 +491,33 @@ fn eval_files<B: burn::prelude::Backend>(
     use trident::neural::inference::execute::validate_and_rank;
     use trident::neural::training::supervised::{graph_to_edges, graph_to_features};
 
+    // Pre-filter: only evaluate functions that the beam could realistically match.
+    // Sort by target length (shortest first) and cap at 50 to keep eval fast.
+    let max_eval = 50;
+    let mut eval_indices: Vec<usize> = (0..compiled.len())
+        .filter(|&i| compiled[i].tasm_lines.len() <= beam_config.max_steps)
+        .collect();
+    eval_indices.sort_by_key(|&i| compiled[i].tasm_lines.len());
+    eval_indices.truncate(max_eval);
+
+    let eval_set: std::collections::HashSet<usize> = eval_indices.iter().copied().collect();
+
     let mut evals = Vec::with_capacity(compiled.len());
 
     for (file_idx, cf) in compiled.iter().enumerate() {
+        // Skip functions too long for beam or beyond eval cap
+        if !eval_set.contains(&file_idx) {
+            evals.push(FileEval {
+                total_blocks: cf.tasm_lines.len(),
+                decoded: 0,
+                checked: 0,
+                proven: 0,
+                wins: 0,
+                checked_cost: 0,
+                checked_baseline: 0,
+            });
+            continue;
+        }
         let graph = trident::neural::data::tir_graph::TirGraph::from_tir_ops(&cf.tir_ops);
         if graph.nodes.is_empty() {
             evals.push(FileEval {
@@ -522,19 +560,28 @@ fn eval_files<B: burn::prelude::Backend>(
             .filter(|s| !s.is_empty())
             .count();
 
-        // Diagnostic: save first file's top beam for display after eval
-        if file_idx == 0 && !beam_result.sequences.is_empty() {
+        // Diagnostic: save top beam for first 3 evaluated files to see if model differentiates
+        let first_3: Vec<usize> = eval_indices.iter().take(3).copied().collect();
+        if first_3.contains(&file_idx) && !beam_result.sequences.is_empty() {
             let top = &beam_result.sequences[0];
             let tasm = vocab.decode_sequence(top);
             let preview: Vec<&str> = tasm.iter().map(|s| s.as_str()).take(10).collect();
-            // Store in thread-local for display_epoch_table to pick up
+            let target_preview: Vec<&str> =
+                cf.tasm_lines.iter().map(|s| s.as_str()).take(5).collect();
+            let line = format!(
+                "{}: beam={} [{}] target=[{}]",
+                cf.path,
+                top.len(),
+                preview.join(", "),
+                target_preview.join(", "),
+            );
             BEAM_DIAGNOSTIC.with(|d| {
-                *d.borrow_mut() = Some(format!(
-                    "beam[0] {} tokens: [{}]{}",
-                    top.len(),
-                    preview.join(", "),
-                    if tasm.len() > 10 { " ..." } else { "" },
-                ));
+                let mut val = d.borrow_mut();
+                if let Some(existing) = val.as_mut() {
+                    existing.push_str(&format!("\n    {}", line));
+                } else {
+                    *val = Some(line);
+                }
             });
         }
 
@@ -587,9 +634,15 @@ fn display_epoch_table(
 
     // Pick up beam diagnostic if available
     let diag = BEAM_DIAGNOSTIC.with(|d| d.borrow_mut().take());
-    let diag_lines = if diag.is_some() { 1 } else { 0 };
+    let diag_lines = diag.as_ref().map_or(0, |d| d.lines().count());
 
-    let table_lines = 1 + diag_lines + 1 + 1 + file_evals.len() + 1;
+    let active_count = file_evals
+        .iter()
+        .filter(|e| e.decoded > 0 || e.checked > 0)
+        .count();
+    let skipped = file_evals.len() - active_count;
+    let skipped_line = if skipped > 0 { 1 } else { 0 };
+    let table_lines = 1 + diag_lines + 1 + 1 + active_count + skipped_line + 1;
     if epoch > 0 && prev_table_lines > 0 {
         eprint!("\x1B[{}A", prev_table_lines);
     }
@@ -601,7 +654,9 @@ fn display_epoch_table(
         elapsed.as_secs_f64(),
     );
     if let Some(d) = diag {
-        eprintln!("    {}\x1B[K", d);
+        for line in d.lines() {
+            eprintln!("    {}\x1B[K", line);
+        }
     }
 
     display_file_table(file_evals, compiled);
@@ -635,7 +690,13 @@ fn display_file_table(file_evals: &[FileEval], compiled: &[CompiledFile]) {
     );
     eprintln!("  {}\x1B[K", "-".repeat(122));
 
-    for &(path, total, decoded, checked, proven, wins, vc, vb) in &sorted {
+    // Only show files that were actually evaluated (decoded > 0 or checked > 0)
+    let active: Vec<_> = sorted
+        .iter()
+        .filter(|s| s.2 > 0 || s.3 > 0)
+        .copied()
+        .collect::<Vec<_>>();
+    for &(path, total, decoded, checked, proven, wins, vc, vb) in &active {
         let blocks_col = format!("{}/{}", total, total);
         let cost_col = if checked > 0 {
             let vr = vc as f64 / vb.max(1) as f64;
@@ -646,6 +707,13 @@ fn display_file_table(file_evals: &[FileEval], compiled: &[CompiledFile]) {
         eprintln!(
             "  {:<60} | {:>9} | {:>7} {:>8} {:>7} {:>5} | {:>15}\x1B[K",
             path, blocks_col, decoded, checked, proven, wins, cost_col,
+        );
+    }
+    let skipped = sorted.len() - active.len();
+    if skipped > 0 {
+        eprintln!(
+            "  ... {} functions skipped (target > max_steps)\x1B[K",
+            skipped
         );
     }
     eprintln!("  {}\x1B[K", "-".repeat(122));

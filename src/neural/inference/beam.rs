@@ -33,7 +33,7 @@ impl Default for BeamConfig {
         Self {
             k: 32,
             max_steps: 256,
-            min_tokens: 5,
+            min_tokens: 1,
             length_alpha: 0.7,
             rep_penalty: 1.5,
             rep_window: 16,

@@ -400,8 +400,11 @@ impl StackState {
             // --- Extension field (modeled as nops for stack) ---
             "xb_mul" | "x_invert" | "xx_dot_step" | "xb_dot_step" => {}
 
-            // --- Control flow — can't simulate branches, mark unsimulable ---
-            "call" | "return" | "recurse" | "recurse_or_return" | "skiz" => {
+            // --- Control flow ---
+            // return/recurse are stack-transparent for isolated function verification.
+            // call/skiz/recurse_or_return require branch simulation — unsimulable.
+            "return" | "recurse" => {}
+            "call" | "recurse_or_return" | "skiz" => {
                 self.error = true;
             }
 
@@ -466,9 +469,29 @@ pub fn verify_equivalent(baseline_tasm: &[String], candidate_tasm: &[String], se
         "nop",
         "halt",
         "write_io",
+        "read_io",
         "divine",
         "assert",
         "assert_vector",
+        // Memory ops — simulated with dummy values (correct stack effects)
+        "read_mem",
+        "write_mem",
+        // Crypto ops — simulated with dummy values (correct stack effects)
+        "hash",
+        "sponge_init",
+        "sponge_absorb",
+        "sponge_squeeze",
+        "sponge_absorb_mem",
+        "merkle_step",
+        "merkle_step_mem",
+        // Extension field ops — simulated as nops (correct stack effects)
+        "xb_mul",
+        "x_invert",
+        "xx_dot_step",
+        "xb_dot_step",
+        // Control flow — return/recurse are no-ops for stack in isolated functions
+        "return",
+        "recurse",
     ];
     for line in candidate_tasm {
         let op = line.trim().split_whitespace().next().unwrap_or("");
