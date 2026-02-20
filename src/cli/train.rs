@@ -90,12 +90,14 @@ pub fn cmd_train(args: TrainArgs) {
         process::exit(1);
     }
 
-    // Stage detection
+    // Stage selection: explicit --stage flag, or default to Stage 1.
+    // Auto-detection was causing problems (stale checkpoint from broken run
+    // would skip Stage 1 forever). User controls stage transitions.
     let stage = match args.stage {
         Some(1) => TrainingStage::Stage1Supervised,
         Some(2) => TrainingStage::Stage2GFlowNet,
         Some(3) => TrainingStage::Stage3Online,
-        _ => checkpoint::detect_stage(0, 100),
+        _ => TrainingStage::Stage1Supervised,
     };
 
     let device_tag = if args.cpu { "CPU" } else { "GPU" };
@@ -111,7 +113,10 @@ pub fn cmd_train(args: TrainArgs) {
         config.param_estimate() / 1_000_000,
         device_tag,
     );
-    eprintln!("  schedule  {} epochs, {}", args.epochs, stage);
+    eprintln!(
+        "  schedule  {} epochs, {} (use --stage 2 for GFlowNet)",
+        args.epochs, stage,
+    );
 
     // Show existing checkpoints
     let ckpts = checkpoint::available_checkpoints();
