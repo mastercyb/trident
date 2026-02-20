@@ -843,4 +843,108 @@ mod tests {
             assert!(*val < MODULUS, "value {} >= MODULUS", val);
         }
     }
+
+    // --- Side-channel verification tests ---
+
+    #[test]
+    fn write_io_removal_caught() {
+        // Baseline writes TOS; candidate just pops — same stack, different I/O
+        let baseline = lines(&["write_io 1"]);
+        let candidate = lines(&["pop 1"]);
+        assert!(!verify_equivalent(&baseline, &candidate, 77));
+    }
+
+    #[test]
+    fn write_io_equivalent_accepted() {
+        // Both write the same value
+        let baseline = lines(&["write_io 1"]);
+        let candidate = lines(&["write_io 1"]);
+        assert!(verify_equivalent(&baseline, &candidate, 77));
+    }
+
+    #[test]
+    fn assert_removal_caught() {
+        // Baseline asserts TOS==1; candidate just pops — different assert_log
+        let baseline = lines(&["push 1", "assert"]);
+        let candidate = lines(&["push 1", "pop 1"]);
+        assert!(!verify_equivalent(&baseline, &candidate, 88));
+    }
+
+    #[test]
+    fn assert_equivalent_accepted() {
+        let baseline = lines(&["push 1", "assert"]);
+        let candidate = lines(&["push 1", "assert"]);
+        assert!(verify_equivalent(&baseline, &candidate, 88));
+    }
+
+    #[test]
+    fn divine_replacement_caught() {
+        // Baseline uses divine 1; candidate uses push 0 — same stack (both push 0)
+        // but divine_log differs
+        let baseline = lines(&["divine 1"]);
+        let candidate = lines(&["push 0"]);
+        assert!(!verify_equivalent(&baseline, &candidate, 99));
+    }
+
+    #[test]
+    fn divine_equivalent_accepted() {
+        let baseline = lines(&["divine 1"]);
+        let candidate = lines(&["divine 1"]);
+        assert!(verify_equivalent(&baseline, &candidate, 99));
+    }
+
+    #[test]
+    fn halt_removal_caught() {
+        // Baseline halts before push 99; candidate executes push 99
+        let baseline = lines(&["halt", "push 99"]);
+        let candidate = lines(&["push 99"]);
+        assert!(!verify_equivalent(&baseline, &candidate, 55));
+    }
+
+    #[test]
+    fn halt_equivalent_accepted() {
+        let baseline = lines(&["push 1", "halt"]);
+        let candidate = lines(&["push 1", "halt"]);
+        assert!(verify_equivalent(&baseline, &candidate, 55));
+    }
+
+    #[test]
+    fn split_now_verifiable() {
+        // split should work now — same input, same deterministic output
+        let baseline = lines(&["split"]);
+        let candidate = lines(&["split"]);
+        assert!(verify_equivalent(&baseline, &candidate, 42));
+    }
+
+    #[test]
+    fn split_wrong_replacement_caught() {
+        // Candidate fakes split with wrong stack effect
+        let baseline = lines(&["split"]);
+        let candidate = lines(&["dup 0"]); // wrong: pushes copy instead of hi/lo
+        assert!(!verify_equivalent(&baseline, &candidate, 42));
+    }
+
+    #[test]
+    fn assert_vector_removal_caught() {
+        // Baseline: assert_vector (compare top 5 with next 5, pop 5)
+        // Candidate: pop 5 (same stack effect, no assertion)
+        let baseline = lines(&[
+            "push 1",
+            "push 2",
+            "push 3",
+            "push 4",
+            "push 5",
+            "push 1",
+            "push 2",
+            "push 3",
+            "push 4",
+            "push 5",
+            "assert_vector",
+        ]);
+        let candidate = lines(&[
+            "push 1", "push 2", "push 3", "push 4", "push 5", "push 1", "push 2", "push 3",
+            "push 4", "push 5", "pop 5",
+        ]);
+        assert!(!verify_equivalent(&baseline, &candidate, 66));
+    }
 }
