@@ -96,9 +96,16 @@ pub fn cmd_train(args: TrainArgs) {
         process::exit(1);
     }
 
+    // Holdout split: reserve ~5% (min 5) of raw pairs for validation.
+    // Split before augmentation so holdout is unseen during training.
+    let raw_count = raw_pairs.len();
+    let holdout_count = (raw_count / 20).max(5).min(raw_count);
+    let (train_raw, holdout) =
+        trident::neural::data::pairs::train_holdout_split(raw_pairs, holdout_count);
+
     // Data augmentation: expand training set via TASM random walk,
     // equivalent substitutions, and dead code insertion.
-    eprintln!("  augmenting...");
+    eprintln!("  augmenting {} train pairs...", train_raw.len());
     let augment_config = trident::neural::training::augment::AugmentConfig {
         tir_reorder_variants: 3,
         tasm_walk_variants: 5,
@@ -106,7 +113,8 @@ pub fn cmd_train(args: TrainArgs) {
         seed: 0xDEAD_BEEF_A097,
     };
     let pairs =
-        trident::neural::training::augment::augment_pairs(&raw_pairs, &vocab, &augment_config);
+        trident::neural::training::augment::augment_pairs(&train_raw, &vocab, &augment_config);
+    eprintln!("  holdout: {} pairs", holdout.len());
 
     // Stage selection: explicit --stage flag, or default to Stage 1.
     // Auto-detection was causing problems (stale checkpoint from broken run
@@ -129,7 +137,7 @@ pub fn cmd_train(args: TrainArgs) {
     eprintln!(
         "  corpus    {} files, {} raw pairs, {} augmented, {} blocks",
         corpus.len(),
-        raw_pairs.len(),
+        raw_count,
         pairs.len(),
         total_blocks,
     );
@@ -166,6 +174,7 @@ pub fn cmd_train(args: TrainArgs) {
         run_training_loop::<B>(
             model,
             &pairs,
+            &holdout,
             &compiled,
             &vocab,
             args.epochs,
@@ -181,6 +190,7 @@ pub fn cmd_train(args: TrainArgs) {
         run_training_loop::<B>(
             model,
             &pairs,
+            &holdout,
             &compiled,
             &vocab,
             args.epochs,
@@ -194,6 +204,7 @@ pub fn cmd_train(args: TrainArgs) {
 fn run_training_loop<B: burn::tensor::backend::AutodiffBackend>(
     model: trident::neural::model::composite::NeuralCompilerV2<B>,
     pairs: &[trident::neural::data::pairs::TrainingPair],
+    holdout: &[trident::neural::data::pairs::TrainingPair],
     compiled: &[CompiledFile],
     vocab: &trident::neural::model::vocab::Vocab,
     epochs: u64,
@@ -217,7 +228,6 @@ fn run_training_loop<B: burn::tensor::backend::AutodiffBackend>(
         }
         Ok(None) => {
             eprintln!("  no checkpoint found, training from scratch");
-            // Re-init since load_checkpoint consumed the model
             trident::neural::model::composite::NeuralCompilerConfig::new().init::<B>(device)
         }
         Err(e) => {
@@ -228,7 +238,7 @@ fn run_training_loop<B: burn::tensor::backend::AutodiffBackend>(
 
     match stage {
         TrainingStage::Stage1Supervised => {
-            run_stage1(model, pairs, compiled, vocab, epochs, device);
+            run_stage1(model, pairs, holdout, compiled, vocab, epochs, device);
         }
         TrainingStage::Stage2GFlowNet => {
             run_stage2(model, compiled, vocab, epochs, device);
@@ -243,6 +253,7 @@ fn run_training_loop<B: burn::tensor::backend::AutodiffBackend>(
 fn run_stage1<B: burn::tensor::backend::AutodiffBackend>(
     model: trident::neural::model::composite::NeuralCompilerV2<B>,
     pairs: &[trident::neural::data::pairs::TrainingPair],
+    holdout: &[trident::neural::data::pairs::TrainingPair],
     compiled: &[CompiledFile],
     vocab: &trident::neural::model::vocab::Vocab,
     epochs: u64,
@@ -264,6 +275,7 @@ fn run_stage1<B: burn::tensor::backend::AutodiffBackend>(
     let mut best_loss = f32::INFINITY;
     let mut stale_epochs = 0usize;
     let mut prev_table_lines: usize = 0;
+    let mut phase_a_reached = false;
 
     // Small beam for eval during training — full K=32 is too slow (197s/epoch).
     // K=4, max_steps=64 gives fast feedback; production inference uses K=32.
@@ -298,10 +310,17 @@ fn run_stage1<B: burn::tensor::backend::AutodiffBackend>(
             stale_epochs += 1;
         }
 
-        // Evaluate via beam search
+        // Evaluate via beam search on compiled files
         let inner = model.valid();
         let inner_device = device.clone();
         let file_evals = eval_files(&inner, compiled, vocab, &beam_config, &inner_device);
+
+        // Holdout validity: beam search on unseen pairs, check via stack verifier
+        let holdout_valid = if !holdout.is_empty() {
+            eval_holdout_validity(&inner, holdout, vocab, &beam_config, &inner_device)
+        } else {
+            (0, 0)
+        };
 
         let epoch_elapsed = epoch_start.elapsed();
 
@@ -317,6 +336,35 @@ fn run_stage1<B: burn::tensor::backend::AutodiffBackend>(
             epoch_elapsed,
             prev_table_lines,
         );
+
+        // Show holdout validity
+        if holdout_valid.1 > 0 {
+            let validity_pct = holdout_valid.0 as f64 / holdout_valid.1 as f64 * 100.0;
+            eprintln!(
+                "  holdout validity: {}/{} ({:.0}%)\x1B[K",
+                holdout_valid.0, holdout_valid.1, validity_pct,
+            );
+            prev_table_lines += 1;
+
+            // Phase A gate: validity >= 80% on holdout
+            if validity_pct >= 80.0 && !phase_a_reached {
+                phase_a_reached = true;
+                eprintln!(
+                    "  PHASE A REACHED: validity={:.0}% on holdout (>= 80%)\x1B[K",
+                    validity_pct,
+                );
+                prev_table_lines += 1;
+                // Save production checkpoint
+                if let Err(e) =
+                    checkpoint::save_checkpoint(&model, CheckpointTag::Production, device)
+                {
+                    eprintln!("  warning: production checkpoint save failed: {}", e);
+                } else {
+                    eprintln!("  saved production checkpoint\x1B[K");
+                    prev_table_lines += 1;
+                }
+            }
+        }
 
         // Early stopping
         if stale_epochs >= sup_config.patience {
@@ -335,6 +383,66 @@ fn run_stage1<B: burn::tensor::backend::AutodiffBackend>(
         elapsed.as_secs_f64(),
         best_loss
     );
+}
+
+/// Evaluate holdout validity: beam search on each holdout pair, check if
+/// the best candidate is equivalent to the target TASM via stack verifier.
+/// Returns (valid_count, total_count).
+fn eval_holdout_validity<B: burn::prelude::Backend>(
+    model: &trident::neural::model::composite::NeuralCompilerV2<B>,
+    holdout: &[trident::neural::data::pairs::TrainingPair],
+    vocab: &trident::neural::model::vocab::Vocab,
+    beam_config: &trident::neural::inference::beam::BeamConfig,
+    device: &B::Device,
+) -> (usize, usize) {
+    use trident::neural::inference::beam::beam_search;
+    use trident::neural::inference::execute::validate_and_rank;
+    use trident::neural::training::supervised::{graph_to_edges, graph_to_features};
+
+    let mut valid = 0usize;
+    let mut total = 0usize;
+
+    for pair in holdout {
+        if pair.graph.nodes.is_empty() {
+            continue;
+        }
+
+        // Decode target tokens to TASM for equivalence check
+        let target_tasm: Vec<String> = pair
+            .target_tokens
+            .iter()
+            .filter(|&&t| t != 0) // skip EOS
+            .filter_map(|&t| vocab.decode(t).map(|s| s.to_string()))
+            .collect();
+
+        if target_tasm.is_empty() {
+            continue;
+        }
+
+        total += 1;
+
+        let node_features = graph_to_features::<B>(&pair.graph, device);
+        let (edge_src, edge_dst, edge_types) = graph_to_edges::<B>(&pair.graph, device);
+
+        let beam_result = beam_search(
+            &model.encoder,
+            &model.decoder,
+            node_features,
+            edge_src,
+            edge_dst,
+            edge_types,
+            beam_config,
+            0,
+            device,
+        );
+
+        // Check if any beam candidate validates against the target
+        if validate_and_rank(&beam_result.sequences, vocab, &target_tasm, 0).is_some() {
+            valid += 1;
+        }
+    }
+
+    (valid, total)
 }
 
 /// Stage 2: GFlowNet fine-tuning.
