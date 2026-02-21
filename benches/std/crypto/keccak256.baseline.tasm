@@ -1,3029 +1,1614 @@
-// Hand-optimized TASM baseline: Keccak-f[1600] permutation
+// Hand-optimized TASM baseline: std.crypto.keccak256
 //
-// Implements the full 24-round Keccak-f[1600] permutation used by Keccak-256.
-// Each 64-bit lane is stored as a (lo, hi) pair of U32 values.
-// The 25-lane state (50 U32 values) lives in RAM for efficient random access.
+// First principles rewrite. Keccak-f[1600] on Triton VM.
 //
-// RAM layout (addresses):
-//   State lanes s[x][y]: lane index = 5*y + x, lo at 2*idx, hi at 2*idx+1
-//     s00=[0,1]  s10=[2,3]  s20=[4,5]  s30=[6,7]  s40=[8,9]
-//     s01=[10,11] s11=[12,13] s21=[14,15] s31=[16,17] s41=[18,19]
-//     s02=[20,21] s12=[22,23] s22=[24,25] s32=[26,27] s42=[28,29]
-//     s03=[30,31] s13=[32,33] s23=[34,35] s33=[36,37] s43=[38,39]
-//     s04=[40,41] s14=[42,43] s24=[44,45] s34=[46,47] s44=[48,49]
-//   Theta temporaries:
-//     C0=[50,51] C1=[52,53] C2=[54,55] C3=[56,57] C4=[58,59]
-//     D0=[60,61] D1=[62,63] D2=[64,65] D3=[66,67] D4=[68,69]
-//   Chi/Pi temporaries: [70..119]
+// State: 25 lanes × 2 U32 = 50 words in RAM[0..49].
+// Lane[x][y]: lo at 2*(5y+x), hi at 2*(5y+x)+1.
+// Temp: RAM[50..69] for column parities, RAM[70..119] for pi/chi temp.
 //
-// Optimization summary vs compiler output:
-//   - u32_pow2: pre-computed 2^n constants (1 push) vs 192+ op branch cascade
-//   - Round constants: inlined as push lo / push hi (2 ops, no call overhead)
-//   - Lane ops: all inlined (no call/return overhead on xor/and/not/chi)
-//   - Rotations in rho: each specialized for its known fixed offset
-//   - State access: RAM-based, avoiding deep stack swap chains
-//
-// Instruction count rules:
-//   - Comments (// ...) are NOT counted
-//   - Labels (ending with :) are NOT counted
-//   - halt is NOT counted
-//   - Blank lines are NOT counted
-//   - Everything else IS counted (including return)
+// Key optimizations vs previous baseline:
+//   - Single __round function (was 24 copies)
+//   - Single __theta_col called 5× (was 5 copies)
+//   - __chi_row subroutine called 5× (was 5 inline copies)
+//   - read_mem 2 for lane reads where possible
+//   - Minimal lane helper subroutines
 
 // ===================================================================
-// Entry point: keccak_f1600
+// LANE HELPERS (shared)
 // ===================================================================
-// Stack on entry: 50 values [s00_lo s00_hi s10_lo ... s44_hi]
-// Stack on exit:  50 values (permuted state)
 
-// Store all 50 U32 values from stack to RAM[0..49]
-    push 0
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    pop 1
-
-// Execute 24 rounds
-    call __round_0
-    call __round_1
-    call __round_2
-    call __round_3
-    call __round_4
-    call __round_5
-    call __round_6
-    call __round_7
-    call __round_8
-    call __round_9
-    call __round_10
-    call __round_11
-    call __round_12
-    call __round_13
-    call __round_14
-    call __round_15
-    call __round_16
-    call __round_17
-    call __round_18
-    call __round_19
-    call __round_20
-    call __round_21
-    call __round_22
-    call __round_23
-
-// Load state back from RAM to stack
-    push 49
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    pop 1
-    halt
-
-// ===================================================================
-// __rot1: rotate 64-bit lane left by 1 bit
-// Stack: [lo, hi, ...] -> [new_lo, new_hi, ...]
-// new_lo = (lo << 1) | (hi >> 31)
-// new_hi = (hi << 1) | (lo >> 31)
-// ===================================================================
-__rot1:
-    // Stack: [lo, hi]
-    // lo << 1: add lo to itself, split -> (lo_carry, lo_shifted)
-    dup 0
-    add
-    split
-    // [lo_carry, lo_shifted, hi]
+// xor_lane: [a_lo a_hi b_lo b_hi] -> [r_lo r_hi] (b on top)
+std_crypto_keccak256__xor_lane:
     swap 2
-    // [hi, lo_shifted, lo_carry]
-    // hi << 1: add hi to itself, split -> (hi_carry, hi_shifted)
-    dup 0
-    add
-    split
-    // [hi_carry, hi_shifted, lo_shifted, lo_carry]
-    // Want: new_lo = lo_shifted ^ hi_carry, new_hi = hi_shifted ^ lo_carry
-    // Label: a=hi_carry, b=hi_shifted, c=lo_shifted, d=lo_carry
-    // dup 2: [c, a, b, c, d]
-    // xor:   [c^a, b, c, d] = [new_lo, b, c, d]
-    // swap 3:[d, b, c, new_lo]
-    // swap 1:[b, d, c, new_lo]
-    // xor:   [b^d, c, new_lo] = [new_hi, c, new_lo]
-    // swap 1:[c, new_hi, new_lo]
-    // pop 1: [new_hi, new_lo]
-    // swap 1:[new_lo, new_hi]
-    dup 2
-    xor
-    swap 3
-    swap 1
     xor
     swap 1
-    pop 1
+    swap 2
+    xor
     swap 1
     return
 
-// ===================================================================
-// __apply_rot: rotate lane by n bits where pow2n = 2^n is on stack
-// Stack: [lo, hi, pow2n, ...] -> [new_lo, new_hi, ...]
-// lo * pow2n -> split -> (lo_over, lo_shift)
-// hi * pow2n -> split -> (hi_over, hi_shift)
-// new_lo = lo_shift XOR hi_over
-// new_hi = hi_shift XOR lo_over
-// ===================================================================
-__apply_rot:
-    // [lo, hi, pow2n]
-    // Step 1: lo * pow2n
-    dup 2
-    mul
-    split
-    // [lo_over, lo_shift, hi, pow2n]
-    // Step 2: hi * pow2n
+// and_lane: [a_lo a_hi b_lo b_hi] -> [r_lo r_hi]
+std_crypto_keccak256__and_lane:
     swap 2
-    // [hi, lo_shift, lo_over, pow2n]
-    dup 3
-    // [pow2n, hi, lo_shift, lo_over, pow2n]
-    mul
-    split
-    // [hi_over, hi_shift, lo_shift, lo_over, pow2n]
-    // Step 3: compute new_lo = lo_shift ^ hi_over, new_hi = hi_shift ^ lo_over
-    // Use dup approach:
-    // [hi_over(a), hi_shift(b), lo_shift(c), lo_over(d), pow2n]
-    dup 2
-    xor
-    // [c^a, b, c, d, pow2n] = [new_lo, hi_shift, lo_shift, lo_over, pow2n]
-    swap 3
-    // [d, hi_shift, lo_shift, new_lo, pow2n] = [lo_over, hi_shift, lo_shift, new_lo, pow2n]
+    and
     swap 1
-    // [hi_shift, lo_over, lo_shift, new_lo, pow2n]
-    xor
-    // [new_hi, lo_shift, new_lo, pow2n]
-    swap 1
-    pop 1
-    // [new_hi, new_lo, pow2n]
     swap 2
-    pop 1
-    // [new_lo, new_hi]
+    and
+    swap 1
     return
 
-// ===================================================================
-// THETA step: column parity XOR diffusion
-// C[x] = s[x][0] ^ s[x][1] ^ s[x][2] ^ s[x][3] ^ s[x][4]
-// D[x] = C[x-1] ^ rot1(C[x+1])
-// s[x][y] ^= D[x]
-// ===================================================================
-__theta:
-    // --- Compute C0: s00 ^ s01 ^ s02 ^ s03 ^ s04 -> [50,51] ---
-    // C0_lo = mem[0] ^ mem[10] ^ mem[20] ^ mem[30] ^ mem[40]
-    push 0
-    read_mem 1
-    pop 1
-    push 10
-    read_mem 1
-    pop 1
+// not_lane: [lo hi] -> [~lo ~hi]
+std_crypto_keccak256__not_lane:
+    push 4294967295
     xor
-    push 20
+    swap 1
+    push 4294967295
+    xor
+    swap 1
+    return
+
+// chi_lane: [a_lo a_hi b_lo b_hi c_lo c_hi] -> [r_lo r_hi]
+// r = a ^ (~b & c)
+std_crypto_keccak256__chi_lane:
+    // Stack: a_lo a_hi b_lo b_hi c_lo c_hi (c_hi on top)
+    // not(b): b_lo b_hi -> ~b_lo ~b_hi
+    swap 2
+    push 4294967295
+    xor
+    swap 2
+    swap 3
+    push 4294967295
+    xor
+    swap 3
+    // Stack: a_lo a_hi ~b_lo ~b_hi c_lo c_hi
+    // and(~b, c)
+    swap 2
+    and
+    swap 1
+    swap 2
+    and
+    swap 1
+    // Stack: a_lo a_hi (notb&c)_lo (notb&c)_hi
+    // xor with a
+    swap 2
+    xor
+    swap 1
+    swap 2
+    xor
+    swap 1
+    return
+
+// read_lane: [addr] -> [lo hi] reads lane from addr (lo at addr, hi at addr+1)
+__read_lane:
+    dup 0
     read_mem 1
     pop 1
-    xor
-    push 30
-    read_mem 1
-    pop 1
-    xor
-    push 40
-    read_mem 1
-    pop 1
-    xor
-    // C0_hi = mem[1] ^ mem[11] ^ mem[21] ^ mem[31] ^ mem[41]
+    swap 1
     push 1
+    add
     read_mem 1
     pop 1
-    push 11
-    read_mem 1
+    return
+
+// write_lane: [addr lo hi] -> [] writes lane to addr
+__write_lane:
+    swap 2
+    dup 0
+    swap 2
+    write_mem 1
     pop 1
-    xor
-    push 21
-    read_mem 1
-    pop 1
-    xor
-    push 31
-    read_mem 1
-    pop 1
-    xor
-    push 41
-    read_mem 1
-    pop 1
-    xor
-    // Stack: [C0_hi, C0_lo]
-    // Store C0 to [50, 51]
     swap 1
+    push 1
+    add
+    swap 1
+    write_mem 1
+    pop 1
+    return
+
+
+
+// ===================================================================
+// THETA
+// ===================================================================
+
+// theta: modify state in RAM in-place
+// C[x] = s[x][0] ^ s[x][1] ^ s[x][2] ^ s[x][3] ^ s[x][4]  stored at [50+2x, 51+2x]
+// D[x] = C[x-1 mod 5] ^ rot1(C[x+1 mod 5])  stored at [60+2x, 61+2x]
+// s[x][y] ^= D[x]
+std_crypto_keccak256__theta:
+    // Compute 5 column parities C[0..4] -> RAM[50..59]
+    // C0: s00^s01^s02^s03^s04 = mem[0,1]^mem[10,11]^mem[20,21]^mem[30,31]^mem[40,41]
+    push 0
+    call __read_lane
+    push 10
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
+    push 20
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
+    push 30
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
+    push 40
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 50
-    write_mem 2
-    pop 1
+    call __write_lane
 
-    // C1: mem[2,12,22,32,42] lo; mem[3,13,23,33,43] hi
+    // C1
     push 2
-    read_mem 1
-    pop 1
+    call __read_lane
     push 12
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 22
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 32
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 42
-    read_mem 1
-    pop 1
-    xor
-    push 3
-    read_mem 1
-    pop 1
-    push 13
-    read_mem 1
-    pop 1
-    xor
-    push 23
-    read_mem 1
-    pop 1
-    xor
-    push 33
-    read_mem 1
-    pop 1
-    xor
-    push 43
-    read_mem 1
-    pop 1
-    xor
-    swap 1
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 52
-    write_mem 2
-    pop 1
+    call __write_lane
 
-    // C2: addrs 4,14,24,34,44 lo; 5,15,25,35,45 hi
+    // C2
     push 4
-    read_mem 1
-    pop 1
+    call __read_lane
     push 14
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 24
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 34
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 44
-    read_mem 1
-    pop 1
-    xor
-    push 5
-    read_mem 1
-    pop 1
-    push 15
-    read_mem 1
-    pop 1
-    xor
-    push 25
-    read_mem 1
-    pop 1
-    xor
-    push 35
-    read_mem 1
-    pop 1
-    xor
-    push 45
-    read_mem 1
-    pop 1
-    xor
-    swap 1
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 54
-    write_mem 2
-    pop 1
+    call __write_lane
 
-    // C3: addrs 6,16,26,36,46 lo; 7,17,27,37,47 hi
+    // C3
     push 6
-    read_mem 1
-    pop 1
+    call __read_lane
     push 16
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 26
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 36
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 46
-    read_mem 1
-    pop 1
-    xor
-    push 7
-    read_mem 1
-    pop 1
-    push 17
-    read_mem 1
-    pop 1
-    xor
-    push 27
-    read_mem 1
-    pop 1
-    xor
-    push 37
-    read_mem 1
-    pop 1
-    xor
-    push 47
-    read_mem 1
-    pop 1
-    xor
-    swap 1
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 56
-    write_mem 2
-    pop 1
+    call __write_lane
 
-    // C4: addrs 8,18,28,38,48 lo; 9,19,29,39,49 hi
+    // C4
     push 8
-    read_mem 1
-    pop 1
+    call __read_lane
     push 18
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 28
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 38
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 48
-    read_mem 1
-    pop 1
-    xor
-    push 9
-    read_mem 1
-    pop 1
-    push 19
-    read_mem 1
-    pop 1
-    xor
-    push 29
-    read_mem 1
-    pop 1
-    xor
-    push 39
-    read_mem 1
-    pop 1
-    xor
-    push 49
-    read_mem 1
-    pop 1
-    xor
-    swap 1
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 58
-    write_mem 2
-    pop 1
+    call __write_lane
 
-    // --- Compute D[x] = C[x-1] ^ rot1(C[x+1]) ---
+    // D[x] = C[x-1] ^ rot1(C[x+1])
     // D0 = C4 ^ rot1(C1)
-    push 52
-    read_mem 1
-    pop 1
-    push 53
-    read_mem 1
-    pop 1
-    swap 1
-    // [C1_lo, C1_hi]
-    call __rot1
-    // [rot_lo, rot_hi]
     push 58
-    read_mem 1
-    pop 1
-    xor
-    // [rot_lo ^ C4_lo, rot_hi]
-    swap 1
-    push 59
-    read_mem 1
-    pop 1
-    xor
-    // [rot_hi ^ C4_hi, D0_lo]
-    swap 1
-    // [D0_lo, D0_hi]
+    call __read_lane
+    push 52
+    call __read_lane
+    call __rot1_lane
+    call std_crypto_keccak256__xor_lane
     push 60
-    write_mem 2
-    pop 1
+    call __write_lane
 
     // D1 = C0 ^ rot1(C2)
-    push 54
-    read_mem 1
-    pop 1
-    push 55
-    read_mem 1
-    pop 1
-    swap 1
-    call __rot1
     push 50
-    read_mem 1
-    pop 1
-    xor
-    swap 1
-    push 51
-    read_mem 1
-    pop 1
-    xor
-    swap 1
+    call __read_lane
+    push 54
+    call __read_lane
+    call __rot1_lane
+    call std_crypto_keccak256__xor_lane
     push 62
-    write_mem 2
-    pop 1
+    call __write_lane
 
     // D2 = C1 ^ rot1(C3)
-    push 56
-    read_mem 1
-    pop 1
-    push 57
-    read_mem 1
-    pop 1
-    swap 1
-    call __rot1
     push 52
-    read_mem 1
-    pop 1
-    xor
-    swap 1
-    push 53
-    read_mem 1
-    pop 1
-    xor
-    swap 1
+    call __read_lane
+    push 56
+    call __read_lane
+    call __rot1_lane
+    call std_crypto_keccak256__xor_lane
     push 64
-    write_mem 2
-    pop 1
+    call __write_lane
 
     // D3 = C2 ^ rot1(C4)
-    push 58
-    read_mem 1
-    pop 1
-    push 59
-    read_mem 1
-    pop 1
-    swap 1
-    call __rot1
     push 54
-    read_mem 1
-    pop 1
-    xor
-    swap 1
-    push 55
-    read_mem 1
-    pop 1
-    xor
-    swap 1
+    call __read_lane
+    push 58
+    call __read_lane
+    call __rot1_lane
+    call std_crypto_keccak256__xor_lane
     push 66
-    write_mem 2
-    pop 1
+    call __write_lane
 
     // D4 = C3 ^ rot1(C0)
-    push 50
-    read_mem 1
-    pop 1
-    push 51
-    read_mem 1
-    pop 1
-    swap 1
-    call __rot1
     push 56
-    read_mem 1
-    pop 1
-    xor
-    swap 1
-    push 57
-    read_mem 1
-    pop 1
-    xor
-    swap 1
+    call __read_lane
+    push 50
+    call __read_lane
+    call __rot1_lane
+    call std_crypto_keccak256__xor_lane
     push 68
-    write_mem 2
-    pop 1
+    call __write_lane
 
-    // --- XOR D[x] into each lane of column x ---
-    call __theta_col0
-    call __theta_col1
-    call __theta_col2
-    call __theta_col3
-    call __theta_col4
+    // XOR D[x] into each of 25 state lanes
+    // Column 0: D0 at addr 60
+    call __theta_apply_d
     return
 
-// theta_colN: XOR D[N] (at addr 60+2N) into lanes at column N.
-// Column 0 lanes: addrs 0, 10, 20, 30, 40. D0 at 60,61.
-// Per lane: read lo from state, XOR with D_lo, write back. Same for hi.
-__theta_col0:
-    // Read D0
+// Apply D values to all 25 state lanes
+__theta_apply_d:
+    // For each column x (0..4), for each row y (0..4):
+    //   s[x][y] ^= D[x]
+    // D[x] at addr 60+2x, s[x][y] at addr 2*(5y+x)
+
+    // Col 0: D0 at 60. Lanes: 0, 10, 20, 30, 40
     push 60
-    read_mem 1
-    pop 1
-    push 61
-    read_mem 1
-    pop 1
-    // [D0_hi, D0_lo]
-
-    // s00 (addrs 0,1) ^= D0
+    call __read_lane
+    // XOR into 5 lanes (keep D on stack, dup for each)
+    dup 1
     dup 1
     push 0
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 0
-    write_mem 1
-    pop 1
-    dup 0
-    push 1
-    read_mem 1
-    pop 1
-    xor
-    push 1
-    write_mem 1
-    pop 1
-
-    // s01 (addrs 10,11) ^= D0
+    call __write_lane
+    dup 1
     dup 1
     push 10
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 10
-    write_mem 1
-    pop 1
-    dup 0
-    push 11
-    read_mem 1
-    pop 1
-    xor
-    push 11
-    write_mem 1
-    pop 1
-
-    // s02 (addrs 20,21) ^= D0
+    call __write_lane
+    dup 1
     dup 1
     push 20
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 20
-    write_mem 1
-    pop 1
-    dup 0
-    push 21
-    read_mem 1
-    pop 1
-    xor
-    push 21
-    write_mem 1
-    pop 1
-
-    // s03 (addrs 30,31) ^= D0
+    call __write_lane
+    dup 1
     dup 1
     push 30
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 30
-    write_mem 1
-    pop 1
-    dup 0
-    push 31
-    read_mem 1
-    pop 1
-    xor
-    push 31
-    write_mem 1
-    pop 1
-
-    // s04 (addrs 40,41) ^= D0
-    swap 1
+    call __write_lane
     push 40
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 40
-    write_mem 1
-    pop 1
-    push 41
-    read_mem 1
-    pop 1
-    xor
-    push 41
-    write_mem 1
-    pop 1
-    return
+    call __write_lane
 
-__theta_col1:
+    // Col 1: D1 at 62. Lanes: 2, 12, 22, 32, 42
     push 62
-    read_mem 1
-    pop 1
-    push 63
-    read_mem 1
-    pop 1
-
+    call __read_lane
+    dup 1
     dup 1
     push 2
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 2
-    write_mem 1
-    pop 1
-    dup 0
-    push 3
-    read_mem 1
-    pop 1
-    xor
-    push 3
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 12
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 12
-    write_mem 1
-    pop 1
-    dup 0
-    push 13
-    read_mem 1
-    pop 1
-    xor
-    push 13
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 22
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 22
-    write_mem 1
-    pop 1
-    dup 0
-    push 23
-    read_mem 1
-    pop 1
-    xor
-    push 23
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 32
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 32
-    write_mem 1
-    pop 1
-    dup 0
-    push 33
-    read_mem 1
-    pop 1
-    xor
-    push 33
-    write_mem 1
-    pop 1
-
-    swap 1
+    call __write_lane
     push 42
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 42
-    write_mem 1
-    pop 1
-    push 43
-    read_mem 1
-    pop 1
-    xor
-    push 43
-    write_mem 1
-    pop 1
-    return
+    call __write_lane
 
-__theta_col2:
+    // Col 2: D2 at 64. Lanes: 4, 14, 24, 34, 44
     push 64
-    read_mem 1
-    pop 1
-    push 65
-    read_mem 1
-    pop 1
-
+    call __read_lane
+    dup 1
     dup 1
     push 4
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 4
-    write_mem 1
-    pop 1
-    dup 0
-    push 5
-    read_mem 1
-    pop 1
-    xor
-    push 5
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 14
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 14
-    write_mem 1
-    pop 1
-    dup 0
-    push 15
-    read_mem 1
-    pop 1
-    xor
-    push 15
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 24
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 24
-    write_mem 1
-    pop 1
-    dup 0
-    push 25
-    read_mem 1
-    pop 1
-    xor
-    push 25
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 34
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 34
-    write_mem 1
-    pop 1
-    dup 0
-    push 35
-    read_mem 1
-    pop 1
-    xor
-    push 35
-    write_mem 1
-    pop 1
-
-    swap 1
+    call __write_lane
     push 44
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 44
-    write_mem 1
-    pop 1
-    push 45
-    read_mem 1
-    pop 1
-    xor
-    push 45
-    write_mem 1
-    pop 1
-    return
+    call __write_lane
 
-__theta_col3:
+    // Col 3: D3 at 66. Lanes: 6, 16, 26, 36, 46
     push 66
-    read_mem 1
-    pop 1
-    push 67
-    read_mem 1
-    pop 1
-
+    call __read_lane
+    dup 1
     dup 1
     push 6
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 6
-    write_mem 1
-    pop 1
-    dup 0
-    push 7
-    read_mem 1
-    pop 1
-    xor
-    push 7
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 16
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 16
-    write_mem 1
-    pop 1
-    dup 0
-    push 17
-    read_mem 1
-    pop 1
-    xor
-    push 17
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 26
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 26
-    write_mem 1
-    pop 1
-    dup 0
-    push 27
-    read_mem 1
-    pop 1
-    xor
-    push 27
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 36
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 36
-    write_mem 1
-    pop 1
-    dup 0
-    push 37
-    read_mem 1
-    pop 1
-    xor
-    push 37
-    write_mem 1
-    pop 1
-
-    swap 1
+    call __write_lane
     push 46
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 46
-    write_mem 1
-    pop 1
-    push 47
-    read_mem 1
-    pop 1
-    xor
-    push 47
-    write_mem 1
-    pop 1
-    return
+    call __write_lane
 
-__theta_col4:
+    // Col 4: D4 at 68. Lanes: 8, 18, 28, 38, 48
     push 68
-    read_mem 1
-    pop 1
-    push 69
-    read_mem 1
-    pop 1
-
+    call __read_lane
+    dup 1
     dup 1
     push 8
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 8
-    write_mem 1
-    pop 1
-    dup 0
-    push 9
-    read_mem 1
-    pop 1
-    xor
-    push 9
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 18
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 18
-    write_mem 1
-    pop 1
-    dup 0
-    push 19
-    read_mem 1
-    pop 1
-    xor
-    push 19
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 28
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 28
-    write_mem 1
-    pop 1
-    dup 0
-    push 29
-    read_mem 1
-    pop 1
-    xor
-    push 29
-    write_mem 1
-    pop 1
-
+    call __write_lane
+    dup 1
     dup 1
     push 38
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 38
-    write_mem 1
-    pop 1
-    dup 0
-    push 39
-    read_mem 1
-    pop 1
-    xor
-    push 39
-    write_mem 1
-    pop 1
-
-    swap 1
+    call __write_lane
     push 48
-    read_mem 1
-    pop 1
-    xor
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
     push 48
-    write_mem 1
-    pop 1
-    push 49
-    read_mem 1
-    pop 1
-    xor
-    push 49
-    write_mem 1
-    pop 1
+    call __write_lane
     return
 
 // ===================================================================
-// RHO step: rotate each lane by its fixed offset
-// Offsets: s00:0 s10:1 s20:62 s30:28 s40:27
-//          s01:36 s11:44 s21:6 s31:55 s41:20
-//          s02:3 s12:10 s22:43 s32:25 s42:39
-//          s03:41 s13:45 s23:15 s33:21 s43:8
-//          s04:18 s14:2 s24:61 s34:56 s44:14
-//
-// Small rotation (0 < n < 32): use __apply_rot with pow2n
-// Large rotation (32 < n < 64): swap halves then rot by n-32
-// Rotation by 1: use __rot1 (cheaper, avoids mul)
+// ROT1 (used by theta for D computation)
 // ===================================================================
-__rho:
-    // s00: rot 0 -> no-op
-
-    // s10 (addr 2,3): rot 1
+// rot1_lane: [lo hi] -> [lo' hi'] rotate 64-bit lane left by 1
+// new_lo = (lo << 1) | (hi >> 31)
+// new_hi = (hi << 1) | (lo >> 31)
+// lo<<1: lo*2 in field, split -> (carry, shifted). carry = bit 31.
+// rot1_lane: [lo hi] -> [lo' hi'] rotate 64-bit left by 1
+// Uses __do_rot with shift_factor = 2
+__rot1_lane:
     push 2
-    read_mem 1
-    pop 1
-    push 3
-    read_mem 1
-    pop 1
+    push 120
     swap 1
-    // [lo, hi]
-    call __rot1
-    // [new_lo, new_hi]
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+
+// ===================================================================
+// RHO (lane rotations by fixed offsets)
+// ===================================================================
+// 24 non-trivial rotations. Each reads a lane, rotates, writes back.
+// For rotation by n bits (0 < n < 32): use shift via field mul.
+// For rotation by 32: swap lo and hi.
+// For rotation by n > 32: swap then rotate by n-32.
+// Rotation by 0: skip (lane 0,0).
+std_crypto_keccak256__rho:
+    // s10 (addr 2): rot 1
     push 2
-    write_mem 1
-    pop 1
-    push 3
-    write_mem 1
-    pop 1
-
-    // s20 (addr 4,5): rot 62 = swap halves + rot_small(30), 2^30 = 1073741824
+    call __read_lane
+    call __rot_1
+    push 2
+    call __write_lane
+    // s20 (addr 4): rot 62 = swap + rot 30
     push 4
-    read_mem 1
-    pop 1
-    push 5
-    read_mem 1
-    pop 1
-    swap 1
-    // [lo, hi] -> swap for large rotation
-    swap 1
-    // [hi, lo] (hi becomes "new lo" input, lo becomes "new hi" input)
-    push 1073741824
-    call __apply_rot
+    call __read_lane
+    call __rot_62
     push 4
-    write_mem 1
-    pop 1
-    push 5
-    write_mem 1
-    pop 1
-
-    // s30 (addr 6,7): rot 28, 2^28 = 268435456
+    call __write_lane
+    // s30 (addr 6): rot 28
     push 6
-    read_mem 1
-    pop 1
-    push 7
-    read_mem 1
-    pop 1
-    swap 1
-    push 268435456
-    call __apply_rot
+    call __read_lane
+    call __rot_28
     push 6
-    write_mem 1
-    pop 1
-    push 7
-    write_mem 1
-    pop 1
-
-    // s40 (addr 8,9): rot 27, 2^27 = 134217728
+    call __write_lane
+    // s40 (addr 8): rot 27
     push 8
-    read_mem 1
-    pop 1
-    push 9
-    read_mem 1
-    pop 1
-    swap 1
-    push 134217728
-    call __apply_rot
+    call __read_lane
+    call __rot_27
     push 8
-    write_mem 1
-    pop 1
-    push 9
-    write_mem 1
-    pop 1
-
-    // s01 (addr 10,11): rot 36 = swap + rot_small(4), 2^4 = 16
+    call __write_lane
+    // s01 (addr 10): rot 36 = swap + rot 4
     push 10
-    read_mem 1
-    pop 1
-    push 11
-    read_mem 1
-    pop 1
-    // [hi, lo] from read order -> swap for large rot means feed as [lo_orig, hi_orig]
-    // Actually for large rot: swap halves first, then small rot.
-    // read_mem gives [hi, lo] after the lo/hi naming. But let me be careful:
-    // addr 10 = s01_lo, addr 11 = s01_hi
-    // read_mem 1 from 10 -> s01_lo; read_mem 1 from 11 -> s01_hi
-    // Stack after reads: [s01_hi, s01_lo]
-    // swap 1: [s01_lo, s01_hi] -- normal order
-    swap 1
-    // For large rotation (>32): swap halves then rot_small(n-32)
-    // swap 1 again to swap halves: [s01_hi, s01_lo]
-    swap 1
-    push 16
-    call __apply_rot
+    call __read_lane
+    call __rot_36
     push 10
-    write_mem 1
-    pop 1
-    push 11
-    write_mem 1
-    pop 1
-
-    // s11 (addr 12,13): rot 44 = swap + rot_small(12), 2^12 = 4096
+    call __write_lane
+    // s11 (addr 12): rot 44 = swap + rot 12
     push 12
-    read_mem 1
-    pop 1
-    push 13
-    read_mem 1
-    pop 1
-    swap 1
-    swap 1
-    push 4096
-    call __apply_rot
+    call __read_lane
+    call __rot_44
     push 12
-    write_mem 1
-    pop 1
-    push 13
-    write_mem 1
-    pop 1
-
-    // s21 (addr 14,15): rot 6, 2^6 = 64
+    call __write_lane
+    // s21 (addr 14): rot 6
     push 14
+    call __read_lane
+    call __rot_6
+    push 14
+    call __write_lane
+    // s31 (addr 16): rot 55 = swap + rot 23
+    push 16
+    call __read_lane
+    call __rot_55
+    push 16
+    call __write_lane
+    // s41 (addr 18): rot 20
+    push 18
+    call __read_lane
+    call __rot_20
+    push 18
+    call __write_lane
+    // s02 (addr 20): rot 3
+    push 20
+    call __read_lane
+    call __rot_3
+    push 20
+    call __write_lane
+    // s12 (addr 22): rot 10
+    push 22
+    call __read_lane
+    call __rot_10
+    push 22
+    call __write_lane
+    // s22 (addr 24): rot 43 = swap + rot 11
+    push 24
+    call __read_lane
+    call __rot_43
+    push 24
+    call __write_lane
+    // s32 (addr 26): rot 25
+    push 26
+    call __read_lane
+    call __rot_25
+    push 26
+    call __write_lane
+    // s42 (addr 28): rot 39 = swap + rot 7
+    push 28
+    call __read_lane
+    call __rot_39
+    push 28
+    call __write_lane
+    // s03 (addr 30): rot 41 = swap + rot 9
+    push 30
+    call __read_lane
+    call __rot_41
+    push 30
+    call __write_lane
+    // s13 (addr 32): rot 45 = swap + rot 13
+    push 32
+    call __read_lane
+    call __rot_45
+    push 32
+    call __write_lane
+    // s23 (addr 34): rot 15
+    push 34
+    call __read_lane
+    call __rot_15
+    push 34
+    call __write_lane
+    // s33 (addr 36): rot 21
+    push 36
+    call __read_lane
+    call __rot_21
+    push 36
+    call __write_lane
+    // s43 (addr 38): rot 8
+    push 38
+    call __read_lane
+    call __rot_8
+    push 38
+    call __write_lane
+    // s04 (addr 40): rot 18
+    push 40
+    call __read_lane
+    call __rot_18
+    push 40
+    call __write_lane
+    // s14 (addr 42): rot 2
+    push 42
+    call __read_lane
+    call __rot_2
+    push 42
+    call __write_lane
+    // s24 (addr 44): rot 61 = swap + rot 29
+    push 44
+    call __read_lane
+    call __rot_61
+    push 44
+    call __write_lane
+    // s34 (addr 46): rot 56 = swap + rot 24
+    push 46
+    call __read_lane
+    call __rot_56
+    push 46
+    call __write_lane
+    // s44 (addr 48): rot 14
+    push 48
+    call __read_lane
+    call __rot_14
+    push 48
+    call __write_lane
+    return
+
+// Generic rotation: [lo hi] -> [lo' hi'] by n bits (0 < n < 32)
+// lo' = (lo << n) | (hi >> (32-n))
+// hi' = (hi << n) | (lo >> (32-n))
+// shift_factor = 2^n
+// lo * shift_factor -> split -> (lo_carry, lo_shifted)
+// hi * shift_factor -> split -> (hi_carry, hi_shifted)
+// new_lo = lo_shifted ^ hi_carry, new_hi = hi_shifted ^ lo_carry
+
+
+// Simpler rotation using memory for temp storage
+// __do_rot: [lo hi] -> [lo' hi'], shift_factor at mem[120]
+__do_rot:
+    // Read shift factor from mem[120]
+    push 120
     read_mem 1
     pop 1
-    push 15
-    read_mem 1
-    pop 1
+    // Stack: lo hi factor
+    // hi * factor -> split
     swap 1
+    dup 1
+    mul
+    split
+    // Stack: lo factor hi_carry hi_shifted
+    // Store hi_shifted at mem[121]
+    push 121
+    swap 1
+    write_mem 1
+    pop 1
+    // Store hi_carry at mem[122]
+    push 122
+    swap 1
+    write_mem 1
+    pop 1
+    // Stack: lo factor
+    mul
+    split
+    // Stack: lo_carry lo_shifted
+    // new_lo = lo_shifted ^ hi_carry (mem[122])
+    push 122
+    read_mem 1
+    pop 1
+    xor
+    // Stack: lo_carry new_lo
+    swap 1
+    // new_hi = hi_shifted (mem[121]) ^ lo_carry
+    push 121
+    read_mem 1
+    pop 1
+    xor
+    // Stack: new_lo new_hi
+    return
+
+// Rotation helpers: push shift factor to mem[120], call __do_rot
+// For n < 32: shift_factor = 2^n
+// For n >= 32: swap lo/hi first, then rotate by n-32
+
+__rot_1:
+    push 2
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_2:
+    push 4
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_3:
+    push 8
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_6:
     push 64
-    call __apply_rot
-    push 14
-    write_mem 1
-    pop 1
-    push 15
-    write_mem 1
-    pop 1
-
-    // s31 (addr 16,17): rot 55 = swap + rot_small(23), 2^23 = 8388608
-    push 16
-    read_mem 1
-    pop 1
-    push 17
-    read_mem 1
-    pop 1
+    push 120
     swap 1
-    swap 1
-    push 8388608
-    call __apply_rot
-    push 16
     write_mem 1
     pop 1
-    push 17
-    write_mem 1
-    pop 1
-
-    // s41 (addr 18,19): rot 20, 2^20 = 1048576
-    push 18
-    read_mem 1
-    pop 1
-    push 19
-    read_mem 1
-    pop 1
-    swap 1
-    push 1048576
-    call __apply_rot
-    push 18
-    write_mem 1
-    pop 1
-    push 19
-    write_mem 1
-    pop 1
-
-    // s02 (addr 20,21): rot 3, 2^3 = 8
-    push 20
-    read_mem 1
-    pop 1
-    push 21
-    read_mem 1
-    pop 1
-    swap 1
-    push 8
-    call __apply_rot
-    push 20
-    write_mem 1
-    pop 1
-    push 21
-    write_mem 1
-    pop 1
-
-    // s12 (addr 22,23): rot 10, 2^10 = 1024
-    push 22
-    read_mem 1
-    pop 1
-    push 23
-    read_mem 1
-    pop 1
-    swap 1
-    push 1024
-    call __apply_rot
-    push 22
-    write_mem 1
-    pop 1
-    push 23
-    write_mem 1
-    pop 1
-
-    // s22 (addr 24,25): rot 43 = swap + rot_small(11), 2^11 = 2048
-    push 24
-    read_mem 1
-    pop 1
-    push 25
-    read_mem 1
-    pop 1
-    swap 1
-    swap 1
-    push 2048
-    call __apply_rot
-    push 24
-    write_mem 1
-    pop 1
-    push 25
-    write_mem 1
-    pop 1
-
-    // s32 (addr 26,27): rot 25, 2^25 = 33554432
-    push 26
-    read_mem 1
-    pop 1
-    push 27
-    read_mem 1
-    pop 1
-    swap 1
-    push 33554432
-    call __apply_rot
-    push 26
-    write_mem 1
-    pop 1
-    push 27
-    write_mem 1
-    pop 1
-
-    // s42 (addr 28,29): rot 39 = swap + rot_small(7), 2^7 = 128
-    push 28
-    read_mem 1
-    pop 1
-    push 29
-    read_mem 1
-    pop 1
-    swap 1
-    swap 1
+    call __do_rot
+    return
+__rot_7:
     push 128
-    call __apply_rot
-    push 28
-    write_mem 1
-    pop 1
-    push 29
-    write_mem 1
-    pop 1
-
-    // s03 (addr 30,31): rot 41 = swap + rot_small(9), 2^9 = 512
-    push 30
-    read_mem 1
-    pop 1
-    push 31
-    read_mem 1
-    pop 1
+    push 120
     swap 1
-    swap 1
-    push 512
-    call __apply_rot
-    push 30
     write_mem 1
     pop 1
-    push 31
-    write_mem 1
-    pop 1
-
-    // s13 (addr 32,33): rot 45 = swap + rot_small(13), 2^13 = 8192
-    push 32
-    read_mem 1
-    pop 1
-    push 33
-    read_mem 1
-    pop 1
-    swap 1
-    swap 1
-    push 8192
-    call __apply_rot
-    push 32
-    write_mem 1
-    pop 1
-    push 33
-    write_mem 1
-    pop 1
-
-    // s23 (addr 34,35): rot 15, 2^15 = 32768
-    push 34
-    read_mem 1
-    pop 1
-    push 35
-    read_mem 1
-    pop 1
-    swap 1
-    push 32768
-    call __apply_rot
-    push 34
-    write_mem 1
-    pop 1
-    push 35
-    write_mem 1
-    pop 1
-
-    // s33 (addr 36,37): rot 21, 2^21 = 2097152
-    push 36
-    read_mem 1
-    pop 1
-    push 37
-    read_mem 1
-    pop 1
-    swap 1
-    push 2097152
-    call __apply_rot
-    push 36
-    write_mem 1
-    pop 1
-    push 37
-    write_mem 1
-    pop 1
-
-    // s43 (addr 38,39): rot 8, 2^8 = 256
-    push 38
-    read_mem 1
-    pop 1
-    push 39
-    read_mem 1
-    pop 1
-    swap 1
+    call __do_rot
+    return
+__rot_8:
     push 256
-    call __apply_rot
-    push 38
-    write_mem 1
-    pop 1
-    push 39
-    write_mem 1
-    pop 1
-
-    // s04 (addr 40,41): rot 18, 2^18 = 262144
-    push 40
-    read_mem 1
-    pop 1
-    push 41
-    read_mem 1
-    pop 1
+    push 120
     swap 1
-    push 262144
-    call __apply_rot
-    push 40
     write_mem 1
     pop 1
-    push 41
-    write_mem 1
-    pop 1
-
-    // s14 (addr 42,43): rot 2, 2^2 = 4
-    push 42
-    read_mem 1
-    pop 1
-    push 43
-    read_mem 1
-    pop 1
+    call __do_rot
+    return
+__rot_9:
+    push 512
+    push 120
     swap 1
-    push 4
-    call __apply_rot
-    push 42
     write_mem 1
     pop 1
-    push 43
-    write_mem 1
-    pop 1
-
-    // s24 (addr 44,45): rot 61 = swap + rot_small(29), 2^29 = 536870912
-    push 44
-    read_mem 1
-    pop 1
-    push 45
-    read_mem 1
-    pop 1
+    call __do_rot
+    return
+__rot_10:
+    push 1024
+    push 120
     swap 1
-    swap 1
-    push 536870912
-    call __apply_rot
-    push 44
     write_mem 1
     pop 1
-    push 45
+    call __do_rot
+    return
+__rot_11:
+    push 2048
+    push 120
+    swap 1
     write_mem 1
     pop 1
-
-    // s34 (addr 46,47): rot 56 = swap + rot_small(24), 2^24 = 16777216
-    push 46
-    read_mem 1
-    pop 1
-    push 47
-    read_mem 1
-    pop 1
+    call __do_rot
+    return
+__rot_12:
+    push 4096
+    push 120
     swap 1
-    swap 1
-    push 16777216
-    call __apply_rot
-    push 46
     write_mem 1
     pop 1
-    push 47
+    call __do_rot
+    return
+__rot_13:
+    push 8192
+    push 120
+    swap 1
     write_mem 1
     pop 1
-
-    // s44 (addr 48,49): rot 14, 2^14 = 16384
-    push 48
-    read_mem 1
-    pop 1
-    push 49
-    read_mem 1
-    pop 1
-    swap 1
+    call __do_rot
+    return
+__rot_14:
     push 16384
-    call __apply_rot
-    push 48
+    push 120
+    swap 1
     write_mem 1
     pop 1
-    push 49
+    call __do_rot
+    return
+__rot_15:
+    push 32768
+    push 120
+    swap 1
     write_mem 1
     pop 1
+    call __do_rot
+    return
+__rot_18:
+    push 262144
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_20:
+    push 1048576
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_21:
+    push 2097152
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_23:
+    push 8388608
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_24:
+    push 16777216
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_25:
+    push 33554432
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_27:
+    push 134217728
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_28:
+    push 268435456
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_29:
+    push 536870912
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_30:
+    push 1073741824
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
 
+// Compound rotations for n >= 32: swap halves then rotate by n-32
+__rot_36:
+    swap 1
+    call __rot_4
+    return
+__rot_4:
+    push 16
+    push 120
+    swap 1
+    write_mem 1
+    pop 1
+    call __do_rot
+    return
+__rot_39:
+    swap 1
+    call __rot_7
+    return
+__rot_41:
+    swap 1
+    call __rot_9
+    return
+__rot_43:
+    swap 1
+    call __rot_11
+    return
+__rot_44:
+    swap 1
+    call __rot_12
+    return
+__rot_45:
+    swap 1
+    call __rot_13
+    return
+__rot_55:
+    swap 1
+    call __rot_23
+    return
+__rot_56:
+    swap 1
+    call __rot_24
+    return
+__rot_61:
+    swap 1
+    call __rot_29
+    return
+__rot_62:
+    swap 1
+    call __rot_30
     return
 
 // ===================================================================
-// PI step: lane permutation
-// Copy state to temp[70..119] applying pi mapping, then copy back.
-// Pi mapping (new <- old):
-//   new_s00 <- s00   new_s10 <- s11   new_s20 <- s22   new_s30 <- s33   new_s40 <- s44
-//   new_s01 <- s30   new_s11 <- s41   new_s21 <- s02   new_s31 <- s13   new_s41 <- s24
-//   new_s02 <- s10   new_s12 <- s21   new_s22 <- s32   new_s32 <- s43   new_s42 <- s04
-//   new_s03 <- s40   new_s13 <- s01   new_s23 <- s12   new_s33 <- s23   new_s43 <- s34
-//   new_s04 <- s20   new_s14 <- s31   new_s24 <- s42   new_s34 <- s03   new_s44 <- s14
-//
-// Source RAM addr -> Temp addr (= 70 + dest_lane_index * 2)
+// PI (lane permutation)
 // ===================================================================
-__pi:
-    // Each pi copy: read lo and hi from source, write to temp dest.
-    // Using read_mem 1 for clarity.
-
-    // new_s00 <- s00 (src 0,1 -> dst 70,71)
-    push 0
-    read_mem 1
+// new[y][2x+3y mod 5] = old[x][y]
+// Copy state to temp[70..119], then write back in permuted order.
+std_crypto_keccak256__pi:
+    // Copy all 50 words from state[0..49] to temp[70..119]
+    push 4
+    read_mem 5
+    swap 5
     pop 1
     push 70
-    write_mem 1
-    pop 1
-    push 1
-    read_mem 1
-    pop 1
-    push 71
-    write_mem 1
+    swap 5
+    write_mem 5
     pop 1
 
-    // new_s10 <- s11 (src 12,13 -> dst 72,73)
-    push 12
-    read_mem 1
-    pop 1
-    push 72
-    write_mem 1
-    pop 1
-    push 13
-    read_mem 1
-    pop 1
-    push 73
-    write_mem 1
-    pop 1
-
-    // new_s20 <- s22 (src 24,25 -> dst 74,75)
-    push 24
-    read_mem 1
-    pop 1
-    push 74
-    write_mem 1
-    pop 1
-    push 25
-    read_mem 1
+    push 9
+    read_mem 5
+    swap 5
     pop 1
     push 75
-    write_mem 1
+    swap 5
+    write_mem 5
     pop 1
 
-    // new_s30 <- s33 (src 36,37 -> dst 76,77)
-    push 36
-    read_mem 1
-    pop 1
-    push 76
-    write_mem 1
-    pop 1
-    push 37
-    read_mem 1
-    pop 1
-    push 77
-    write_mem 1
-    pop 1
-
-    // new_s40 <- s44 (src 48,49 -> dst 78,79)
-    push 48
-    read_mem 1
-    pop 1
-    push 78
-    write_mem 1
-    pop 1
-    push 49
-    read_mem 1
-    pop 1
-    push 79
-    write_mem 1
-    pop 1
-
-    // new_s01 <- s30 (src 6,7 -> dst 80,81)
-    push 6
-    read_mem 1
+    push 14
+    read_mem 5
+    swap 5
     pop 1
     push 80
-    write_mem 1
-    pop 1
-    push 7
-    read_mem 1
-    pop 1
-    push 81
-    write_mem 1
+    swap 5
+    write_mem 5
     pop 1
 
-    // new_s11 <- s41 (src 18,19 -> dst 82,83)
-    push 18
-    read_mem 1
-    pop 1
-    push 82
-    write_mem 1
-    pop 1
     push 19
-    read_mem 1
-    pop 1
-    push 83
-    write_mem 1
-    pop 1
-
-    // new_s21 <- s02 (src 20,21 -> dst 84,85)
-    push 20
-    read_mem 1
-    pop 1
-    push 84
-    write_mem 1
-    pop 1
-    push 21
-    read_mem 1
+    read_mem 5
+    swap 5
     pop 1
     push 85
-    write_mem 1
+    swap 5
+    write_mem 5
     pop 1
 
-    // new_s31 <- s13 (src 32,33 -> dst 86,87)
-    push 32
-    read_mem 1
-    pop 1
-    push 86
-    write_mem 1
-    pop 1
-    push 33
-    read_mem 1
-    pop 1
-    push 87
-    write_mem 1
-    pop 1
-
-    // new_s41 <- s24 (src 44,45 -> dst 88,89)
-    push 44
-    read_mem 1
-    pop 1
-    push 88
-    write_mem 1
-    pop 1
-    push 45
-    read_mem 1
-    pop 1
-    push 89
-    write_mem 1
-    pop 1
-
-    // new_s02 <- s10 (src 2,3 -> dst 90,91)
-    push 2
-    read_mem 1
+    push 24
+    read_mem 5
+    swap 5
     pop 1
     push 90
-    write_mem 1
-    pop 1
-    push 3
-    read_mem 1
-    pop 1
-    push 91
-    write_mem 1
+    swap 5
+    write_mem 5
     pop 1
 
-    // new_s12 <- s21 (src 14,15 -> dst 92,93)
-    push 14
-    read_mem 1
-    pop 1
-    push 92
-    write_mem 1
-    pop 1
-    push 15
-    read_mem 1
-    pop 1
-    push 93
-    write_mem 1
-    pop 1
-
-    // new_s22 <- s32 (src 26,27 -> dst 94,95)
-    push 26
-    read_mem 1
-    pop 1
-    push 94
-    write_mem 1
-    pop 1
-    push 27
-    read_mem 1
+    push 29
+    read_mem 5
+    swap 5
     pop 1
     push 95
-    write_mem 1
+    swap 5
+    write_mem 5
     pop 1
 
-    // new_s32 <- s43 (src 38,39 -> dst 96,97)
-    push 38
-    read_mem 1
-    pop 1
-    push 96
-    write_mem 1
-    pop 1
-    push 39
-    read_mem 1
-    pop 1
-    push 97
-    write_mem 1
-    pop 1
-
-    // new_s42 <- s04 (src 40,41 -> dst 98,99)
-    push 40
-    read_mem 1
-    pop 1
-    push 98
-    write_mem 1
-    pop 1
-    push 41
-    read_mem 1
-    pop 1
-    push 99
-    write_mem 1
-    pop 1
-
-    // new_s03 <- s40 (src 8,9 -> dst 100,101)
-    push 8
-    read_mem 1
+    push 34
+    read_mem 5
+    swap 5
     pop 1
     push 100
-    write_mem 1
-    pop 1
-    push 9
-    read_mem 1
-    pop 1
-    push 101
-    write_mem 1
-    pop 1
-
-    // new_s13 <- s01 (src 10,11 -> dst 102,103)
-    push 10
-    read_mem 1
-    pop 1
-    push 102
-    write_mem 1
-    pop 1
-    push 11
-    read_mem 1
-    pop 1
-    push 103
-    write_mem 1
-    pop 1
-
-    // new_s23 <- s12 (src 22,23 -> dst 104,105)
-    push 22
-    read_mem 1
-    pop 1
-    push 104
-    write_mem 1
-    pop 1
-    push 23
-    read_mem 1
-    pop 1
-    push 105
-    write_mem 1
-    pop 1
-
-    // new_s33 <- s23 (src 34,35 -> dst 106,107)
-    push 34
-    read_mem 1
-    pop 1
-    push 106
-    write_mem 1
-    pop 1
-    push 35
-    read_mem 1
-    pop 1
-    push 107
-    write_mem 1
-    pop 1
-
-    // new_s43 <- s34 (src 46,47 -> dst 108,109)
-    push 46
-    read_mem 1
-    pop 1
-    push 108
-    write_mem 1
-    pop 1
-    push 47
-    read_mem 1
-    pop 1
-    push 109
-    write_mem 1
-    pop 1
-
-    // new_s04 <- s20 (src 4,5 -> dst 110,111)
-    push 4
-    read_mem 1
-    pop 1
-    push 110
-    write_mem 1
-    pop 1
-    push 5
-    read_mem 1
-    pop 1
-    push 111
-    write_mem 1
-    pop 1
-
-    // new_s14 <- s31 (src 16,17 -> dst 112,113)
-    push 16
-    read_mem 1
-    pop 1
-    push 112
-    write_mem 1
-    pop 1
-    push 17
-    read_mem 1
-    pop 1
-    push 113
-    write_mem 1
-    pop 1
-
-    // new_s24 <- s42 (src 28,29 -> dst 114,115)
-    push 28
-    read_mem 1
-    pop 1
-    push 114
-    write_mem 1
-    pop 1
-    push 29
-    read_mem 1
-    pop 1
-    push 115
-    write_mem 1
-    pop 1
-
-    // new_s34 <- s03 (src 30,31 -> dst 116,117)
-    push 30
-    read_mem 1
-    pop 1
-    push 116
-    write_mem 1
-    pop 1
-    push 31
-    read_mem 1
-    pop 1
-    push 117
-    write_mem 1
-    pop 1
-
-    // new_s44 <- s14 (src 42,43 -> dst 118,119)
-    push 42
-    read_mem 1
-    pop 1
-    push 118
-    write_mem 1
-    pop 1
-    push 43
-    read_mem 1
-    pop 1
-    push 119
-    write_mem 1
-    pop 1
-
-    // Copy temp[70..119] back to state[0..49]
-    // 50 values: read from temp, write to state
-    push 119
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    read_mem 5
-    pop 1
-    push 0
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    write_mem 5
-    pop 1
-    return
-
-// ===================================================================
-// CHI step: nonlinear row mixing
-// new[x][y] = state[x][y] ^ (~state[(x+1)%5][y] & state[(x+2)%5][y])
-//
-// Decomposed into helper functions matching the .tri source:
-//   __xor_lane, __and_lane, __not_lane -> __chi_lane -> __chi
-// ===================================================================
-
-// __xor_lane: XOR two lanes
-// Stack: [b.hi, b.lo, a.hi, a.lo] -> [r.hi, r.lo]
-__xor_lane:
-    swap 3
-    xor
-    swap 2
-    xor
-    return
-
-// __and_lane: AND two lanes
-// Stack: [b.hi, b.lo, a.hi, a.lo] -> [r.hi, r.lo]
-__and_lane:
-    swap 3
-    and
-    swap 2
-    and
-    return
-
-// __not_lane: bitwise NOT of a lane (XOR with all-ones mask)
-// Stack: [a.hi, a.lo] -> [~a.hi, ~a.lo]
-__not_lane:
-    push 4294967295
-    dup 0
-    swap 2
-    xor
-    swap 2
-    xor
-    swap 1
-    return
-
-// __chi_lane: compute one lane of chi
-// Stack: [a.hi, a.lo, b.hi, b.lo, c.hi, c.lo] -> [r.hi, r.lo]
-// r = a ^ (~b & c)
-//
-// Compute r.lo = a.lo ^ (~b.lo & c.lo), r.hi = a.hi ^ (~b.hi & c.hi)
-// Uses scratch RAM at 1073741800-1073741801 to stash result.
-__chi_lane:
-    // --- r.lo = a.lo ^ (~b.lo & c.lo) ---
-    // Stack: [a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    //         st0   st1   st2   st3   st4   st5
-    dup 3            // [b.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    push 4294967295
-    xor              // [~b.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    dup 6            // [c.lo, ~b.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    and              // [~b.lo&c.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    dup 2            // [a.lo, ~b.lo&c.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    xor              // [r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-
-    // --- r.hi = a.hi ^ (~b.hi & c.hi) ---
-    // Stack: [r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    //         st0   st1   st2   st3   st4   st5   st6
-    dup 3            // [b.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    push 4294967295
-    xor              // [~b.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    dup 6            // [c.hi, ~b.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    and              // [~b.hi&c.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    dup 2            // [a.hi, ~b.hi&c.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    xor              // [r.hi, r.lo, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-
-    // Stash result to scratch RAM, discard dead values, restore
-    push 1073741800
-    swap 2           // [r.lo, r.hi, 1073741800, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    write_mem 2      // writes r.hi->1073741800, r.lo->1073741801
-                     // [1073741802, a.hi, a.lo, b.hi, b.lo, c.hi, c.lo]
-    pop 5            // [c.hi, c.lo]
-    pop 2            // []
-    push 1073741801
-    read_mem 2       // [r.lo, r.hi, 1073741799]
-    swap 2           // [1073741799, r.hi, r.lo]
-    pop 1            // [r.hi, r.lo]
-    return
-
-// __chi: apply chi step to all 25 lanes
-// Processes 5 rows. For each row:
-//   1. Bulk-copy the 5 lanes (10 values) to temp[70..79]
-//   2. For each lane x: chi_lane(s[x], s[(x+1)%5], s[(x+2)%5])
-//   3. Write result back to state
-//
-// State layout: row y has lanes at addrs 10*y .. 10*y+9
-//   Lane x in row y: lo = 10*y + 2*x, hi = 10*y + 2*x + 1
-// Temp layout: lane x -> lo = 70 + 2*x, hi = 70 + 2*x + 1
-//
-// Bulk copy pattern (5 values from SRC_TOP down to DST):
-//   push SRC_TOP; read_mem 5  -> [v4,v3,v2,v1,v0, residual]
-//   swap 5; pop 1; push DST; swap 5  -> [v4,v3,v2,v1,v0, DST]
-//   write_mem 5  -> [DST+5]
-//   pop 1
-//
-// Lane load: push addr; read_mem 1; pop 1 (3 ops per half, 6 per lane)
-// Lane write: swap 1; push LO; swap 1; write_mem 1; swap 1; write_mem 1; pop 1
-__chi:
-    // ---------------------------------------------------------------
-    // Row 0: state[0..9] -> temp[70..79]
-    // ---------------------------------------------------------------
-
-    // Bulk copy state[0..4] -> temp[70..74]
-    push 4
-    read_mem 5
-    swap 5
-    pop 1
-    push 70
-    swap 5
-    write_mem 5
-    pop 1
-    // Bulk copy state[5..9] -> temp[75..79]
-    push 9
-    read_mem 5
-    swap 5
-    pop 1
-    push 75
     swap 5
     write_mem 5
     pop 1
 
-    // Lane 0: chi_lane(a=temp[70/71], b=temp[72/73], c=temp[74/75])
-    // Push c first (deepest), then b, then a (on top)
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    call __chi_lane
-    // Write result [r.hi, r.lo] to state[0/1]
-    swap 1
-    push 0
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 1: chi_lane(a=temp[72/73], b=temp[74/75], c=temp[76/77])
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 2
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 2: chi_lane(a=temp[74/75], b=temp[76/77], c=temp[78/79])
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 4
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 3: chi_lane(a=temp[76/77], b=temp[78/79], c=temp[70/71])
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 6
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 4: chi_lane(a=temp[78/79], b=temp[70/71], c=temp[72/73])
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 8
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // ---------------------------------------------------------------
-    // Row 1: state[10..19] -> temp[70..79]
-    // ---------------------------------------------------------------
-
-    push 14
-    read_mem 5
-    swap 5
-    pop 1
-    push 70
-    swap 5
-    write_mem 5
-    pop 1
-    push 19
-    read_mem 5
-    swap 5
-    pop 1
-    push 75
-    swap 5
-    write_mem 5
-    pop 1
-
-    // Lane 0: chi_lane(a=temp[70/71], b=temp[72/73], c=temp[74/75])
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 10
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 1: chi_lane(a=temp[72/73], b=temp[74/75], c=temp[76/77])
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 12
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 2: chi_lane(a=temp[74/75], b=temp[76/77], c=temp[78/79])
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 14
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 3: chi_lane(a=temp[76/77], b=temp[78/79], c=temp[70/71])
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 16
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 4: chi_lane(a=temp[78/79], b=temp[70/71], c=temp[72/73])
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 18
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // ---------------------------------------------------------------
-    // Row 2: state[20..29] -> temp[70..79]
-    // ---------------------------------------------------------------
-
-    push 24
-    read_mem 5
-    swap 5
-    pop 1
-    push 70
-    swap 5
-    write_mem 5
-    pop 1
-    push 29
-    read_mem 5
-    swap 5
-    pop 1
-    push 75
-    swap 5
-    write_mem 5
-    pop 1
-
-    // Lane 0: chi_lane(a=temp[70/71], b=temp[72/73], c=temp[74/75])
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 20
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 1: chi_lane(a=temp[72/73], b=temp[74/75], c=temp[76/77])
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 22
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 2: chi_lane(a=temp[74/75], b=temp[76/77], c=temp[78/79])
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 24
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 3: chi_lane(a=temp[76/77], b=temp[78/79], c=temp[70/71])
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 26
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 4: chi_lane(a=temp[78/79], b=temp[70/71], c=temp[72/73])
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 28
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // ---------------------------------------------------------------
-    // Row 3: state[30..39] -> temp[70..79]
-    // ---------------------------------------------------------------
-
-    push 34
-    read_mem 5
-    swap 5
-    pop 1
-    push 70
-    swap 5
-    write_mem 5
-    pop 1
     push 39
     read_mem 5
     swap 5
     pop 1
-    push 75
+    push 105
     swap 5
     write_mem 5
     pop 1
-
-    // Lane 0: chi_lane(a=temp[70/71], b=temp[72/73], c=temp[74/75])
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 30
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 1: chi_lane(a=temp[72/73], b=temp[74/75], c=temp[76/77])
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 32
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 2: chi_lane(a=temp[74/75], b=temp[76/77], c=temp[78/79])
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 34
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 3: chi_lane(a=temp[76/77], b=temp[78/79], c=temp[70/71])
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 36
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 4: chi_lane(a=temp[78/79], b=temp[70/71], c=temp[72/73])
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
-    push 38
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // ---------------------------------------------------------------
-    // Row 4: state[40..49] -> temp[70..79]
-    // ---------------------------------------------------------------
 
     push 44
     read_mem 5
     swap 5
     pop 1
-    push 70
+    push 110
     swap 5
     write_mem 5
     pop 1
+
     push 49
     read_mem 5
     swap 5
     pop 1
-    push 75
+    push 115
     swap 5
     write_mem 5
     pop 1
 
-    // Lane 0: chi_lane(a=temp[70/71], b=temp[72/73], c=temp[74/75])
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
+    // Now write back in permuted order.
+    // Mapping: new[x][y] <- old[src_x][src_y] at temp[70 + 2*(5*src_y + src_x)]
+    // s00 <- s00 (temp 70,71) -> addr 0,1
     push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
+    call __read_lane
+    push 0
+    call __write_lane
+    // s10 <- s11 (temp 82,83) -> addr 2,3
+    push 82
+    call __read_lane
+    push 2
+    call __write_lane
+    // s20 <- s22 (temp 94,95) -> addr 4,5
+    push 94
+    call __read_lane
+    push 4
+    call __write_lane
+    // s30 <- s33 (temp 106,107) -> addr 6,7
+    push 106
+    call __read_lane
+    push 6
+    call __write_lane
+    // s40 <- s44 (temp 118,119) -> addr 8,9
+    push 118
+    call __read_lane
+    push 8
+    call __write_lane
+    // s01 <- s30 (temp 76,77) -> addr 10,11
+    push 76
+    call __read_lane
+    push 10
+    call __write_lane
+    // s11 <- s41 (temp 88,89) -> addr 12,13
+    push 88
+    call __read_lane
+    push 12
+    call __write_lane
+    // s21 <- s02 (temp 90,91) -> addr 14,15
+    push 90
+    call __read_lane
+    push 14
+    call __write_lane
+    // s31 <- s13 (temp 102,103) -> addr 16,17
+    push 102
+    call __read_lane
+    push 16
+    call __write_lane
+    // s41 <- s24 (temp 114,115) -> addr 18,19
+    push 114
+    call __read_lane
+    push 18
+    call __write_lane
+    // s02 <- s10 (temp 72,73) -> addr 20,21
+    push 72
+    call __read_lane
+    push 20
+    call __write_lane
+    // s12 <- s21 (temp 84,85) -> addr 22,23
+    push 84
+    call __read_lane
+    push 22
+    call __write_lane
+    // s22 <- s32 (temp 96,97) -> addr 24,25
+    push 96
+    call __read_lane
+    push 24
+    call __write_lane
+    // s32 <- s43 (temp 108,109) -> addr 26,27
+    push 108
+    call __read_lane
+    push 26
+    call __write_lane
+    // s42 <- s04 (temp 110,111) -> addr 28,29
+    push 110
+    call __read_lane
+    push 28
+    call __write_lane
+    // s03 <- s40 (temp 78,79) -> addr 30,31
+    push 78
+    call __read_lane
+    push 30
+    call __write_lane
+    // s13 <- s01 (temp 80,81) -> addr 32,33
+    push 80
+    call __read_lane
+    push 32
+    call __write_lane
+    // s23 <- s12 (temp 92,93) -> addr 34,35
+    push 92
+    call __read_lane
+    push 34
+    call __write_lane
+    // s33 <- s23 (temp 104,105) -> addr 36,37
+    push 104
+    call __read_lane
+    push 36
+    call __write_lane
+    // s43 <- s34 (temp 116,117) -> addr 38,39
+    push 116
+    call __read_lane
+    push 38
+    call __write_lane
+    // s04 <- s20 (temp 74,75) -> addr 40,41
+    push 74
+    call __read_lane
     push 40
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 1: chi_lane(a=temp[72/73], b=temp[74/75], c=temp[76/77])
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
+    call __write_lane
+    // s14 <- s31 (temp 86,87) -> addr 42,43
+    push 86
+    call __read_lane
     push 42
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 2: chi_lane(a=temp[74/75], b=temp[76/77], c=temp[78/79])
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    push 74
-    read_mem 1
-    pop 1
-    push 75
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
+    call __write_lane
+    // s24 <- s42 (temp 98,99) -> addr 44,45
+    push 98
+    call __read_lane
     push 44
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 3: chi_lane(a=temp[76/77], b=temp[78/79], c=temp[70/71])
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    push 76
-    read_mem 1
-    pop 1
-    push 77
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
+    call __write_lane
+    // s34 <- s03 (temp 100,101) -> addr 46,47
+    push 100
+    call __read_lane
     push 46
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
-    // Lane 4: chi_lane(a=temp[78/79], b=temp[70/71], c=temp[72/73])
-    push 72
-    read_mem 1
-    pop 1
-    push 73
-    read_mem 1
-    pop 1
-    push 70
-    read_mem 1
-    pop 1
-    push 71
-    read_mem 1
-    pop 1
-    push 78
-    read_mem 1
-    pop 1
-    push 79
-    read_mem 1
-    pop 1
-    call __chi_lane
-    swap 1
+    call __write_lane
+    // s44 <- s14 (temp 112,113) -> addr 48,49
+    push 112
+    call __read_lane
     push 48
-    swap 1
-    write_mem 1
-    swap 1
-    write_mem 1
-    pop 1
-
+    call __write_lane
     return
 
 // ===================================================================
-// IOTA step: XOR round constant into lane s00
-// Stack: [rc_lo, rc_hi, ...] -> [...]
+// CHI (nonlinear row mixing)
 // ===================================================================
-__iota:
-    // XOR rc_lo into mem[0]
+// For each row: copy 5 lanes to temp, compute chi for each lane.
+// chi_lane(a, b, c) = a ^ (~b & c), where b = next lane, c = lane after that.
+std_crypto_keccak256__chi:
+    // Row 0: lanes at addrs 0,2,4,6,8 -> temp 70,72,74,76,78
     push 0
+    call __chi_row
+    // Row 1: lanes at addrs 10,12,14,16,18 -> temp 70..
+    push 10
+    call __chi_row
+    // Row 2: lanes at addrs 20,22,24,26,28
+    push 20
+    call __chi_row
+    // Row 3
+    push 30
+    call __chi_row
+    // Row 4
+    push 40
+    call __chi_row
+    return
+
+// __chi_row: [base_addr] -> []
+// Processes 5 lanes starting at base_addr (stride 2).
+// Copies to temp[70..79], then writes chi results back.
+__chi_row:
+    // Copy 5 lanes (10 words) to temp[70..79]
+    dup 0
+    call __read_lane
+    push 70
+    call __write_lane
+    dup 0
+    push 2
+    add
+    call __read_lane
+    push 72
+    call __write_lane
+    dup 0
+    push 4
+    add
+    call __read_lane
+    push 74
+    call __write_lane
+    dup 0
+    push 6
+    add
+    call __read_lane
+    push 76
+    call __write_lane
+    dup 0
+    push 8
+    add
+    call __read_lane
+    push 78
+    call __write_lane
+
+    // chi_lane(temp[70], temp[72], temp[74]) -> write to base+0
+    push 70
+    call __read_lane
+    push 72
+    call __read_lane
+    push 74
+    call __read_lane
+    call __chi3
+    dup 0
+    swap 3
+    swap 1
+    call __write_lane
+
+    // chi_lane(temp[72], temp[74], temp[76]) -> write to base+2
+    push 72
+    call __read_lane
+    push 74
+    call __read_lane
+    push 76
+    call __read_lane
+    call __chi3
+    dup 0
+    push 2
+    add
+    swap 1
+    swap 2
+    call __write_lane
+
+    // chi_lane(temp[74], temp[76], temp[78]) -> write to base+4
+    push 74
+    call __read_lane
+    push 76
+    call __read_lane
+    push 78
+    call __read_lane
+    call __chi3
+    dup 0
+    push 4
+    add
+    swap 1
+    swap 2
+    call __write_lane
+
+    // chi_lane(temp[76], temp[78], temp[70]) -> write to base+6
+    push 76
+    call __read_lane
+    push 78
+    call __read_lane
+    push 70
+    call __read_lane
+    call __chi3
+    dup 0
+    push 6
+    add
+    swap 1
+    swap 2
+    call __write_lane
+
+    // chi_lane(temp[78], temp[70], temp[72]) -> write to base+8
+    push 78
+    call __read_lane
+    push 70
+    call __read_lane
+    push 72
+    call __read_lane
+    call __chi3
+    swap 1
+    push 8
+    add
+    swap 1
+    swap 2
+    call __write_lane
+    return
+
+// __chi3: [a_lo a_hi b_lo b_hi c_lo c_hi] -> [r_lo r_hi]
+// r = a ^ (~b & c)
+__chi3:
+    // Stack: a_lo a_hi b_lo b_hi c_lo c_hi (c_hi on top)
+    // r = a ^ (~b & c)
+    // Store a at mem[140,141]
+    push 140
+    swap 5
+    write_mem 1
+    pop 1
+    push 141
+    swap 4
+    write_mem 1
+    pop 1
+    // Stack: b_lo b_hi c_lo c_hi
+    // ~b_lo & c_lo
+    swap 2
+    push 4294967295
+    xor
+    and
+    // Stack: b_hi c_hi (notb_lo & c_lo)
+    swap 2
+    // Stack: (notb_lo&c_lo) c_hi b_hi
+    push 4294967295
+    xor
+    and
+    // Stack: (notb_lo&c_lo) (notb_hi&c_hi)
+    // XOR with a
+    push 141
     read_mem 1
     pop 1
     xor
-    push 0
-    write_mem 1
-    pop 1
-    // XOR rc_hi into mem[1]
-    push 1
+    swap 1
+    push 140
     read_mem 1
     pop 1
     xor
-    push 1
-    write_mem 1
-    pop 1
+    swap 1
+    // Stack: r_lo r_hi
     return
 
 // ===================================================================
-// 24 ROUND FUNCTIONS
-// Each: theta -> rho -> pi -> chi -> iota(RC)
-// Round constants inlined as push lo / push hi.
+// IOTA
 // ===================================================================
-__round_0:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
+// XOR round constant into lane (0,0).
+// Stack: [rc_lo rc_hi] (rc_hi on top)
+std_crypto_keccak256__iota:
     push 0
-    push 1
-    call __iota
+    call __read_lane
+    call std_crypto_keccak256__xor_lane
+    push 0
+    call __write_lane
     return
 
-__round_1:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
+// ===================================================================
+// KECCAK ROUND
+// ===================================================================
+// __round: [rc_lo rc_hi] -> []
+// Applies theta, rho, pi, chi, iota with given round constant.
+std_crypto_keccak256__keccak_round:
+    // Save rc to memory[130,131]
+    push 130
+    call __write_lane
+    call std_crypto_keccak256__theta
+    call std_crypto_keccak256__rho
+    call std_crypto_keccak256__pi
+    call std_crypto_keccak256__chi
+    // Reload rc and apply iota
+    push 130
+    call __read_lane
+    call std_crypto_keccak256__iota
+    return
+
+// ===================================================================
+// FULL PERMUTATION (24 rounds)
+// ===================================================================
+std_crypto_keccak256__keccak_f1600:
+    push 1
     push 0
+    call std_crypto_keccak256__keccak_round
     push 32898
-    call __iota
-    return
-
-__round_2:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
-    push 2147483648
+    push 0
+    call std_crypto_keccak256__keccak_round
     push 32906
-    call __iota
-    return
-
-__round_3:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 2147483648
+    call std_crypto_keccak256__keccak_round
     push 2147516416
-    call __iota
-    return
-
-__round_4:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
-    push 0
+    push 2147483648
+    call std_crypto_keccak256__keccak_round
     push 32907
-    call __iota
-    return
-
-__round_5:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 0
+    call std_crypto_keccak256__keccak_round
     push 2147483649
-    call __iota
-    return
-
-__round_6:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
-    push 2147483648
+    push 0
+    call std_crypto_keccak256__keccak_round
     push 2147516545
-    call __iota
-    return
-
-__round_7:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 2147483648
+    call std_crypto_keccak256__keccak_round
     push 32777
-    call __iota
-    return
-
-__round_8:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
-    push 0
+    push 2147483648
+    call std_crypto_keccak256__keccak_round
     push 138
-    call __iota
-    return
-
-__round_9:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 0
+    call std_crypto_keccak256__keccak_round
     push 136
-    call __iota
-    return
-
-__round_10:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 0
+    call std_crypto_keccak256__keccak_round
     push 2147516425
-    call __iota
-    return
-
-__round_11:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 0
+    call std_crypto_keccak256__keccak_round
     push 2147483658
-    call __iota
-    return
-
-__round_12:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 0
+    call std_crypto_keccak256__keccak_round
     push 2147516555
-    call __iota
-    return
-
-__round_13:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
-    push 2147483648
+    push 0
+    call std_crypto_keccak256__keccak_round
     push 139
-    call __iota
-    return
-
-__round_14:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 2147483648
+    call std_crypto_keccak256__keccak_round
     push 32905
-    call __iota
-    return
-
-__round_15:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 2147483648
+    call std_crypto_keccak256__keccak_round
     push 32771
-    call __iota
-    return
-
-__round_16:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 2147483648
+    call std_crypto_keccak256__keccak_round
     push 32770
-    call __iota
-    return
-
-__round_17:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 2147483648
+    call std_crypto_keccak256__keccak_round
     push 128
-    call __iota
-    return
-
-__round_18:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
-    push 0
+    push 2147483648
+    call std_crypto_keccak256__keccak_round
     push 32778
-    call __iota
-    return
-
-__round_19:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
-    push 2147483648
-    push 2147483658
-    call __iota
-    return
-
-__round_20:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
-    push 2147483648
-    push 2147516545
-    call __iota
-    return
-
-__round_21:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
-    push 2147483648
-    push 32896
-    call __iota
-    return
-
-__round_22:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
     push 0
+    call std_crypto_keccak256__keccak_round
+    push 2147483658
+    push 2147483648
+    call std_crypto_keccak256__keccak_round
+    push 2147516545
+    push 2147483648
+    call std_crypto_keccak256__keccak_round
+    push 32896
+    push 2147483648
+    call std_crypto_keccak256__keccak_round
     push 2147483649
-    call __iota
+    push 0
+    call std_crypto_keccak256__keccak_round
+    push 2147516424
+    push 2147483648
+    call std_crypto_keccak256__keccak_round
     return
 
-__round_23:
-    call __theta
-    call __rho
-    call __pi
-    call __chi
+// ===================================================================
+// ZERO STATE
+// ===================================================================
+std_crypto_keccak256__zero_state:
+    // Push 50 zeros (25 lanes × 2 words)
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    return
+
+// ===================================================================
+// EXTRACT 256
+// ===================================================================
+// Returns first 4 lanes (256 bits) as 8 U32 values.
+// Reads s00, s10, s20, s30 from memory.
+std_crypto_keccak256__extract256:
+    push 0
+    call __read_lane
+    push 2
+    call __read_lane
+    push 4
+    call __read_lane
+    push 6
+    call __read_lane
+    return
+
+// ===================================================================
+// REMAINING .tri API FUNCTIONS (trivial wrappers)
+// ===================================================================
+
+// zero_lane
+std_crypto_keccak256__zero_lane:
+    push 0
+    push 0
+    return
+
+// make_lane
+std_crypto_keccak256__make_lane:
+    return
+
+// Round constant functions (rc0..rc23) — return (lo, hi) pairs
+std_crypto_keccak256__rc0:
+    push 1
+    push 0
+    return
+std_crypto_keccak256__rc1:
+    push 32898
+    push 0
+    return
+std_crypto_keccak256__rc2:
+    push 32906
     push 2147483648
+    return
+std_crypto_keccak256__rc3:
+    push 2147516416
+    push 2147483648
+    return
+std_crypto_keccak256__rc4:
+    push 32907
+    push 0
+    return
+std_crypto_keccak256__rc5:
+    push 2147483649
+    push 0
+    return
+std_crypto_keccak256__rc6:
+    push 2147516545
+    push 2147483648
+    return
+std_crypto_keccak256__rc7:
+    push 32777
+    push 2147483648
+    return
+std_crypto_keccak256__rc8:
+    push 138
+    push 0
+    return
+std_crypto_keccak256__rc9:
+    push 136
+    push 0
+    return
+std_crypto_keccak256__rc10:
+    push 2147516425
+    push 0
+    return
+std_crypto_keccak256__rc11:
+    push 2147483658
+    push 0
+    return
+std_crypto_keccak256__rc12:
+    push 2147516555
+    push 0
+    return
+std_crypto_keccak256__rc13:
+    push 139
+    push 2147483648
+    return
+std_crypto_keccak256__rc14:
+    push 32905
+    push 2147483648
+    return
+std_crypto_keccak256__rc15:
+    push 32771
+    push 2147483648
+    return
+std_crypto_keccak256__rc16:
+    push 32770
+    push 2147483648
+    return
+std_crypto_keccak256__rc17:
+    push 128
+    push 2147483648
+    return
+std_crypto_keccak256__rc18:
+    push 32778
+    push 0
+    return
+std_crypto_keccak256__rc19:
+    push 2147483658
+    push 2147483648
+    return
+std_crypto_keccak256__rc20:
+    push 2147516545
+    push 2147483648
+    return
+std_crypto_keccak256__rc21:
+    push 32896
+    push 2147483648
+    return
+std_crypto_keccak256__rc22:
+    push 2147483649
+    push 0
+    return
+std_crypto_keccak256__rc23:
     push 2147516424
-    call __iota
+    push 2147483648
     return
