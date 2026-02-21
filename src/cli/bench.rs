@@ -692,14 +692,27 @@ fn compile_neural_tasm_inline(
         // Try neural compilation
         match trident::neural::compile_with_model(fn_tir, &fn_insns, model, device) {
             Ok(r) if r.neural && r.cost <= compiler_cost => {
-                any_neural = true;
-                // Emit labeled function: __fn_name: + neural body + return
-                result_lines.push(format!("// {}: neural (cost {})", fn_name, r.cost));
-                result_lines.push(format!("__{}:", fn_name));
-                let needs_return = !r.tasm_lines.last().is_some_and(|l| l.trim() == "return");
-                result_lines.extend(r.tasm_lines);
-                if needs_return {
-                    result_lines.push("return".to_string());
+                // Check if neural output is identical to compiler
+                let identical = r.tasm_lines == fn_insns;
+                if identical {
+                    // Memorized compiler output — not a real neural win
+                    result_lines.push(format!(
+                        "// {}: compiler (cost {}) [neural=identical]",
+                        fn_name, compiler_cost
+                    ));
+                    result_lines.extend(fn_full);
+                } else {
+                    any_neural = true;
+                    result_lines.push(format!(
+                        "// {}: NEURAL (cost {}, compiler {})",
+                        fn_name, r.cost, compiler_cost
+                    ));
+                    result_lines.push(format!("__{}:", fn_name));
+                    let needs_return = !r.tasm_lines.last().is_some_and(|l| l.trim() == "return");
+                    result_lines.extend(r.tasm_lines);
+                    if needs_return {
+                        result_lines.push("return".to_string());
+                    }
                 }
             }
             _ => {
