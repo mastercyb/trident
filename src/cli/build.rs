@@ -165,11 +165,7 @@ fn run_neural_analysis(
     options: &trident::CompileOptions,
     train_epochs: Option<u64>,
 ) {
-    use trident::ir::tir::lower::create_speculative_lowering;
     use trident::ir::tir::neural::report::{OptimizerReport, OptimizerStatus};
-    use trident::neural::data::tir_graph::TirGraph;
-    use trident::neural::inference::beam::{beam_search, BeamConfig};
-    use trident::neural::inference::execute::validate_and_rank;
     use trident::neural::model::composite::NeuralCompilerConfig;
     use trident::neural::model::vocab::Vocab;
     use trident::neural::training::supervised;
@@ -189,8 +185,6 @@ fn run_neural_analysis(
     let baseline_profile = trident::cost::scorer::profile_tasm_str(&baseline_tasm.join("\n"));
     let baseline_cost = baseline_profile.cost();
 
-    // Build TirGraph from IR
-    let graph = TirGraph::from_tir_ops(&ir);
     let vocab = Vocab::new();
 
     // Training mode (--train N): run N epochs of supervised training
@@ -264,55 +258,29 @@ fn run_neural_analysis(
         return;
     }
 
-    // Analysis mode (--neural without --train): run v2 beam search
-    use burn::backend::NdArray;
-    type InferBackend = NdArray;
-    let device = Default::default();
-
-    let config = NeuralCompilerConfig::new();
-    let model = config.init::<InferBackend>(&device);
-
-    let node_features = supervised::graph_to_features::<InferBackend>(&graph, &device);
-    let (edge_src, edge_dst, edge_types) =
-        supervised::graph_to_edges::<InferBackend>(&graph, &device);
-
-    let beam_config = BeamConfig::default();
-    let result = beam_search(
-        &model.encoder,
-        &model.decoder,
-        node_features,
-        edge_src,
-        edge_dst,
-        edge_types,
-        &beam_config,
-        0,
-        &device,
-    );
-
-    // Validate candidates against baseline
-    let ranked = validate_and_rank(&result.sequences, &vocab, &baseline_tasm, 0);
-
-    // Build report via speculative lowering
-    let spec = create_speculative_lowering(
-        &options.target_config.name,
-        0,
-        String::new(),
-        OptimizerStatus::Improving,
-    );
-
-    if let Some(r) = ranked {
-        spec.inject_neural_candidate("full_ir", &r.tasm_lines, baseline_cost);
-        eprintln!(
-            "\nNeural v2: {}/{} candidates valid, best cost: {} (baseline: {})",
-            r.valid_count, r.total_count, r.cost, baseline_cost,
-        );
-    } else {
-        spec.inject_neural_candidate("full_ir", &[], baseline_cost);
-        eprintln!("\nNeural v2: no valid candidates (fallback to compiler)");
+    // Analysis mode (--neural without --train): run v2 beam search with trained checkpoint.
+    // Uses neural::compile() which loads the production/stage1_best checkpoint.
+    match trident::neural::compile(&ir, &baseline_tasm) {
+        Ok(result) => {
+            if result.neural {
+                let ratio = result.cost as f64 / baseline_cost.max(1) as f64;
+                eprintln!(
+                    "\nNeural v2: {}/{} candidates valid, best cost: {} (baseline: {}, {:.2}x)",
+                    result.valid_count, result.total_count, result.cost, baseline_cost, ratio,
+                );
+                if result.cost <= baseline_cost {
+                    eprintln!("  neural output accepted (cost <= baseline)");
+                } else {
+                    eprintln!("  neural output worse than baseline, using compiler output");
+                }
+            } else {
+                eprintln!("\nNeural v2: no valid candidates (fallback to compiler)");
+            }
+        }
+        Err(e) => {
+            eprintln!("\nNeural v2 error: {}", e);
+        }
     }
-
-    let report = spec.report();
-    eprintln!("{}", report.format_report());
 }
 
 /// Build TIR from a source entry point (for neural analysis).
