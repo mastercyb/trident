@@ -665,10 +665,12 @@ fn compile_neural_tasm_inline(
             continue;
         }
 
-        // Lower this function's TIR to compiler TASM baseline
-        let fn_baseline: Vec<String> = lowering
-            .lower(fn_tir)
-            .into_iter()
+        // Lower this function's TIR to get full compiler output (with labels)
+        let fn_full = lowering.lower(fn_tir);
+
+        // Extract just instructions (no labels/comments) for neural comparison
+        let fn_insns: Vec<String> = fn_full
+            .iter()
             .filter(|l| {
                 let t = l.trim();
                 !t.is_empty() && !t.ends_with(':') && !t.starts_with("//")
@@ -676,36 +678,44 @@ fn compile_neural_tasm_inline(
             .map(|l| l.trim().to_string())
             .collect();
 
-        if fn_baseline.is_empty() {
+        if fn_insns.is_empty() {
+            result_lines.extend(fn_full);
             continue;
         }
 
         let compiler_cost = trident::cost::scorer::profile_tasm(
-            &fn_baseline.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            &fn_insns.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
         )
         .cost()
         .max(1);
 
         // Try neural compilation
-        match trident::neural::compile_with_model(fn_tir, &fn_baseline, model, device) {
+        match trident::neural::compile_with_model(fn_tir, &fn_insns, model, device) {
             Ok(r) if r.neural && r.cost <= compiler_cost => {
                 any_neural = true;
+                // Emit labeled function: __fn_name: + neural body + return
                 result_lines.push(format!("// {}: neural (cost {})", fn_name, r.cost));
+                result_lines.push(format!("__{}:", fn_name));
+                let needs_return = !r.tasm_lines.last().is_some_and(|l| l.trim() == "return");
                 result_lines.extend(r.tasm_lines);
+                if needs_return {
+                    result_lines.push("return".to_string());
+                }
             }
             _ => {
+                // Use full compiler output (already has labels)
                 result_lines.push(format!("// {}: compiler (cost {})", fn_name, compiler_cost));
-                result_lines.extend(fn_baseline);
+                result_lines.extend(fn_full);
             }
         }
     }
 
     if !any_neural {
-        // All functions fell back to compiler — no point showing neural column
-        // But still return the assembled TASM so we get instruction count
-        // (which should match compiler). Return None to avoid confusion.
         return None;
     }
+
+    // Add halt at end for executability
+    result_lines.push("halt".to_string());
 
     // Also write .neural.tasm to disk as cache for future runs
     let classical_path = source_path.to_string_lossy();
