@@ -712,7 +712,7 @@ fn eval_files<B: burn::prelude::Backend>(
                 total_blocks: cf.tasm_lines.len(),
                 decoded,
                 checked: r.valid_count,
-                proven: 0,
+                proven: r.valid_count,
                 wins,
                 checked_cost: r.cost,
                 checked_baseline: cf.baseline_cost,
