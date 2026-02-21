@@ -1,0 +1,35 @@
+// Hand-optimized TASM baseline: vm.io.mem
+//
+// RAM intrinsics — Triton VM memory operations.
+
+// read(addr) -> Field
+// read_mem 1: [addr] -> [value, addr-1]
+vm_io_mem__read:
+    read_mem 1
+    pop 1
+    return
+
+// write(addr, val)
+// write_mem 1: [addr, val] -> [addr+1]
+// Stack: [addr, val] with val on top -> swap, write, pop
+vm_io_mem__write:
+    swap 1
+    write_mem 1
+    pop 1
+    return
+
+// read_block(addr) -> Digest (5 fields)
+// read_mem 5: [addr] -> [v4 v3 v2 v1 v0, addr-5]
+vm_io_mem__read_block:
+    read_mem 5
+    pop 1
+    return
+
+// write_block(addr, d: Digest)
+// Stack: [addr, d0, d1, d2, d3, d4] with d4 on top
+// Need addr on top for write_mem 5
+vm_io_mem__write_block:
+    swap 5
+    write_mem 5
+    pop 1
+    return

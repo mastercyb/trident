@@ -1,0 +1,30 @@
+// Hand-optimized TASM baseline: vm.crypto.hash
+//
+// Tip5 hash and sponge intrinsics — single Triton VM instructions.
+
+// tip5(x0..x9) -> Digest (5 elements)
+// Stack: [x0 x1 x2 x3 x4 x5 x6 x7 x8 x9] with x9 on top
+// hash instruction absorbs top 10 elements, produces 5-element digest
+vm_crypto_hash__tip5:
+    hash
+    return
+
+// sponge_init()
+vm_crypto_hash__sponge_init:
+    sponge_init
+    return
+
+// sponge_absorb(x0..x9)
+vm_crypto_hash__sponge_absorb:
+    sponge_absorb
+    return
+
+// sponge_squeeze() -> Digest
+vm_crypto_hash__sponge_squeeze:
+    sponge_squeeze
+    return
+
+// sponge_absorb_mem(ptr)
+vm_crypto_hash__sponge_absorb_mem:
+    sponge_absorb_mem
+    return

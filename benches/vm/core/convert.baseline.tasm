@@ -1,0 +1,18 @@
+// Hand-optimized TASM baseline: vm.core.convert
+//
+// Type conversion intrinsics — single Triton VM instructions.
+
+// as_u32(a: Field) -> U32: truncate and range-check
+vm_core_convert__as_u32:
+    split
+    pop 1
+    return
+
+// as_field(a: U32) -> Field: identity (U32 is already a field element)
+vm_core_convert__as_field:
+    return
+
+// split(a: Field) -> (U32, U32): split into (hi, lo)
+vm_core_convert__split:
+    split
+    return

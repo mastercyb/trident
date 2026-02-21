@@ -1,0 +1,23 @@
+// Hand-optimized TASM baseline: vm.core.assert
+//
+// VM intrinsics — each function is a single Triton VM instruction.
+
+// assert.is_true(cond: Bool) — halt if st0 == 0
+vm_core_assert__is_true:
+    assert
+    return
+
+// assert.eq(a, b) — halt if a != b
+// Stack: [a, b] with b on top
+// eq pushes 1 if equal, then assert checks it
+vm_core_assert__eq:
+    eq
+    assert
+    return
+
+// assert.digest(a, b) — halt if 5-element vectors differ
+// Stack: [a0 a1 a2 a3 a4 b0 b1 b2 b3 b4] with b4 on top
+vm_core_assert__digest:
+    assert_vector
+    pop 5
+    return

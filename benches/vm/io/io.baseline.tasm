@@ -1,0 +1,68 @@
+// Hand-optimized TASM baseline: vm.io.io
+//
+// I/O intrinsics — single Triton VM instructions.
+
+// read() -> Field
+vm_io_io__read:
+    read_io 1
+    return
+
+// read2() -> (Field, Field)
+vm_io_io__read2:
+    read_io 2
+    return
+
+// read3() -> (Field, Field, Field)
+vm_io_io__read3:
+    read_io 3
+    return
+
+// read4() -> (Field, Field, Field, Field)
+vm_io_io__read4:
+    read_io 4
+    return
+
+// read5() -> Digest
+vm_io_io__read5:
+    read_io 5
+    return
+
+// write(v)
+vm_io_io__write:
+    write_io 1
+    return
+
+// write2(a, b)
+vm_io_io__write2:
+    write_io 2
+    return
+
+// write3(a, b, c)
+vm_io_io__write3:
+    write_io 3
+    return
+
+// write4(a, b, c, d)
+vm_io_io__write4:
+    write_io 4
+    return
+
+// write5(a, b, c, d, e)
+vm_io_io__write5:
+    write_io 5
+    return
+
+// divine() -> Field
+vm_io_io__divine:
+    divine 1
+    return
+
+// divine3() -> (Field, Field, Field)
+vm_io_io__divine3:
+    divine 3
+    return
+
+// divine5() -> Digest
+vm_io_io__divine5:
+    divine 5
+    return

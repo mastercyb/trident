@@ -1,0 +1,10 @@
+// Hand-optimized TASM baseline: vm.crypto.merkle
+//
+// Merkle step intrinsic — single Triton VM instruction.
+
+// step(idx, d0, d1, d2, d3, d4) -> (new_idx, Digest)
+// Stack: [idx d0 d1 d2 d3 d4] with d4 on top
+// merkle_step divines sibling, computes parent
+vm_crypto_merkle__step:
+    merkle_step
+    return

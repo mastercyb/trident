@@ -1,0 +1,18 @@
+// Hand-optimized TASM baseline: vm.core.u32
+//
+// U32 intrinsics — single Triton VM instructions.
+
+// log2(a: U32) -> U32
+vm_core_u32__log2:
+    log_2_floor
+    return
+
+// pow(base: U32, exp: U32) -> U32
+vm_core_u32__pow:
+    pow
+    return
+
+// popcount(a: U32) -> U32
+vm_core_u32__popcount:
+    pop_count
+    return

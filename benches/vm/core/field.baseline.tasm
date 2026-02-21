@@ -1,0 +1,32 @@
+// Hand-optimized TASM baseline: vm.core.field
+//
+// Field arithmetic intrinsics — single Triton VM instructions.
+
+// add(a, b) -> a + b
+vm_core_field__add:
+    add
+    return
+
+// mul(a, b) -> a * b
+vm_core_field__mul:
+    mul
+    return
+
+// sub(a, b) -> a - b
+// Triton VM: negate b then add
+vm_core_field__sub:
+    push -1
+    mul
+    add
+    return
+
+// neg(a) -> -a
+vm_core_field__neg:
+    push -1
+    mul
+    return
+
+// inv(a) -> 1/a
+vm_core_field__inv:
+    invert
+    return
