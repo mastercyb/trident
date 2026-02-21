@@ -522,7 +522,7 @@ fn run_trisha_timed(
                     let _ = child.wait();
                     return Err("timed out".to_string());
                 }
-                std::thread::sleep(std::time::Duration::from_millis(500));
+                std::thread::sleep(std::time::Duration::from_millis(5));
             }
             Err(e) => return Err(format!("wait error: {}", e)),
         }
