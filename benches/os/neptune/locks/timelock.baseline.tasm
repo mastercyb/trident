@@ -1,0 +1,51 @@
+// Hand-optimized TASM baseline: os.neptune.locks.timelock
+//
+// Symmetric auth + time check against kernel timestamp.
+
+os_neptune_locks_timelock__main:
+    // Auth: divine lock_hash, divine preimage, hash, assert
+    divine 5
+    divine 5
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    hash
+    assert_vector
+    pop 5
+    // Read kernel MAST hash
+    read_io 5
+    // Authenticate timestamp from kernel (depth-3 Merkle, leaf 5)
+    // Simplified: divine leaf, 3 Merkle steps, extract timestamp
+    divine 5
+    dup 4
+    dup 4
+    dup 4
+    dup 4
+    dup 4
+    push 5
+    swap 5
+    merkle_step
+    merkle_step
+    merkle_step
+    assert_vector
+    pop 5
+    pop 1
+    // Stack: kernel_hash(5), timestamp_leaf(5)
+    // Extract timestamp (first field of leaf)
+    swap 4
+    pop 1
+    pop 1
+    pop 1
+    pop 1
+    // Time check: current_time - unlock_after fits in U32 (non-negative)
+    divine 1
+    push -1
+    mul
+    add
+    split
+    pop 1
+    pop 1
+    pop 5
+    return

@@ -1,0 +1,148 @@
+// Hand-optimized TASM baseline: os.neptune.types.custom_token
+// Custom token type script (TSP-1 pattern):
+//   - Token identity verification
+//   - Supply conservation OR mint authorization
+//
+// Shared subroutine __sum_token_amounts loops over coins,
+// verifying token_id match and accumulating amounts.
+
+// main entry point
+__main:
+    // Read 3 type-script digests (kernel_hash, input_hash, output_hash)
+    read_io 5
+    pop 5
+    read_io 5
+    pop 5
+    read_io 5
+    pop 5
+    // Divine token_id (5 fields)
+    divine 5
+    // Divine mint_auth_hash (1 field)
+    divine 1
+    // Stack: mint_auth token_id(5)
+    // Compute config commitment: hash(t0..t4, mint_auth, 0,0,0,0)
+    dup 5
+    push 0
+    push 0
+    push 0
+    push 0
+    hash
+    // Stack: mint_auth token_id(5) config(5)
+    // Divine expected_config and assert match
+    divine 5
+    assert_vector
+    pop 5
+    // Stack: mint_auth token_id(5)
+    // Sum input coin amounts
+    divine 1
+    // Stack: mint_auth token_id(5) num_inputs
+    push 0
+    swap 1
+    // Stack: mint_auth token_id(5) 0 num_inputs
+    call __sum_token_amounts
+    pop 1
+    // Stack: mint_auth token_id(5) input_total
+    // Sum output coin amounts
+    divine 1
+    // Stack: mint_auth token_id(5) input_total num_outputs
+    push 0
+    swap 1
+    // Stack: mint_auth token_id(5) input_total 0 num_outputs
+    call __sum_token_amounts
+    pop 1
+    // Stack: mint_auth token_id(5) input_total output_total
+    // Check conservation or mint auth
+    dup 1
+    dup 1
+    eq
+    skiz
+    call __conservation_ok
+    skiz
+    call __need_mint_auth
+    // Clean up
+    pop 1
+    pop 1
+    pop 5
+    pop 1
+    halt
+
+__conservation_ok:
+    // input_total == output_total, nothing more to check
+    push 0
+    return
+
+__need_mint_auth:
+    // Supply changed — verify mint authority
+    // Stack: mint_auth token_id(5) input_total output_total
+    // Need mint_auth_hash from deep in stack
+    swap 7
+    // Stack: output_total token_id(5) input_total mint_auth
+    // verify_auth pattern: divine secret, hash, compare h0
+    divine 1
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    hash
+    swap 5
+    eq
+    assert
+    pop 4
+    // Restore mint_auth position
+    swap 7
+    push 0
+    return
+
+// __sum_token_amounts: loop over coins verifying token_id + accumulating amounts
+// Stack entry: ... token_id(5) accumulator count
+// Each iteration: divine coin_token(5), assert == token_id, divine amount, check U32, add
+// Stack exit: ... token_id(5) total 0
+__sum_token_amounts:
+    dup 0
+    push 0
+    eq
+    skiz
+    return
+    push -1
+    add
+    swap 1
+    // Stack: ... token_id(5) count acc
+    // Divine coin_token (5 fields)
+    divine 5
+    // Assert coin_token == token_id
+    // token_id is at depth 7..11: acc count t4 t3 t2 t1 t0 ... deeper
+    // Actually token_id sits below count and acc on the stack
+    // This requires reaching deep — use dup to compare
+    dup 7
+    eq
+    assert
+    dup 7
+    eq
+    assert
+    dup 7
+    eq
+    assert
+    dup 7
+    eq
+    assert
+    dup 7
+    eq
+    assert
+    // Divine amount
+    divine 1
+    // Assert amount fits in U32
+    dup 0
+    split
+    push 0
+    eq
+    assert
+    pop 1
+    // Add to accumulator
+    add
+    swap 1
+    recurse

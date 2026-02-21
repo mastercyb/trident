@@ -1,0 +1,11 @@
+// Hand-optimized TASM baseline: os.neptune.utxo
+// UTXO authentication: compare two digests.
+
+// authenticate(divined: Digest, expected: Digest)
+//   Stack entry: expected(5) divined(5)
+//   assert_vector compares top 5 with next 5
+//   3 instructions
+__authenticate:
+    assert_vector
+    pop 5
+    return

@@ -1,0 +1,93 @@
+// Hand-optimized TASM baseline: os.neptune.types.native_currency
+// Native currency type script: conservation law (inputs >= outputs).
+//
+// Reads 3 type-script digests, divines input/output counts and amounts,
+// checks conservation, publishes fee.
+//
+// Key insight: the two sum loops have identical bodies (divine + split-check + add).
+// Share a single __sum_amounts subroutine.
+
+// main entry point
+__main:
+    // Read 3 type-script digests (kernel_hash, input_hash, output_hash)
+    read_io 5
+    pop 5
+    read_io 5
+    pop 5
+    read_io 5
+    pop 5
+    // Divine num_inputs, num_outputs
+    divine 1
+    divine 1
+    // Stack: num_outputs num_inputs
+    // Sum input amounts
+    swap 1
+    push 0
+    swap 1
+    // Stack: num_outputs 0 num_inputs
+    call __sum_amounts
+    // Stack: num_outputs input_total 0
+    pop 1
+    // Stack: num_outputs input_total
+    // Sum output amounts
+    swap 1
+    push 0
+    swap 1
+    // Stack: input_total 0 num_outputs
+    call __sum_amounts
+    // Stack: input_total output_total 0
+    pop 1
+    // Stack: input_total output_total
+    // fee = input_total - output_total (must be non-negative)
+    dup 1
+    dup 1
+    push -1
+    mul
+    add
+    // Stack: input_total output_total fee
+    // Assert fee is non-negative (fits in U32)
+    dup 0
+    split
+    push 0
+    eq
+    assert
+    pop 1
+    // Stack: input_total output_total fee
+    // Publish fee
+    swap 2
+    pop 1
+    swap 1
+    pop 1
+    // Stack: fee
+    write_io 1
+    halt
+
+// __sum_amounts: loop to divine and accumulate amounts
+// Stack entry: accumulator count
+// Each iteration: divine amount, check U32, add to acc
+// Stack exit: accumulator 0
+__sum_amounts:
+    dup 0
+    push 0
+    eq
+    skiz
+    return
+    push -1
+    add
+    swap 1
+    // Stack: count acc
+    divine 1
+    // Stack: count acc amount
+    // Assert amount fits in U32
+    dup 0
+    split
+    push 0
+    eq
+    assert
+    pop 1
+    // Stack: count acc amount
+    add
+    // Stack: count new_acc
+    swap 1
+    // Stack: new_acc count
+    recurse

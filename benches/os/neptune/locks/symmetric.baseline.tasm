@@ -1,0 +1,19 @@
+// Hand-optimized TASM baseline: os.neptune.locks.symmetric
+//
+// 5-field preimage lock: divine lock_hash, divine preimage (5 fields),
+// hash, assert matches, read kernel hash.
+
+os_neptune_locks_symmetric__main:
+    divine 5
+    divine 5
+    push 0
+    push 0
+    push 0
+    push 0
+    push 0
+    hash
+    assert_vector
+    pop 5
+    read_io 5
+    pop 5
+    return
