@@ -88,13 +88,25 @@ pub fn cmd_train(args: TrainArgs) {
             )
         })
         .collect();
-    let pairs = extract_pairs(&blocks, &vocab);
+    let raw_pairs = extract_pairs(&blocks, &vocab);
     let total_blocks: usize = compiled.len();
 
-    if pairs.is_empty() {
+    if raw_pairs.is_empty() {
         eprintln!("error: no training pairs extracted from corpus");
         process::exit(1);
     }
+
+    // Data augmentation: expand training set via TASM random walk,
+    // equivalent substitutions, and dead code insertion.
+    eprintln!("  augmenting...");
+    let augment_config = trident::neural::training::augment::AugmentConfig {
+        tir_reorder_variants: 3,
+        tasm_walk_variants: 5,
+        max_swap_attempts: 10,
+        seed: 0xDEAD_BEEF_A097,
+    };
+    let pairs =
+        trident::neural::training::augment::augment_pairs(&raw_pairs, &vocab, &augment_config);
 
     // Stage selection: explicit --stage flag, or default to Stage 1.
     // Auto-detection was causing problems (stale checkpoint from broken run
@@ -115,8 +127,9 @@ pub fn cmd_train(args: TrainArgs) {
 
     let device_tag = if args.cpu { "CPU" } else { "GPU" };
     eprintln!(
-        "  corpus    {} files, {} training pairs, {} blocks",
+        "  corpus    {} files, {} raw pairs, {} augmented, {} blocks",
         corpus.len(),
+        raw_pairs.len(),
         pairs.len(),
         total_blocks,
     );
