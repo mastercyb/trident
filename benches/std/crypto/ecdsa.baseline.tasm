@@ -1,132 +1,72 @@
 // Hand-optimized TASM baseline: std.crypto.ecdsa
 //
-// Functions matching ecdsa.tri API:
-//   read_u256, divine_u256, read_signature, divine_signature,
-//   valid_range, is_low_s, write_u256, write_signature
+// First principles rewrite. Key decisions:
+//   - read_u256/divine_u256: batch I/O + split chain = 19 insns each
+//   - read/divine_signature: call subroutines, 3 insns each
+//   - write_u256: reverse + batch write = 13 insns
+//   - write_signature: store s to mem, write r, reload s, write s
+//   - is_zero_u256: OR chain (fewer insns than eq+and chain)
+//   - lt256_sub: store b at addr 0, borrow chain, 8 limbs
+//   - valid_range: store all 3 U256s, run 4 checks
+//   - Memory: contiguous blocks, write_mem 5 + write_mem 3 for batch store
 //
-// Stack convention: U256 = 8 U32 limbs on stack, l0 deepest, l7 on top.
-// Signature = two U256s: r (deeper 8 limbs), s (top 8 limbs).
-//
-// Optimization strategy:
-//   - Batch I/O: read_io 5 + read_io 3 instead of 8x read_io 1
-//   - Inline read/divine into signature functions (no call overhead)
-//   - Subtraction-based lt256 (borrow chain, no branching)
-//   - Flat is_zero (eq + and chain, no nested if-else)
-//   - Memory used for multi-U256 operations to avoid deep stack access
-//
-// Memory layout (scratch):
-//   200..207  lt256_sub: b operand
-//   300..307  valid_range/is_low_s: order
-//   310..317  valid_range/is_low_s: s
-//   320..327  valid_range: r
-//   400..407  write_signature: s temp
+// U256 on stack: [l0 l1 l2 l3 l4 l5 l6 l7] l7 on top, l0 deepest.
+// Signature: [r.l0..r.l7 s.l0..s.l7] s.l7 on top.
 
-
-// ===========================================================================
+// ===================================================================
 // SUBROUTINES
-// ===========================================================================
+// ===================================================================
 
-
-// ---------------------------------------------------------------------------
-// is_zero_u256: check if U256 is all zeros
-// ---------------------------------------------------------------------------
-// Input:  l0 l1 l2 l3 l4 l5 l6 l7 (l7 on top)
-// Output: flag (1 if all zero, 0 if nonzero)
-// Consumes the 8 limbs.
-is_zero_u256:
+// is_zero_u256: [l0..l7] -> [flag]
+// OR all limbs. If result is 0, all were zero.
+__is_zero:
+    or
+    or
+    or
+    or
+    or
+    or
+    or
     push 0
     eq
-    swap 1
-    push 0
-    eq
-    and
-    swap 1
-    push 0
-    eq
-    and
-    swap 1
-    push 0
-    eq
-    and
-    swap 1
-    push 0
-    eq
-    and
-    swap 1
-    push 0
-    eq
-    and
-    swap 1
-    push 0
-    eq
-    and
-    swap 1
-    push 0
-    eq
-    and
     return
 
+// not_flag: [b] -> [!b]
+__not:
+    push 0
+    eq
+    return
 
-// ---------------------------------------------------------------------------
-// not_flag: boolean NOT (0 -> 1, 1 -> 0)
-// ---------------------------------------------------------------------------
-not_flag:
-    push -1
-    mul
-    push 1
+// store_u256: [addr, l0..l7] -> [] writes 8 limbs starting at addr
+// addr on top of the 8 limbs. write_mem 5 writes st1..st5 to [addr..addr+4], leaves addr+5.
+// Need: addr below data. Swap addr to bottom.
+__store_u256:
+    swap 8
+    write_mem 5
+    write_mem 3
+    pop 1
+    return
+
+// load_u256: [addr] -> [l0..l7] reads 8 limbs from addr
+// read_mem 5 reads [addr-4..addr] into st1..st5, leaves addr-5.
+// We want to read addr..addr+7, so start from addr+7.
+__load_u256:
+    push 7
     add
+    read_mem 5
+    read_mem 3
+    pop 1
     return
 
-
-// ---------------------------------------------------------------------------
-// lt256_sub: unsigned a < b via subtraction borrow chain
-// ---------------------------------------------------------------------------
-// Input:  a.l0..a.l7 b.l0..b.l7 (b.l7 on top, a.l0 deepest)
-// Output: flag (1 if a < b, 0 otherwise)
-// Consumes all 16 limbs.
-//
-// Method: compute a - b limb by limb tracking borrow.
-//   diff_i = 2^32 + a_i - b_i - borrow_in
-//   split => (hi, lo); borrow_out = 1 - hi
-// Final borrow = 1 iff a < b.
-lt256_sub:
-    // Store b into memory[200..207] (b_i at address 200+i)
-    // b7 on top, store in descending order
-    push 207
-    swap 1
-    write_mem 1
-    pop 1
-    push 206
-    swap 1
-    write_mem 1
-    pop 1
-    push 205
-    swap 1
-    write_mem 1
-    pop 1
-    push 204
-    swap 1
-    write_mem 1
-    pop 1
-    push 203
-    swap 1
-    write_mem 1
-    pop 1
-    push 202
-    swap 1
-    write_mem 1
-    pop 1
-    push 201
-    swap 1
-    write_mem 1
-    pop 1
-    push 200
-    swap 1
-    write_mem 1
-    pop 1
-    // Stack: a0 a1 a2 a3 a4 a5 a6 a7
-
-    // Reverse a so a0 is on top (process LSB first)
+// lt256_sub: [a.l0..a.l7 b.l0..b.l7] -> [flag]
+// Unsigned a < b via subtraction borrow chain.
+// Store b at mem[0..7], reverse a, borrow chain from LSB.
+__lt256:
+    // Store b at addr 0
+    push 0
+    call __store_u256
+    // Stack: a.l0..a.l7 (l7 on top)
+    // Reverse a so a.l0 is on top (process LSB first)
     swap 7
     swap 1
     swap 6
@@ -137,10 +77,9 @@ lt256_sub:
     swap 3
     swap 4
     swap 3
-    // Stack (top to bottom): a0 a1 a2 a3 a4 a5 a6 a7
-
-    // --- Limb 0 (no borrow in) ---
-    push 200
+    // Stack: a0 a1 a2 a3 a4 a5 a6 a7 (a0 on top)
+    // Limb 0: diff = 2^32 + a0 - b0, split, borrow = 1 - hi
+    push 0
     read_mem 1
     pop 1
     push -1
@@ -154,33 +93,9 @@ lt256_sub:
     mul
     push 1
     add
-    // Stack: a7..a1 borrow0
-
-    // --- Limb 1 ---
+    // Limbs 1-7: same pattern with borrow propagation
     swap 1
-    push 201
-    read_mem 1
-    pop 1
-    push -1
-    mul
-    push 4294967296
-    add
-    add
-    swap 1
-    push -1
-    mul
-    add
-    split
-    pop 1
-    push -1
-    mul
     push 1
-    add
-    // Stack: a7..a2 borrow1
-
-    // --- Limb 2 ---
-    swap 1
-    push 202
     read_mem 1
     pop 1
     push -1
@@ -199,9 +114,8 @@ lt256_sub:
     push 1
     add
 
-    // --- Limb 3 ---
     swap 1
-    push 203
+    push 2
     read_mem 1
     pop 1
     push -1
@@ -220,9 +134,8 @@ lt256_sub:
     push 1
     add
 
-    // --- Limb 4 ---
     swap 1
-    push 204
+    push 3
     read_mem 1
     pop 1
     push -1
@@ -241,9 +154,8 @@ lt256_sub:
     push 1
     add
 
-    // --- Limb 5 ---
     swap 1
-    push 205
+    push 4
     read_mem 1
     pop 1
     push -1
@@ -262,9 +174,8 @@ lt256_sub:
     push 1
     add
 
-    // --- Limb 6 ---
     swap 1
-    push 206
+    push 5
     read_mem 1
     pop 1
     push -1
@@ -283,9 +194,8 @@ lt256_sub:
     push 1
     add
 
-    // --- Limb 7 ---
     swap 1
-    push 207
+    push 6
     read_mem 1
     pop 1
     push -1
@@ -303,782 +213,180 @@ lt256_sub:
     mul
     push 1
     add
-    // Stack: final_borrow (1 if a < b, 0 otherwise)
+
+    swap 1
+    push 7
+    read_mem 1
+    pop 1
+    push -1
+    mul
+    push 4294967296
+    add
+    add
+    swap 1
+    push -1
+    mul
+    add
+    split
+    pop 1
+    push -1
+    mul
+    push 1
+    add
     return
 
+// reverse_8: reverse top 8 stack elements
+__rev8:
+    swap 7
+    swap 1
+    swap 6
+    swap 1
+    swap 2
+    swap 5
+    swap 2
+    swap 3
+    swap 4
+    swap 3
+    return
 
-// ===========================================================================
+// split_8: split top 8 field elements to U32 (range-check)
+// [f0..f7] (f7 on top) -> [u0..u7] (u7 on top)
+__split8:
+    split
+    pop 1
+    swap 1
+    split
+    pop 1
+    swap 2
+    split
+    pop 1
+    swap 3
+    split
+    pop 1
+    swap 4
+    split
+    pop 1
+    swap 5
+    split
+    pop 1
+    swap 6
+    split
+    pop 1
+    swap 7
+    split
+    pop 1
+    call __rev8
+    return
+
+// ===================================================================
 // PUBLIC API
-// ===========================================================================
+// ===================================================================
 
-
-// ---------------------------------------------------------------------------
-// read_u256: 8 field elements from public input -> U256
-// ---------------------------------------------------------------------------
-// Output: l0 l1 l2 l3 l4 l5 l6 l7 (l7 on top)
-// Batch read, then split each to enforce U32 range.
-// read_io pushes first-read deepest, last-read on top.
-// So read_io 5 + read_io 3 gives: f0 f1 f2 f3 f4 f5 f6 f7 (f7 on top).
-// Split from top down (f7 first), swap into position.
+// read_u256: -> [l0..l7]
 std_crypto_ecdsa__read_u256:
     read_io 5
     read_io 3
-    // f0 f1 f2 f3 f4 f5 f6 f7
-    split
-    pop 1
-    swap 1
-    split
-    pop 1
-    swap 2
-    split
-    pop 1
-    swap 3
-    split
-    pop 1
-    swap 4
-    split
-    pop 1
-    swap 5
-    split
-    pop 1
-    swap 6
-    split
-    pop 1
-    swap 7
-    split
-    pop 1
-    // Now top-to-bottom: l0 l1 l2 l3 l4 l5 l6 l7 (l0 on top)
-    // Reverse to get l7 on top
-    swap 7
-    swap 1
-    swap 6
-    swap 1
-    swap 2
-    swap 5
-    swap 2
-    swap 3
-    swap 4
-    swap 3
+    call __split8
     return
 
-
-// ---------------------------------------------------------------------------
-// divine_u256: 8 field elements from nondeterministic input -> U256
-// ---------------------------------------------------------------------------
+// divine_u256: -> [l0..l7]
 std_crypto_ecdsa__divine_u256:
     divine 5
     divine 3
-    split
-    pop 1
-    swap 1
-    split
-    pop 1
-    swap 2
-    split
-    pop 1
-    swap 3
-    split
-    pop 1
-    swap 4
-    split
-    pop 1
-    swap 5
-    split
-    pop 1
-    swap 6
-    split
-    pop 1
-    swap 7
-    split
-    pop 1
-    swap 7
-    swap 1
-    swap 6
-    swap 1
-    swap 2
-    swap 5
-    swap 2
-    swap 3
-    swap 4
-    swap 3
+    call __split8
     return
 
-
-// ---------------------------------------------------------------------------
-// read_signature: read r then s from public input (16 field elements)
-// ---------------------------------------------------------------------------
-// Output: r.l0..r.l7 s.l0..s.l7 (s.l7 on top)
-// Inlined: two read_u256 back-to-back, no call overhead.
+// read_signature: -> [r.l0..r.l7 s.l0..s.l7]
 std_crypto_ecdsa__read_signature:
-    // --- Read r ---
-    read_io 5
-    read_io 3
-    split
-    pop 1
-    swap 1
-    split
-    pop 1
-    swap 2
-    split
-    pop 1
-    swap 3
-    split
-    pop 1
-    swap 4
-    split
-    pop 1
-    swap 5
-    split
-    pop 1
-    swap 6
-    split
-    pop 1
-    swap 7
-    split
-    pop 1
-    swap 7
-    swap 1
-    swap 6
-    swap 1
-    swap 2
-    swap 5
-    swap 2
-    swap 3
-    swap 4
-    swap 3
-    // --- Read s ---
-    read_io 5
-    read_io 3
-    split
-    pop 1
-    swap 1
-    split
-    pop 1
-    swap 2
-    split
-    pop 1
-    swap 3
-    split
-    pop 1
-    swap 4
-    split
-    pop 1
-    swap 5
-    split
-    pop 1
-    swap 6
-    split
-    pop 1
-    swap 7
-    split
-    pop 1
-    swap 7
-    swap 1
-    swap 6
-    swap 1
-    swap 2
-    swap 5
-    swap 2
-    swap 3
-    swap 4
-    swap 3
+    call std_crypto_ecdsa__read_u256
+    call std_crypto_ecdsa__read_u256
     return
 
-
-// ---------------------------------------------------------------------------
-// divine_signature: divine r then s from nondeterministic input
-// ---------------------------------------------------------------------------
+// divine_signature: -> [r.l0..r.l7 s.l0..s.l7]
 std_crypto_ecdsa__divine_signature:
-    // --- Divine r ---
-    divine 5
-    divine 3
-    split
-    pop 1
-    swap 1
-    split
-    pop 1
-    swap 2
-    split
-    pop 1
-    swap 3
-    split
-    pop 1
-    swap 4
-    split
-    pop 1
-    swap 5
-    split
-    pop 1
-    swap 6
-    split
-    pop 1
-    swap 7
-    split
-    pop 1
-    swap 7
-    swap 1
-    swap 6
-    swap 1
-    swap 2
-    swap 5
-    swap 2
-    swap 3
-    swap 4
-    swap 3
-    // --- Divine s ---
-    divine 5
-    divine 3
-    split
-    pop 1
-    swap 1
-    split
-    pop 1
-    swap 2
-    split
-    pop 1
-    swap 3
-    split
-    pop 1
-    swap 4
-    split
-    pop 1
-    swap 5
-    split
-    pop 1
-    swap 6
-    split
-    pop 1
-    swap 7
-    split
-    pop 1
-    swap 7
-    swap 1
-    swap 6
-    swap 1
-    swap 2
-    swap 5
-    swap 2
-    swap 3
-    swap 4
-    swap 3
+    call std_crypto_ecdsa__divine_u256
+    call std_crypto_ecdsa__divine_u256
     return
 
-
-// ---------------------------------------------------------------------------
-// valid_range: check sig.r and sig.s in [1, n-1]
-// ---------------------------------------------------------------------------
-// Input (bottom to top):
-//   r.l0..r.l7  s.l0..s.l7  order.l0..order.l7
-//   (24 limbs, order.l7 on top)
-// Output: flag (1 if valid, 0 if invalid)
-//
-// valid = !is_zero(r) AND !is_zero(s) AND lt(r, order) AND lt(s, order)
-//
-// Store all three U256s in memory, then run four checks.
+// valid_range: [r.l0..r.l7 s.l0..s.l7 order.l0..order.l7] -> [flag]
+// flag = !is_zero(r) AND !is_zero(s) AND r < order AND s < order
 std_crypto_ecdsa__valid_range:
-    // Store order at memory[300..307]
-    push 307
-    swap 1
-    write_mem 1
-    pop 1
-    push 306
-    swap 1
-    write_mem 1
-    pop 1
-    push 305
-    swap 1
-    write_mem 1
-    pop 1
-    push 304
-    swap 1
-    write_mem 1
-    pop 1
-    push 303
-    swap 1
-    write_mem 1
-    pop 1
-    push 302
-    swap 1
-    write_mem 1
-    pop 1
-    push 301
-    swap 1
-    write_mem 1
-    pop 1
-    push 300
-    swap 1
-    write_mem 1
-    pop 1
-    // Store s at memory[310..317]
-    push 317
-    swap 1
-    write_mem 1
-    pop 1
-    push 316
-    swap 1
-    write_mem 1
-    pop 1
-    push 315
-    swap 1
-    write_mem 1
-    pop 1
-    push 314
-    swap 1
-    write_mem 1
-    pop 1
-    push 313
-    swap 1
-    write_mem 1
-    pop 1
-    push 312
-    swap 1
-    write_mem 1
-    pop 1
-    push 311
-    swap 1
-    write_mem 1
-    pop 1
-    push 310
-    swap 1
-    write_mem 1
-    pop 1
-    // Store r at memory[320..327]
-    push 327
-    swap 1
-    write_mem 1
-    pop 1
-    push 326
-    swap 1
-    write_mem 1
-    pop 1
-    push 325
-    swap 1
-    write_mem 1
-    pop 1
-    push 324
-    swap 1
-    write_mem 1
-    pop 1
-    push 323
-    swap 1
-    write_mem 1
-    pop 1
-    push 322
-    swap 1
-    write_mem 1
-    pop 1
-    push 321
-    swap 1
-    write_mem 1
-    pop 1
-    push 320
-    swap 1
-    write_mem 1
-    pop 1
+    // Store order at mem[100..107]
+    push 100
+    call __store_u256
+    // Store s at mem[110..117]
+    push 110
+    call __store_u256
+    // Store r at mem[120..127]
+    push 120
+    call __store_u256
 
-    // --- Check 1: r != 0 ---
-    push 320
-    read_mem 1
-    pop 1
-    push 321
-    read_mem 1
-    pop 1
-    push 322
-    read_mem 1
-    pop 1
-    push 323
-    read_mem 1
-    pop 1
-    push 324
-    read_mem 1
-    pop 1
-    push 325
-    read_mem 1
-    pop 1
-    push 326
-    read_mem 1
-    pop 1
-    push 327
-    read_mem 1
-    pop 1
-    call is_zero_u256
-    call not_flag
+    // Check 1: r != 0
+    push 120
+    call __load_u256
+    call __is_zero
+    call __not
 
-    // --- Check 2: s != 0 ---
-    push 310
-    read_mem 1
-    pop 1
-    push 311
-    read_mem 1
-    pop 1
-    push 312
-    read_mem 1
-    pop 1
-    push 313
-    read_mem 1
-    pop 1
-    push 314
-    read_mem 1
-    pop 1
-    push 315
-    read_mem 1
-    pop 1
-    push 316
-    read_mem 1
-    pop 1
-    push 317
-    read_mem 1
-    pop 1
-    call is_zero_u256
-    call not_flag
+    // Check 2: s != 0
+    push 110
+    call __load_u256
+    call __is_zero
+    call __not
     and
 
-    // --- Check 3: r < order ---
-    push 320
-    read_mem 1
-    pop 1
-    push 321
-    read_mem 1
-    pop 1
-    push 322
-    read_mem 1
-    pop 1
-    push 323
-    read_mem 1
-    pop 1
-    push 324
-    read_mem 1
-    pop 1
-    push 325
-    read_mem 1
-    pop 1
-    push 326
-    read_mem 1
-    pop 1
-    push 327
-    read_mem 1
-    pop 1
-    push 300
-    read_mem 1
-    pop 1
-    push 301
-    read_mem 1
-    pop 1
-    push 302
-    read_mem 1
-    pop 1
-    push 303
-    read_mem 1
-    pop 1
-    push 304
-    read_mem 1
-    pop 1
-    push 305
-    read_mem 1
-    pop 1
-    push 306
-    read_mem 1
-    pop 1
-    push 307
-    read_mem 1
-    pop 1
-    call lt256_sub
+    // Check 3: r < order
+    push 120
+    call __load_u256
+    push 100
+    call __load_u256
+    call __lt256
     and
 
-    // --- Check 4: s < order ---
-    push 310
-    read_mem 1
-    pop 1
-    push 311
-    read_mem 1
-    pop 1
-    push 312
-    read_mem 1
-    pop 1
-    push 313
-    read_mem 1
-    pop 1
-    push 314
-    read_mem 1
-    pop 1
-    push 315
-    read_mem 1
-    pop 1
-    push 316
-    read_mem 1
-    pop 1
-    push 317
-    read_mem 1
-    pop 1
-    push 300
-    read_mem 1
-    pop 1
-    push 301
-    read_mem 1
-    pop 1
-    push 302
-    read_mem 1
-    pop 1
-    push 303
-    read_mem 1
-    pop 1
-    push 304
-    read_mem 1
-    pop 1
-    push 305
-    read_mem 1
-    pop 1
-    push 306
-    read_mem 1
-    pop 1
-    push 307
-    read_mem 1
-    pop 1
-    call lt256_sub
+    // Check 4: s < order
+    push 110
+    call __load_u256
+    push 100
+    call __load_u256
+    call __lt256
     and
     return
 
-
-// ---------------------------------------------------------------------------
-// is_low_s: check s < order (placeholder matching .tri source)
-// ---------------------------------------------------------------------------
-// Input: r.l0..r.l7 s.l0..s.l7 order.l0..order.l7 (24 limbs)
-// Output: flag (1 if s < order)
-// The .tri source only calls lt256(sig.s, order). We discard r.
+// is_low_s: [r.l0..r.l7 s.l0..s.l7 order.l0..order.l7] -> [flag]
+// flag = s < order (discard r)
 std_crypto_ecdsa__is_low_s:
-    // Store order at memory[300..307]
-    push 307
-    swap 1
-    write_mem 1
-    pop 1
-    push 306
-    swap 1
-    write_mem 1
-    pop 1
-    push 305
-    swap 1
-    write_mem 1
-    pop 1
-    push 304
-    swap 1
-    write_mem 1
-    pop 1
-    push 303
-    swap 1
-    write_mem 1
-    pop 1
-    push 302
-    swap 1
-    write_mem 1
-    pop 1
-    push 301
-    swap 1
-    write_mem 1
-    pop 1
-    push 300
-    swap 1
-    write_mem 1
-    pop 1
-    // Stack: r.l0..r.l7 s.l0..s.l7 (s.l7 on top)
-    // Store s at memory[310..317]
-    push 317
-    swap 1
-    write_mem 1
-    pop 1
-    push 316
-    swap 1
-    write_mem 1
-    pop 1
-    push 315
-    swap 1
-    write_mem 1
-    pop 1
-    push 314
-    swap 1
-    write_mem 1
-    pop 1
-    push 313
-    swap 1
-    write_mem 1
-    pop 1
-    push 312
-    swap 1
-    write_mem 1
-    pop 1
-    push 311
-    swap 1
-    write_mem 1
-    pop 1
-    push 310
-    swap 1
-    write_mem 1
-    pop 1
-    // Stack: r.l0..r.l7 -- discard r
+    // Store order at mem[100..107]
+    push 100
+    call __store_u256
+    // s is now on top. Store at mem[110..117]
+    push 110
+    call __store_u256
+    // Discard r (8 limbs)
     pop 5
     pop 3
-
-    // Load s then order for lt256_sub(s, order)
-    push 310
-    read_mem 1
-    pop 1
-    push 311
-    read_mem 1
-    pop 1
-    push 312
-    read_mem 1
-    pop 1
-    push 313
-    read_mem 1
-    pop 1
-    push 314
-    read_mem 1
-    pop 1
-    push 315
-    read_mem 1
-    pop 1
-    push 316
-    read_mem 1
-    pop 1
-    push 317
-    read_mem 1
-    pop 1
-    push 300
-    read_mem 1
-    pop 1
-    push 301
-    read_mem 1
-    pop 1
-    push 302
-    read_mem 1
-    pop 1
-    push 303
-    read_mem 1
-    pop 1
-    push 304
-    read_mem 1
-    pop 1
-    push 305
-    read_mem 1
-    pop 1
-    push 306
-    read_mem 1
-    pop 1
-    push 307
-    read_mem 1
-    pop 1
-    call lt256_sub
+    // Load s, load order, compare
+    push 110
+    call __load_u256
+    push 100
+    call __load_u256
+    call __lt256
     return
 
-
-// ---------------------------------------------------------------------------
-// write_u256: write U256 to public output (little-endian limb order)
-// ---------------------------------------------------------------------------
-// Input: l0 l1 l2 l3 l4 l5 l6 l7 (l7 on top)
-// Writes l0 first, l7 last. Reverse stack then batch write.
+// write_u256: [l0..l7] -> (writes to public output)
 std_crypto_ecdsa__write_u256:
-    swap 7
-    swap 1
-    swap 6
-    swap 1
-    swap 2
-    swap 5
-    swap 2
-    swap 3
-    swap 4
-    swap 3
+    call __rev8
     write_io 5
     write_io 3
     return
 
-
-// ---------------------------------------------------------------------------
-// write_signature: write r then s to public output (16 field elements)
-// ---------------------------------------------------------------------------
-// Input: r.l0..r.l7 s.l0..s.l7 (s.l7 on top)
-// Writes r first, then s. Store s, write r, reload and write s.
+// write_signature: [r.l0..r.l7 s.l0..s.l7] -> (writes r then s)
 std_crypto_ecdsa__write_signature:
-    // Store s in memory[400..407]
-    push 407
-    swap 1
-    write_mem 1
-    pop 1
-    push 406
-    swap 1
-    write_mem 1
-    pop 1
-    push 405
-    swap 1
-    write_mem 1
-    pop 1
-    push 404
-    swap 1
-    write_mem 1
-    pop 1
-    push 403
-    swap 1
-    write_mem 1
-    pop 1
-    push 402
-    swap 1
-    write_mem 1
-    pop 1
-    push 401
-    swap 1
-    write_mem 1
-    pop 1
-    push 400
-    swap 1
-    write_mem 1
-    pop 1
-    // Write r (reverse then batch)
-    swap 7
-    swap 1
-    swap 6
-    swap 1
-    swap 2
-    swap 5
-    swap 2
-    swap 3
-    swap 4
-    swap 3
-    write_io 5
-    write_io 3
-    // Reload s from memory
-    push 400
-    read_mem 1
-    pop 1
-    push 401
-    read_mem 1
-    pop 1
-    push 402
-    read_mem 1
-    pop 1
-    push 403
-    read_mem 1
-    pop 1
-    push 404
-    read_mem 1
-    pop 1
-    push 405
-    read_mem 1
-    pop 1
-    push 406
-    read_mem 1
-    pop 1
-    push 407
-    read_mem 1
-    pop 1
-    // Write s (reverse then batch)
-    swap 7
-    swap 1
-    swap 6
-    swap 1
-    swap 2
-    swap 5
-    swap 2
-    swap 3
-    swap 4
-    swap 3
-    write_io 5
-    write_io 3
+    // Store s at mem[130..137]
+    push 130
+    call __store_u256
+    // Write r
+    call std_crypto_ecdsa__write_u256
+    // Reload and write s
+    push 130
+    call __load_u256
+    call std_crypto_ecdsa__write_u256
     return
