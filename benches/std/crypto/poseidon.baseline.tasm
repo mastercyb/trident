@@ -1,36 +1,21 @@
 // Hand-optimized TASM baseline: std.crypto.poseidon
 //
-// Functions matching poseidon.tri API:
-//   sbox, mix2, mix4, round2, round4, hash1, hash2, hash3, hash4
+// First principles rewrite. Key decisions:
+//   - sbox (x^5): 6 insns — dup/dup/mul/dup/mul/mul
+//   - mix2: 12 insns — S=a+b, new_a=S+a, new_b=S+2b, pure stack
+//   - mix4: 26 insns — S=a+b+c+d, pure stack swap-replace (no memory)
+//   - hash2/hash4: call subroutines (call is ~1 cycle on Triton VM)
+//   - round2/round4: call sbox/mix inline
 //
-// Optimization strategy:
-//   - sbox: 3 multiplications via dup/mul chain
-//   - mix2: S=a+b identityidentity => new_a=S+a, new_b=S+2b
-//   - mix4: S=a+b+c+d identity => out_i = S + in_imemoryforoutput staging
-//   - hash2/hash4: fully inline all rounds (zero call overheadoverhead)
-//   - hash1/hash3: thin wrappers overover hash2
-//
-// Formulas (from poseidon.tri):
-//   sbox(x) = x^5  (x2=x*x, x4=x2*x2, x5=x4*x)
+// Formulas:
+//   sbox(x) = x^5
 //   mix2(a, b) = (2a+b, a+3b)
-//   mix4(a, b, c, d) = (2a+b+c+d, a+2b+c+d, a+b+2c+d, a+b+c+2d)
-//
-// IdentitiesMemory used:
-//   mix2layout (scratch):
-//      500..503  mix4output staging
+//   mix4(a,b,c,d) = (S+a, S+b, S+c, S+d) where S=a+b+c+d
 
 
-// ===========================================================================
-// COMPONENT SUBROUTINES
-// ===========================================================================
-
-
-// ---------------------------------------------------------------------------
 // sbox: x -> x^5
-// ---------------------------------------------------------------------------
-// Input:  x
-// Output: x^5
-// Trace: x -> x,x -> x,x,x -> x,x^2 -> x,x^2,x^2 -> x,x^4 -> x^5
+// Input: x  Output: x^5
+// x -> x,x -> x,x^2 -> x,x^2,x^2 -> x,x^4 -> x^5
 std_crypto_poseidon__sbox:
     dup 0
     dup 0
@@ -41,12 +26,9 @@ std_crypto_poseidon__sbox:
     return
 
 
-// ---------------------------------------------------------------------------
-// mix2: 2-element linear mix
-// ---------------------------------------------------------------------------
-// Input:  a b  (b on top)
-// Output: new_a new_b  (new_b on top)
-//   new_a = 2a + b,  new_b = a + 3b2b
+// mix2: (a, b) -> (2a+b, a+3b)
+// Input: a b  (b on top)  Output: new_a new_b  (new_b on top)
+// S = a + b.  new_a = S+a = 2a+b.  new_b = S+2b = a+3b.
 std_crypto_poseidon__mix2:
     dup 0
     dup 2
@@ -63,17 +45,15 @@ std_crypto_poseidon__mix2:
     dup 0
     add
     add
+    // Stack: new_a new_b
     return
 
 
-// ---------------------------------------------------------------------------
-// mix4: 4-element linear mix
-// ---------------------------------------------------------------------------
-// Input:  a b c d  (d on top)
-// Output: na nb nc nd  (nd on top)
-//   S = a+b+c+d.  out_i = S + in_i.
-// Uses memory[500..503] for output staging to avoid stack reordering.
+// mix4: (a,b,c,d) -> (S+a, S+b, S+c, S+d) where S=a+b+c+d
+// Input: a b c d  (d on top)  Output: na nb nc nd  (nd on top)
+// Pure stack — no memory operations.
 std_crypto_poseidon__mix4:
+    // Compute S = a+b+c+d
     dup 3
     dup 3
     add
@@ -86,853 +66,171 @@ std_crypto_poseidon__mix4:
     dup 0
     dup 5
     add
-    push 500
-    swap 1
-    write_mem 1
+    swap 5
     pop 1
+    // Stack: na b c d S
+    // nb = S + b
     dup 0
     dup 4
     add
-    push 501
-    swap 1
-    write_mem 1
+    swap 4
     pop 1
-    dup 0
-    dup 3
-    add
-    push 502
-    swap 1
-    write_mem 1
-    pop 1
-    // nd = S + d
-    dup 1
-    add
-    push 503
-    swap 1
-    write_mem 1
-    pop 1
-    // Stack: a b c d  (S consumed by last add)
-    // Pop old values
-    pop 1
-    pop 1
-    pop 1
-    pop 1
-    // Reload from memory
-    push 500
-    read_mem 1
-    pop 1
-    push 501
-    read_mem 1
-    pop 1
-    push 502
-    read_mem 1
-    pop 1
-    push 503
-    read_mem 1
-    pop 1
-    return
-
-
-// ---------------------------------------------------------------------------
-// round2: full round for 2-element state
-// ---------------------------------------------------------------------------
-// Input:  a b rc0 rc1  (rc1 on top)
-// Output: new_a new_b  (new_b on top)
-// Inline: add constants, sbox both, mix2.
-std_crypto_poseidon__round2:
-    dup 2
-    add
-    // Stack: a b1 a1
-    swap 2
-    pop 1
-    // swap 2: a1 b1 a; pop 1: a1 b1
-    // sbox(b1) -- b1 is on top
-    // Stack: a1 b1
-    // sbox(b1)
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    // sbox(a1)
-    swap 1
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    // Stack: a2 b2
-        // mix2 inline:
-    dup 0
-    dup 2
-    add
+    // Stack: na nb c d S
+    // nc = S + c
     dup 0
     dup 3
     add
     swap 3
     pop 1
-    // Stack: new_a b2 S
+    // Stack: na nb nc d S
+    // nd = S + d
+    dup 1
+    add
     swap 1
-    dup 0
-    add
-    add
+    pop 1
+    // Stack: na nb nc nd
     return
 
 
-// ---------------------------------------------------------------------------
-// round4: full round for 4-element state
-// ---------------------------------------------------------------------------
-// Input:  a b c d rc0 rc1 rc2 rc3  (rc3 on top)
-// Output: na nb nc nd  (nd on top)
+// round2: one full round for 2-element state
+// Input: a b rc0 rc1  (rc1 on top)  Output: new_a new_b
+std_crypto_poseidon__round2:
+    // Add round constants: b1 = b + rc1 (rc1 on top, b at pos 2)
+    dup 2
+    add
+    swap 2
+    pop 1
+    // Stack: a b1 rc0
+    // a1 = a + rc0
+    swap 2
+    add
+    swap 1
+    // Stack: a1 b1
+    // sbox both
+    call std_crypto_poseidon__sbox
+    swap 1
+    call std_crypto_poseidon__sbox
+    swap 1
+    // Stack: a2 b2
+    // mix2
+    call std_crypto_poseidon__mix2
+    return
+
+
+// round4: one full round for 4-element state
+// Input: a b c d rc0 rc1 rc2 rc3  (rc3 on top)  Output: na nb nc nd
 std_crypto_poseidon__round4:
+    // d1 = d + rc3
     dup 4
     add
     swap 4
     pop 1
     // c1 = c + rc2
-    // c1 = c + rc2
-    dup 3
-    add
-    swap 4
-    pop 1
-    // b1b1 = b + rc1
     dup 4
     add
     swap 4
     pop 1
-    // a1a1 == a + rc0
+    // b1 = b + rc1
+    dup 4
+    add
+    swap 4
+    pop 1
+    // a1 = a + rc0
     dup 4
     add
     swap 4
     pop 1
     // Stack: a1 b1 c1 d1
-    // sbox all 4 (d on top)
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
+    // sbox all 4
+    call std_crypto_poseidon__sbox
     swap 1
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
+    call std_crypto_poseidon__sbox
     swap 1
     swap 2
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
+    call std_crypto_poseidon__sbox
     swap 2
     swap 3
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
+    call std_crypto_poseidon__sbox
     swap 3
     // Stack: a2 b2 c2 d2
-    // mix4 inline (memory-staged)
-    dup 3
-    dup 3
-    add
-    dup 3
-    add
-    dup 2
-    add
-    // Stack: a2 b2 c2 d2 S
-    dup 0
-    dup 5
-    add
-    push 500
-    swap 1
-    write_mem 1
-    pop 1
-    dup 0
-    dup 4
-    add
-    push 501
-    swap 1
-    write_mem 1
-    pop 1
-    dup 0
-    dup 3
-    add
-    push 502
-    swap 1
-    write_mem 1
-    pop 1
-    dup 1
-    add
-    push 503
-    swap 1
-    write_mem 1
-    pop 1
-    pop 1
-    pop 1
-    pop 1
-    pop 1
-    push 500
-    read_mem 1
-    pop 1
-    push 501
-    read_mem 1
-    pop 1
-    push 502
-    read_mem 1
-    pop 1
-    push 503
-    read_mem 1
-    pop 1
+    call std_crypto_poseidon__mix4
     return
 
 
-// ===========================================================================
-// PUBLIC API: HASH FUNCTIONS
-// ===========================================================================
-
-
-// ---------------------------------------------------------------------------
-// Inline mix2 macro (used in hash2):
-//   Input:  a2 b2  (b2 on top)
-//   Output: new_a new_b  (new_b on top)
-//   12 instructions:
-//     dup 0 / dup 2 / add / dup 0 / dup 3 / add /
-//     swap 3 / pop 1 / swap 1 / dup 0 / add / add
-//
-// Trace:
-//   a2 b2
-//   a2 b2 b2                  dup 0
-//   a2 b2 b2 a2               dup 2
-//   a2 b2 S                   add        (S = a2+b2)
-//   a2 b2 S S                 dup 0
-//   a2 b2 S S a2              dup 3
-//   a2 b2 S new_a             add        (new_a = S+a2 = 2a2+b2)
-//   new_a b2 S a2             swap 3
-//   new_a b2 S                pop 1
-//   new_a S b2                swap 1
-//   new_a S b2 b2             dup 0
-//   new_a S 2b2               add
-//   new_a new_b               add        (new_b = S+2b2 = a2+3b2)
-// ---------------------------------------------------------------------------
-
-
-// ---------------------------------------------------------------------------
-// Inline mix4 macro (used in hash4):
-//   Input:  a2 b2 c2 d2  (d2 on top)
-//   Output: na nb nc nd  (nd on top)
-//   Uses memory[500..503].
-//   Instructions:
-//     compute S:   dup 3 / dup 3 / add / dup 3 / add / dup 2 / add  (7)
-//     store na:    dup 0 / dup 5 / add / push 500 / swap 1 / write_mem 1 / pop 1  (7)
-//     store nb:    dup 0 / dup 4 / add / push 501 / swap 1 / write_mem 1 / pop 1  (7)
-//     store nc:    dup 0 / dup 3 / add / push 502 / swap 1 / write_mem 1 / pop 1  (7)
-//     store nd:    dup 1 / add / push 503 / swap 1 / write_mem 1 / pop 1           (6)
-//     cleanup:     pop 1 * 4                                                       (4)
-//     reload:      (push / read_mem 1 / pop 1) * 4                                (12)
-//                                                                        total: 50
-// ---------------------------------------------------------------------------
-
-
-// ---------------------------------------------------------------------------
 // hash2: Poseidon hash of 2 field elements -> 1 field element
-// ---------------------------------------------------------------------------
-// Input:  a b  (b on top)
-// Output: result
-// 4 rounds, constants: (3,7), (11,13), (17,19), (23,29).
-// Each round fully inlined: add constants (6) + sbox*2 (14) + mix2 (12) = 32
-// Total: 4 * 32 + pop 1 + return = 130 instructions
+// Input: a b  (b on top)  Output: result
+// 4 rounds with constants (3,7), (11,13), (17,19), (23,29)
 std_crypto_poseidon__hash2:
-
-    // === Round 1: rc = (3, 7) ===
-    // add constants
-    swap 1
-    push 3
-    add
-    swap 1
+    // Round 1
     push 7
-    add
-    // sbox(b1)
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    // sbox(a1)
-    swap 1
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    // mix2
-    dup 0
-    dup 2
-    add
-    dup 0
-    dup 3
-    add
-    swap 3
-    pop 1
-    swap 1
-    dup 0
-    add
-    add
-
-    // === Round 2: rc = (11, 13) ===
-    swap 1
-    push 11
-    add
-    swap 1
+    push 3
+    call std_crypto_poseidon__round2
+    // Round 2
     push 13
-    add
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    dup 0
-    dup 2
-    add
-    dup 0
-    dup 3
-    add
-    swap 3
-    pop 1
-    swap 1
-    dup 0
-    add
-    add
-
-    // === Round 3: rc = (17, 19) ===
-    swap 1
-    push 17
-    add
-    swap 1
+    push 11
+    call std_crypto_poseidon__round2
+    // Round 3
     push 19
-    add
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    dup 0
-    dup 2
-    add
-    dup 0
-    dup 3
-    add
-    swap 3
-    pop 1
-    swap 1
-    dup 0
-    add
-    add
-
-    // === Round 4: rc = (23, 29) ===
-    swap 1
-    push 23
-    add
-    swap 1
+    push 17
+    call std_crypto_poseidon__round2
+    // Round 4
     push 29
-    add
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    dup 0
-    dup 2
-    add
-    dup 0
-    dup 3
-    add
-    swap 3
-    pop 1
-    swap 1
-    dup 0
-    add
-    add
-
-    // Discard second element, return first
+    push 23
+    call std_crypto_poseidon__round2
+    // Return first element
     pop 1
     return
 
 
-// ---------------------------------------------------------------------------
 // hash4: Poseidon hash of 4 field elements -> 1 field element
-// ---------------------------------------------------------------------------
-// Input:  a b c d  (d on top)
-// Output: result
-// 4 rounds, constants:
-//   R1: (3,7,11,13),  R2: (17,19,23,29),
-//   R3: (31,37,41,43),  R4: (47,53,59,61).
-// Each round fully inlined: add constants (12) + sbox*4 (28) + mix4 (50) = 90
-// Total: 4 * 90 + 3*pop 1 + return = 364 instructions
+// Input: a b c d  (d on top)  Output: result
+// 4 rounds with constants (3,7,11,13), (17,19,23,29), (31,37,41,43), (47,53,59,61)
 std_crypto_poseidon__hash4:
-
-    // === Round 1: rc = (3, 7, 11, 13) ===
-    // add constants (d on top, work top-down)
+    // Round 1
     push 13
-    add
-    swap 1
     push 11
-    add
-    swap 1
-    swap 2
     push 7
-    add
-    swap 2
-    swap 3
     push 3
-    add
-    swap 3
-    // sbox d (top)
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    // sbox c
-    swap 1
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    // sbox b
-    swap 2
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 2
-    // sbox a
-    swap 3
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 3
-    // mix4 (memory-staged)
-    dup 3
-    dup 3
-    add
-    dup 3
-    add
-    dup 2
-    add
-    dup 0
-    dup 5
-    add
-    push 500
-    swap 1
-    write_mem 1
-    pop 1
-    dup 0
-    dup 4
-    add
-    push 501
-    swap 1
-    write_mem 1
-    pop 1
-    dup 0
-    dup 3
-    add
-    push 502
-    swap 1
-    write_mem 1
-    pop 1
-    dup 1
-    add
-    push 503
-    swap 1
-    write_mem 1
-    pop 1
-    pop 1
-    pop 1
-    pop 1
-    pop 1
-    push 500
-    read_mem 1
-    pop 1
-    push 501
-    read_mem 1
-    pop 1
-    push 502
-    read_mem 1
-    pop 1
-    push 503
-    read_mem 1
-    pop 1
-
-    // === Round 2: rc = (17, 19, 23, 29) ===
+    call std_crypto_poseidon__round4
+    // Round 2
     push 29
-    add
-    swap 1
     push 23
-    add
-    swap 1
-    swap 2
     push 19
-    add
-    swap 2
-    swap 3
     push 17
-    add
-    swap 3
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    swap 2
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 2
-    swap 3
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 3
-    dup 3
-    dup 3
-    add
-    dup 3
-    add
-    dup 2
-    add
-    dup 0
-    dup 5
-    add
-    push 500
-    swap 1
-    write_mem 1
-    pop 1
-    dup 0
-    dup 4
-    add
-    push 501
-    swap 1
-    write_mem 1
-    pop 1
-    dup 0
-    dup 3
-    add
-    push 502
-    swap 1
-    write_mem 1
-    pop 1
-    dup 1
-    add
-    push 503
-    swap 1
-    write_mem 1
-    pop 1
-    pop 1
-    pop 1
-    pop 1
-    pop 1
-    push 500
-    read_mem 1
-    pop 1
-    push 501
-    read_mem 1
-    pop 1
-    push 502
-    read_mem 1
-    pop 1
-    push 503
-    read_mem 1
-    pop 1
-
-    // === Round 3: rc = (31, 37, 41, 43) ===
+    call std_crypto_poseidon__round4
+    // Round 3
     push 43
-    add
-    swap 1
     push 41
-    add
-    swap 1
-    swap 2
     push 37
-    add
-    swap 2
-    swap 3
     push 31
-    add
-    swap 3
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    swap 2
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 2
-    swap 3
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 3
-    dup 3
-    dup 3
-    add
-    dup 3
-    add
-    dup 2
-    add
-    dup 0
-    dup 5
-    add
-    push 500
-    swap 1
-    write_mem 1
-    pop 1
-    dup 0
-    dup 4
-    add
-    push 501
-    swap 1
-    write_mem 1
-    pop 1
-    dup 0
-    dup 3
-    add
-    push 502
-    swap 1
-    write_mem 1
-    pop 1
-    dup 1
-    add
-    push 503
-    swap 1
-    write_mem 1
-    pop 1
-    pop 1
-    pop 1
-    pop 1
-    pop 1
-    push 500
-    read_mem 1
-    pop 1
-    push 501
-    read_mem 1
-    pop 1
-    push 502
-    read_mem 1
-    pop 1
-    push 503
-    read_mem 1
-    pop 1
-
-    // === Round 4: rc = (47, 53, 59, 61) ===
+    call std_crypto_poseidon__round4
+    // Round 4
     push 61
-    add
-    swap 1
     push 59
-    add
-    swap 1
-    swap 2
     push 53
-    add
-    swap 2
-    swap 3
     push 47
-    add
-    swap 3
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 1
-    swap 2
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 2
-    swap 3
-    dup 0
-    dup 0
-    mul
-    dup 0
-    mul
-    mul
-    swap 3
-    dup 3
-    dup 3
-    add
-    dup 3
-    add
-    dup 2
-    add
-    dup 0
-    dup 5
-    add
-    push 500
-    swap 1
-    write_mem 1
-    pop 1
-    dup 0
-    dup 4
-    add
-    push 501
-    swap 1
-    write_mem 1
-    pop 1
-    dup 0
-    dup 3
-    add
-    push 502
-    swap 1
-    write_mem 1
-    pop 1
-    dup 1
-    add
-    push 503
-    swap 1
-    write_mem 1
-    pop 1
-    pop 1
-    pop 1
-    pop 1
-    pop 1
-    push 500
-    read_mem 1
-    pop 1
-    push 501
-    read_mem 1
-    pop 1
-    push 502
-    read_mem 1
-    pop 1
-    push 503
-    read_mem 1
-    pop 1
-
-    // DiscardDiscard nb nc nd, return na
+    call std_crypto_poseidon__round4
+    // Return first element
     pop 1
     pop 1
     pop 1
     return
 
 
-// ---------------------------------------------------------------------------
 // hash1: hash single field element (domain tag = 1)
-// ---------------------------------------------------------------------------
-// Input:  a
-// Output: result
-// hash1(a)hash1(a) == hash2(a, 1)
+// Input: a  Output: result
 std_crypto_poseidon__hash1:
     push 1
     call std_crypto_poseidon__hash2
     return
 
 
-// ---------------------------------------------------------------------------
 // hash3: hash 3 field elements via chained hash2
-// ---------------------------------------------------------------------------
-// Input:  a b c  (c on top)
-// Output: result
-// hash3(a, b, c) = hash2(hash2(a, b), c)
+// Input: a b c  (c on top)  Output: result
 std_crypto_poseidon__hash3:
-    // MoveMove c below a b: swap c past a and b so hash2 seesa and b so hash2 sees a b on top.
     swap 2
     swap 1
-    // Stack: c a b  (b on top)a b  (b on top)
     call std_crypto_poseidon__hash2
-    // Stack: c h1
     swap 1
-    // Stack: h1 c
     call std_crypto_poseidon__hash2
     return
