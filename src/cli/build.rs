@@ -258,28 +258,104 @@ fn run_neural_analysis(
         return;
     }
 
-    // Analysis mode (--neural without --train): run v2 beam search with trained checkpoint.
-    // Uses neural::compile() which loads the production/stage1_best checkpoint.
-    match trident::neural::compile(&ir, &baseline_tasm) {
-        Ok(result) => {
-            if result.neural {
-                let ratio = result.cost as f64 / baseline_cost.max(1) as f64;
+    // Analysis mode (--neural without --train): per-function beam search with trained checkpoint.
+    // Load model once, then compile each function independently.
+    use burn::backend::wgpu::{Wgpu, WgpuDevice};
+    use trident::neural::data::pairs::split_tir_by_function;
+
+    let wgpu_device = WgpuDevice::default();
+    let model = match trident::neural::load_model::<Wgpu>(&wgpu_device) {
+        Some(m) => m,
+        None => {
+            eprintln!("\nNeural v2: no trained checkpoint found. Run `trident train` first.");
+            return;
+        }
+    };
+
+    let functions = split_tir_by_function(&ir);
+    let lowering_fn = trident::ir::tir::lower::create_stack_lowering(&options.target_config.name);
+
+    let mut neural_wins = 0usize;
+    let mut neural_fallbacks = 0usize;
+    let mut total_neural_cost = 0u64;
+    let mut total_compiler_cost = 0u64;
+
+    eprintln!("\nNeural v2 per-function compilation:");
+    eprintln!(
+        "  {:<50} {:>10} {:>10} {:>8}",
+        "Function", "Compiler", "Neural", "Result"
+    );
+    eprintln!("  {}", "-".repeat(82));
+
+    for (fn_name, fn_tir) in &functions {
+        if fn_name.starts_with("__") || fn_tir.is_empty() {
+            continue;
+        }
+
+        // Lower this function's TIR to compiler TASM baseline
+        let fn_baseline = lowering_fn.lower(fn_tir);
+        let fn_baseline: Vec<String> = fn_baseline
+            .into_iter()
+            .filter(|l| {
+                let t = l.trim();
+                !t.is_empty() && !t.ends_with(':') && !t.starts_with("//")
+            })
+            .map(|l| l.trim().to_string())
+            .collect();
+
+        if fn_baseline.is_empty() {
+            continue;
+        }
+
+        let compiler_cost = trident::cost::scorer::profile_tasm(
+            &fn_baseline.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        )
+        .cost()
+        .max(1);
+
+        total_compiler_cost += compiler_cost;
+
+        match trident::neural::compile_with_model(fn_tir, &fn_baseline, &model, &wgpu_device) {
+            Ok(result) if result.neural && result.cost <= compiler_cost => {
+                neural_wins += 1;
+                total_neural_cost += result.cost;
+                let ratio = result.cost as f64 / compiler_cost as f64;
                 eprintln!(
-                    "\nNeural v2: {}/{} candidates valid, best cost: {} (baseline: {}, {:.2}x)",
-                    result.valid_count, result.total_count, result.cost, baseline_cost, ratio,
+                    "  {:<50} {:>10} {:>10} {:>8}",
+                    fn_name,
+                    compiler_cost,
+                    format!("{} ({:.2}x)", result.cost, ratio),
+                    "neural",
                 );
-                if result.cost <= baseline_cost {
-                    eprintln!("  neural output accepted (cost <= baseline)");
-                } else {
-                    eprintln!("  neural output worse than baseline, using compiler output");
-                }
-            } else {
-                eprintln!("\nNeural v2: no valid candidates (fallback to compiler)");
+            }
+            Ok(result) if result.neural => {
+                neural_fallbacks += 1;
+                total_neural_cost += compiler_cost;
+                eprintln!(
+                    "  {:<50} {:>10} {:>10} {:>8}",
+                    fn_name, compiler_cost, result.cost, "compiler",
+                );
+            }
+            _ => {
+                neural_fallbacks += 1;
+                total_neural_cost += compiler_cost;
+                eprintln!(
+                    "  {:<50} {:>10} {:>10} {:>8}",
+                    fn_name, compiler_cost, "-", "fallback",
+                );
             }
         }
-        Err(e) => {
-            eprintln!("\nNeural v2 error: {}", e);
-        }
+    }
+
+    eprintln!("  {}", "-".repeat(82));
+    let total_fns = neural_wins + neural_fallbacks;
+    eprintln!(
+        "  Total: {}/{} functions neural, compiler cost: {}, neural cost: {}",
+        neural_wins, total_fns, total_compiler_cost, total_neural_cost,
+    );
+    if total_compiler_cost > 0 {
+        let ratio = total_neural_cost as f64 / total_compiler_cost as f64;
+        eprintln!("  Overall ratio: {:.4}x", ratio);
     }
 }
 
