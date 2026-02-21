@@ -1,0 +1,61 @@
+module std.math.fibonacci
+
+// Fibonacci sequence over the native field.
+//
+// Computes fib(n) iteratively using bounded for-loops.
+// All arithmetic is native field addition — the simplest possible
+// loop benchmark for a ZK VM. This is the standard benchmark
+// used across ZK frameworks (RISC Zero, SP1, Miden, Cairo).
+
+// Compute the n-th Fibonacci number (0-indexed).
+// fib(0) = 0, fib(1) = 1, fib(n) = fib(n-1) + fib(n-2).
+// Bounded to n <= 256.
+pub fn fib256(n: Field) -> Field {
+    let mut a: Field = 0
+    let mut b: Field = 1
+    for i in 0..n bounded 256 {
+        let next: Field = a + b
+        a = b
+        b = next
+    }
+    a
+}
+
+// Fibonacci with bound 1024 — medium workload.
+pub fn fib1k(n: Field) -> Field {
+    let mut a: Field = 0
+    let mut b: Field = 1
+    for i in 0..n bounded 1024 {
+        let next: Field = a + b
+        a = b
+        b = next
+    }
+    a
+}
+
+// Fibonacci with bound 10000 — heavy workload.
+// At 10K iterations over Goldilocks field, this produces
+// a substantial execution trace for proving benchmarks.
+pub fn fib10k(n: Field) -> Field {
+    let mut a: Field = 0
+    let mut b: Field = 1
+    for i in 0..n bounded 10000 {
+        let next: Field = a + b
+        a = b
+        b = next
+    }
+    a
+}
+
+// Fibonacci with bound 100000 — matches industry benchmark (fib(100K)).
+// This is the standard workload used by RISC Zero, SP1, and others.
+pub fn fib100k(n: Field) -> Field {
+    let mut a: Field = 0
+    let mut b: Field = 1
+    for i in 0..n bounded 100000 {
+        let next: Field = a + b
+        a = b
+        b = next
+    }
+    a
+}
