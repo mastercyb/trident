@@ -257,11 +257,23 @@ pub fn cmd_bench(args: BenchArgs) {
 
 /// Render instruction-count-only table (default, no --full).
 fn render_insn_table(modules: &[ModuleBench], show_functions: bool) {
+    let w = modules
+        .iter()
+        .map(|m| m.name.len())
+        .max()
+        .unwrap_or(40)
+        .max(6)
+        + 2;
     eprintln!(
-        "{:<40} {:>6} {:>6} {:>6} {:>7}",
-        "Module", "Tri", "Hand", "Neural", "Ratio"
+        "{:<w$} {:>6} {:>6} {:>6} {:>7}",
+        "Module",
+        "Tri",
+        "Hand",
+        "Neural",
+        "Ratio",
+        w = w,
     );
-    eprintln!("{}", "-".repeat(70));
+    eprintln!("{}", "-".repeat(w + 30));
 
     for mb in modules {
         let ratio = if mb.hand_insn > 0 {
@@ -275,8 +287,13 @@ fn render_insn_table(modules: &[ModuleBench], show_functions: bool) {
             "-".to_string()
         };
         eprintln!(
-            "{:<40} {:>6} {:>6} {:>6} {:>7}",
-            mb.name, mb.classic_insn, mb.hand_insn, neural_str, ratio,
+            "{:<w$} {:>6} {:>6} {:>6} {:>7}",
+            mb.name,
+            mb.classic_insn,
+            mb.hand_insn,
+            neural_str,
+            ratio,
+            w = w,
         );
         if show_functions {
             for f in &mb.functions {
@@ -289,7 +306,7 @@ fn render_insn_table(modules: &[ModuleBench], show_functions: bool) {
                     "-".to_string()
                 };
                 eprintln!(
-                    "  {:<38} {:>6} {:>6} {:>6} {:>7}",
+                    "  {:<fw$} {:>6} {:>6} {:>6} {:>7}",
                     f.name,
                     if f.compiled_instructions > 0 {
                         f.compiled_instructions.to_string()
@@ -299,12 +316,13 @@ fn render_insn_table(modules: &[ModuleBench], show_functions: bool) {
                     f.baseline_instructions,
                     "", // per-function neural not tracked here
                     fr,
+                    fw = w - 2,
                 );
             }
         }
     }
 
-    eprintln!("{}", "-".repeat(70));
+    eprintln!("{}", "-".repeat(w + 30));
     let sum_classic: usize = modules.iter().map(|m| m.classic_insn).sum();
     let sum_hand: usize = modules.iter().map(|m| m.hand_insn).sum();
     let sum_neural: usize = modules.iter().map(|m| m.neural_insn).sum();
@@ -319,12 +337,13 @@ fn render_insn_table(modules: &[ModuleBench], show_functions: bool) {
         "-".to_string()
     };
     eprintln!(
-        "{:<40} {:>6} {:>6} {:>6} {:>7}",
+        "{:<w$} {:>6} {:>6} {:>6} {:>7}",
         format!("TOTAL ({} modules)", modules.len()),
         sum_classic,
         sum_hand,
         neural_total,
         avg_ratio,
+        w = w,
     );
 }
 
@@ -351,20 +370,36 @@ fn fmt_verify_row(classic: &DimTiming, hand: &DimTiming, neural: &DimTiming) -> 
 
 /// Render full 4D table: grouped by step (Exec | Prove | Verify), sub-columns C/H/N.
 fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
+    let w = modules
+        .iter()
+        .map(|m| m.name.len())
+        .max()
+        .unwrap_or(40)
+        .max(6)
+        + 2;
+    let total_w = w + 104;
     // Header: Module  Compile  Rust | Exec (C H N) | Prove (C H N) | Verify (C H N) | Ratio
     eprintln!(
-        "{:<28} {:>7} {:>7}  | {:>5} {:>5} {:>5} | {:>7} {:>7} {:>7} | {:>5} {:>5} {:>5} {:>4} | {:>5}",
+        "{:<w$} {:>7} {:>7}  | {:>5} {:>5} {:>5} | {:>7} {:>7} {:>7} | {:>5} {:>5} {:>5} {:>4} | {:>5}",
         "Module", "Compile", "Rust",
         "C", "H", "N",
         "C", "H", "N",
         "C", "H", "N", "",
         "Ratio",
+        w = w,
     );
     eprintln!(
-        "{:<28} {:>7} {:>7}  | {:<17} | {:<23} | {:<22} | {:>5}",
-        "", "", "", "Exec", "Prove", "Verify", "",
+        "{:<w$} {:>7} {:>7}  | {:<17} | {:<23} | {:<22} | {:>5}",
+        "",
+        "",
+        "",
+        "Exec",
+        "Prove",
+        "Verify",
+        "",
+        w = w,
     );
-    eprintln!("{}", "-".repeat(132));
+    eprintln!("{}", "-".repeat(total_w));
 
     for mb in modules {
         let ratio = if mb.hand_insn > 0 {
@@ -374,7 +409,7 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
         };
 
         eprintln!(
-            "{:<28} {:>7} {:>7}  | {:>5} {:>5} {:>5} | {:>7} {:>7} {:>7} | {:>5} {:>5} {:>5} {:>4} | {:>5}",
+            "{:<w$} {:>7} {:>7}  | {:>5} {:>5} {:>5} | {:>7} {:>7} {:>7} | {:>5} {:>5} {:>5} {:>4} | {:>5}",
             mb.name,
             format!("{:.1}ms", mb.compile_ms),
             fmt_rust(mb.rust_ns),
@@ -383,6 +418,7 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
             fmt_ms(mb.classic.verify_ms), fmt_ms(mb.hand.verify_ms), fmt_ms(mb.neural.verify_ms),
             fmt_verify_row(&mb.classic, &mb.hand, &mb.neural),
             ratio,
+            w = w,
         );
 
         if show_functions {
@@ -396,7 +432,7 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
                     "-".to_string()
                 };
                 eprintln!(
-                    "  {:<26} {:>5}/{:<5} {}",
+                    "  {:<fw$} {:>5}/{:<5} {}",
                     f.name,
                     if f.compiled_instructions > 0 {
                         f.compiled_instructions.to_string()
@@ -405,12 +441,13 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
                     },
                     f.baseline_instructions,
                     fr,
+                    fw = w - 2,
                 );
             }
         }
     }
 
-    eprintln!("{}", "-".repeat(132));
+    eprintln!("{}", "-".repeat(total_w));
 
     // Summary row
     let sum_classic: usize = modules.iter().map(|m| m.classic_insn).sum();
@@ -467,7 +504,7 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
     };
 
     eprintln!(
-        "{:<28} {:>7} {:>7}  | {:>5} {:>5} {:>5} | {:>7} {:>7} {:>7} | {:>5} {:>5} {:>5} {:>4} | {:>5}",
+        "{:<w$} {:>7} {:>7}  | {:>5} {:>5} {:>5} | {:>7} {:>7} {:>7} | {:>5} {:>5} {:>5} {:>4} | {:>5}",
         format!("TOTAL ({} modules)", n),
         format!("{:.0}ms", total_compile),
         rust_total_str,
@@ -476,13 +513,15 @@ fn render_full_table(modules: &[ModuleBench], show_functions: bool) {
         fmt_t(classic_verify, classic_verified > 0), fmt_t(hand_verify, hand_verified > 0), fmt_t(neural_verify, neural_verified > 0),
         format!("{}/{}", classic_verified, n),
         avg_ratio,
+        w = w,
     );
     eprintln!(
-        "{:<28} {:>7} {:>7}  | insn: {:<11} |",
+        "{:<w$} {:>7} {:>7}  | insn: {:<11} |",
         "",
         "",
         "",
         format!("{}C / {}H", sum_classic, sum_hand),
+        w = w,
     );
 }
 
