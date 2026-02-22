@@ -16,6 +16,8 @@ use vm.core.field
 
 use vm.core.convert
 
+use vm.core.assert
+
 use vm.io.mem
 
 use std.nn.tensor
@@ -104,6 +106,11 @@ pub fn dense_layer(
 //
 // class=0: |00> -> Bell -> skip CZ -> decode -> |00> -> p0>p1 -> true
 // class>0: |00> -> Bell -> CZ -> decode -> |10> -> p0<p1 -> false
+//
+// Measurement traces out q1 from the 2-qubit state (sum of two norm-squareds
+// per outcome), so we can't use gates.measure_deterministic directly
+// (which handles single-qubit |alpha|^2 vs |beta|^2). The comparison
+// logic is identical — split + threshold over Goldilocks.
 pub fn quantum_commit(class: Field) -> Bool {
     let q0: gates.Qubit = gates.init_zero()
     let q1: gates.Qubit = gates.init_zero()
@@ -115,10 +122,12 @@ pub fn quantum_commit(class: Field) -> Bool {
         committed = gates.cz(entangled)
     }
     let decoded: gates.TwoQubit = gates.cnot(committed)
+    // H on q0: apply to 2-qubit state
     let q00: gates.Complex = gates.complex_add(decoded.q00, decoded.q10)
     let q01: gates.Complex = gates.complex_add(decoded.q01, decoded.q11)
     let q10: gates.Complex = gates.complex_sub(decoded.q00, decoded.q10)
     let q11: gates.Complex = gates.complex_sub(decoded.q01, decoded.q11)
+    // Trace out q1: p0 = |q00|^2 + |q01|^2, p1 = |q10|^2 + |q11|^2
     let p0: Field = gates.complex_norm_sq(q00) + gates.complex_norm_sq(q01)
     let p1: Field = gates.complex_norm_sq(q10) + gates.complex_norm_sq(q11)
     let diff: Field = p0 + field.neg(p1)
@@ -134,6 +143,11 @@ pub fn quantum_commit(class: Field) -> Bool {
 // 2. Decrypt encrypted outputs (bridge to plaintext)
 // 3. Dense neural layer (matvec + bias + ReLU — AI)
 // 4. Quantum commitment (2-qubit Bell circuit — Quantum)
+//
+// The class is computed inside the pipeline via argmax on the dense layer
+// output. expected_class is the prover's claim — the circuit asserts it
+// matches the computed argmax, preventing class substitution without
+// performing the actual inference.
 //
 // Returns: Bool from quantum measurement confirming the commitment.
 pub fn trinity(
@@ -152,8 +166,15 @@ pub fn trinity(
     activated_addr: Field,
     expected_class: Field
 ) -> Bool {
+    // Phase 1: Encrypted linear layer
     private_linear(cts_addr, w_priv_addr, ct_out_addr, tmp_addr, lwe_n, input_dim, neurons)
+    // Phase 1b: Decrypt
     decrypt_outputs(ct_out_addr, s_addr, result_addr, delta, lwe_n, neurons)
+    // Phase 2: Dense neural layer
     dense_layer(dense_w_addr, result_addr, dense_b_addr, activated_addr, tmp_addr, neurons)
-    quantum_commit(expected_class)
+    // Compute class from neural output — data dependency between AI and Quantum
+    let class: Field = tensor.argmax(activated_addr, neurons)
+    assert.eq(class, expected_class)
+    // Phase 3: Quantum commitment on computed class
+    quantum_commit(class)
 }

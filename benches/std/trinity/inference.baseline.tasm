@@ -21,9 +21,9 @@
 //   __decrypt_loop    :  24
 //   __dense_layer     :   3
 //   __quantum_commit  :   3
-//   __trinity         :  31
+//   __trinity         :  37
 //   ----------------------------------------
-//   Total             :  61
+//   Total             :  67
 
 
 // ===========================================================================
@@ -116,7 +116,8 @@ __quantum_commit:
 //   1. lwe.private_linear (external)
 //   2. decrypt_outputs (inline loop)
 //   3. dense_layer
-//   4. quantum_commit
+//   4. argmax + assert (data dependency: AI -> Quantum)
+//   5. quantum_commit
 //
 // Stack on entry (st0 = top, 14 args):
 //   st0:  expected_class
@@ -134,7 +135,7 @@ __quantum_commit:
 //   st12: s_addr
 //   st13: cts_addr
 //
-// 31 counted instructions.
+// 37 counted instructions.
 __trinity:
     // --- Phase 1: lwe.private_linear(cts, w_priv, ct_out, tmp, lwe_n, input_dim, neurons) ---
     dup 13
@@ -164,8 +165,17 @@ __trinity:
     dup 9
     call __dense_layer
     pop 6
-    // --- Phase 3: quantum_commit(expected_class) ---
+    // --- argmax(activated_addr, neurons) + assert class == expected ---
+    // Stack: [expected_class, activated_addr, dense_b, dense_w, neurons, ...]
+    dup 1
+    dup 5
+    call __tensor_argmax
+    // Stack: [class, expected_class, activated_addr, ...]
     dup 0
+    dup 2
+    eq
+    assert
+    // --- Phase 3: quantum_commit(class) ---
     call __quantum_commit
     // Cleanup: swap result past 14 args, pop all
     swap 14
