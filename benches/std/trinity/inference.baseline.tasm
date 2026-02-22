@@ -1,13 +1,14 @@
 // Hand-optimized TASM baseline: std.trinity.inference
 //
-// Provable private neural inference with quantum commitment.
+// Provable private neural inference with hash commitment and quantum circuit.
 // Real LWE encryption over Goldilocks, lookup-table ReLU activation,
-// 2-qubit Bell pair commitment.
+// Poseidon2 hash commitment, 2-qubit Bell pair commitment.
 //
 // The ReLU lookup table is the Rosetta Stone primitive: the same
 // table serves as NN activation and FHE PBS test polynomial.
 //
-// Pitch parameters: LWE dim 8, 8 inputs, 16 neurons, Bell commitment.
+// Pitch parameters: LWE dim 8, 8 inputs, 16 neurons,
+// Poseidon2 commitment, Bell commitment.
 //
 // Stack convention:
 //   Arguments pushed left-to-right (first arg deepest on stack).
@@ -23,10 +24,12 @@
 // Static instruction count summary:
 //   __decrypt_loop    :  24
 //   __dense_layer     :  17
+//   __sum_loop        :  13
+//   __hash_commit     :  15
 //   __quantum_commit  :   3
-//   __trinity         :  38
+//   __trinity         :  49
 //   ----------------------------------------
-//   Total             :  82
+//   Total             : 121
 
 
 // ===========================================================================
@@ -118,7 +121,78 @@ __dense_layer:
 
 
 // ===========================================================================
-// PHASE 3: QUANTUM COMMITMENT (2-qubit Bell pair)
+// PHASE 3: HASH COMMITMENT (Poseidon2)
+// ===========================================================================
+
+
+// ---------------------------------------------------------------------------
+// __sum_loop: (addr, counter, accumulator) -> (addr_end, 0, sum)
+// ---------------------------------------------------------------------------
+// Sum counter elements starting at addr, walking forward.
+// Returns sum in st2 when counter reaches 0.
+//
+// 13 counted instructions.
+__sum_loop:
+    dup 1
+    push 0
+    eq
+    skiz
+    return
+    // Stack: [addr, counter, acc]
+    read_mem 1
+    // Stack: [val, addr+1, counter, acc]
+    swap 3
+    add
+    // Stack: [acc+val, addr+1, counter]
+    swap 2
+    // Stack: [counter, addr+1, acc']
+    push -1
+    add
+    // Stack: [counter-1, addr+1, acc']
+    swap 1
+    // Stack: [addr+1, counter-1, acc']
+    recurse
+
+
+// ---------------------------------------------------------------------------
+// __hash_commit: (activated_addr, neurons, weights_digest, key_digest, class, rc_addr) -> digest
+// ---------------------------------------------------------------------------
+// Computes output_digest = sum(activated), then hashes
+// (weights_digest, key_digest, output_digest, class) via Poseidon2.
+//
+// Stack: [activated_addr, neurons, w_dig, key_dig, class, rc_addr]
+//   st0: activated_addr   st3: key_digest
+//   st1: neurons          st4: class
+//   st2: weights_digest   st5: rc_addr
+//
+// 15 counted instructions.
+__hash_commit:
+    // --- sum(activated, neurons) -> output_digest ---
+    // __sum_loop wants (addr, counter, acc)
+    dup 0
+    dup 2
+    push 0
+    call __sum_loop
+    // Stack: [addr_end, 0, output_digest, activated, neurons, w_dig, key_dig, class, rc_addr]
+    pop 2
+    // Stack: [output_digest, activated, neurons, w_dig, key_dig, class, rc_addr]
+    // --- poseidon2.hash4_to_digest(w_dig, key_dig, output_digest, class, rc_addr) ---
+    // Need: [w_dig, key_dig, output_digest, class, rc_addr] (first arg deepest)
+    dup 3
+    dup 5
+    dup 3
+    dup 8
+    dup 10
+    call __poseidon2_hash4_to_digest
+    // Stack: [digest, output_digest, activated, neurons, w_dig, key_dig, class, rc_addr]
+    swap 7
+    pop 5
+    pop 2
+    return
+
+
+// ===========================================================================
+// PHASE 4: QUANTUM COMMITMENT (2-qubit Bell pair)
 // ===========================================================================
 
 
@@ -143,78 +217,99 @@ __quantum_commit:
 // __trinity: (cts_addr, s_addr, w_priv_addr, ct_out_addr, tmp_addr,
 //             result_addr, delta, lwe_n, input_dim, neurons,
 //             dense_w_addr, dense_b_addr, activated_addr,
-//             lut_addr, expected_class) -> Bool
+//             lut_addr, expected_class,
+//             rc_addr, weights_digest, key_digest, expected_digest) -> Bool
 // ---------------------------------------------------------------------------
 // Full pipeline:
 //   1. lwe.private_linear (external)
 //   2. decrypt_outputs (inline loop)
 //   3. dense_layer with lookup-table ReLU (Rosetta Stone)
-//   4. argmax + assert (data dependency: AI -> Quantum)
-//   5. quantum_commit
+//   4. argmax + assert (data dependency: AI -> Hash/Quantum)
+//   5. hash_commit + assert digest (Poseidon2 model binding)
+//   6. quantum_commit
 //
-// Stack on entry (st0 = top, 15 args):
-//   st0:  expected_class
-//   st1:  lut_addr
-//   st2:  activated_addr
-//   st3:  dense_b_addr
-//   st4:  dense_w_addr
-//   st5:  neurons
-//   st6:  input_dim
-//   st7:  lwe_n
-//   st8:  delta
-//   st9:  result_addr
-//   st10: tmp_addr
-//   st11: ct_out_addr
-//   st12: w_priv_addr
-//   st13: s_addr
-//   st14: cts_addr
+// Stack on entry (st0 = top, 19 args):
+//   st0:  expected_digest
+//   st1:  key_digest
+//   st2:  weights_digest
+//   st3:  rc_addr
+//   st4:  expected_class
+//   st5:  lut_addr
+//   st6:  activated_addr
+//   st7:  dense_b_addr
+//   st8:  dense_w_addr
+//   st9:  neurons
+//   st10: input_dim
+//   st11: lwe_n
+//   st12: delta
+//   st13: result_addr
+//   st14: tmp_addr
+//   st15: ct_out_addr
+//   st16: w_priv_addr
+//   st17: s_addr
+//   st18: cts_addr
 //
-// 38 counted instructions.
+// 49 counted instructions.
 __trinity:
     // --- Phase 1: lwe.private_linear(cts, w_priv, ct_out, tmp, lwe_n, input_dim, neurons) ---
-    dup 14
-    dup 13
-    dup 13
-    dup 13
-    dup 11
-    dup 11
-    dup 11
+    dup 18
+    dup 17
+    dup 17
+    dup 17
+    dup 15
+    dup 15
+    dup 15
     call __lwe_private_linear
     // --- Phase 1b: decrypt_outputs ---
     // Push args for __decrypt_loop: [neurons, lwe_n, delta, result_addr, s_addr, ct_out_addr]
-    dup 5
-    dup 8
-    dup 10
+    dup 9
     dup 12
+    dup 14
     dup 16
-    dup 15
+    dup 20
+    dup 19
     call __decrypt_loop
     pop 6
     // --- Phase 2: dense_layer(dense_w, result, dense_b, activated, tmp, lut, neurons) ---
-    dup 4
-    dup 10
-    dup 5
-    dup 5
+    dup 8
     dup 14
-    dup 5
-    dup 11
+    dup 9
+    dup 9
+    dup 18
+    dup 9
+    dup 15
     call __dense_layer
     pop 7
     // --- argmax(activated_addr, neurons) + assert class == expected ---
-    // Stack: [expected_class, lut_addr, activated_addr, dense_b, dense_w, neurons, ...]
-    dup 2
+    // Stack: [..., expected_digest, key_dig, w_dig, rc_addr, expected_class, lut, activated, ...]
     dup 6
+    dup 10
     call __tensor_argmax
-    // Stack: [class, expected_class, lut_addr, activated_addr, ...]
+    // Stack: [class, expected_digest, key_dig, w_dig, rc_addr, expected_class, lut, activated, ...]
     dup 0
+    dup 6
+    eq
+    assert
+    // --- Phase 3: hash_commit(activated, neurons, w_dig, key_dig, class, rc_addr) ---
+    // Stack: [class, exp_dig, key_dig, w_dig, rc_addr, exp_class, lut, activated, dense_b, dense_w, neurons, ...]
+    dup 7
+    dup 11
+    dup 5
+    dup 5
+    dup 4
+    dup 9
+    call __hash_commit
+    // Stack: [digest, class, expected_digest, ...]
+    // assert digest == expected_digest
     dup 2
     eq
     assert
-    // --- Phase 3: quantum_commit(class) ---
+    // --- Phase 4: quantum_commit(class) ---
     call __quantum_commit
-    // Cleanup: swap result past 15 args, pop all
-    swap 15
+    // Cleanup: swap result past 19 args, pop all
+    swap 19
     pop 5
     pop 5
     pop 5
+    pop 4
     return

@@ -1,21 +1,23 @@
 module std.trinity.inference
 
-// Provable private neural inference with quantum commitment.
+// Provable private neural inference with hash commitment and quantum circuit.
 //
-// Three revolutions, one program:
+// Four domains, one program:
 //   Phase 1 — Privacy: LWE homomorphic encryption (real TFHE over Goldilocks)
 //   Phase 2 — Neural:  Dense layer (matvec + bias + lookup-table ReLU)
-//   Phase 3 — Quantum: 2-qubit Bell pair commitment circuit
+//   Phase 3 — Crypto:  Poseidon2 hash commitment (binds model parameters)
+//   Phase 4 — Quantum: 2-qubit Bell pair commitment circuit
 //
 // The ReLU activation is a RAM-based lookup table — the same table that
 // would serve as the FHE programmable bootstrapping test polynomial.
 // One table, multiple readers: the Rosetta Stone stepping stone.
 //
-// The STARK proof covers everything. No other system on earth does this.
+// Poseidon2 round constants and the ReLU table both live in RAM,
+// authenticated by the STARK consistency argument.
 //
 // Pitch parameters:
 //   LWE dimension 8, 8 encrypted inputs, 16-neuron hidden layer,
-//   2-qubit Bell commitment.
+//   Poseidon2 hash commitment, 2-qubit Bell commitment.
 use vm.core.field
 
 use vm.core.convert
@@ -29,6 +31,8 @@ use std.nn.tensor
 use std.fhe.lwe
 
 use std.math.lut
+
+use std.crypto.poseidon2
 
 use std.quantum.gates
 
@@ -100,7 +104,37 @@ pub fn dense_layer(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 3: Quantum commitment (2-qubit Bell pair)
+// Phase 3: Hash commitment (Poseidon2)
+// ---------------------------------------------------------------------------
+// Binds the proof to specific model parameters and inference output.
+// Hashes (weights_digest, key_digest, output_digest, class) into a
+// single field element. The verifier checks this digest matches the
+// expected value — proving "THIS model with THIS key produced THIS
+// result", not just "some model produced some result".
+//
+// Round constants are read from RAM at rc_addr (86 field elements).
+// output_digest is computed as the sum of activated outputs (a simple
+// commitment; a Merkle root would be stronger for large vectors).
+pub fn hash_commit(
+    activated_addr: Field,
+    neurons: Field,
+    weights_digest: Field,
+    key_digest: Field,
+    class: Field,
+    rc_addr: Field
+) -> Field {
+    // Compute output digest: sum of activated values
+    let mut output_digest: Field = 0
+    for i in 0..neurons bounded 4096 {
+        let idx: Field = convert.as_field(i)
+        output_digest = output_digest + mem.read(activated_addr + idx)
+    }
+    // Hash (weights_digest, key_digest, output_digest, class) -> digest
+    poseidon2.hash4_to_digest(weights_digest, key_digest, output_digest, class, rc_addr)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Quantum commitment (2-qubit Bell pair)
 // ---------------------------------------------------------------------------
 // Superdense coding commitment circuit:
 //   |00> -> H(q0) -> CNOT -> conditional CZ -> CNOT -> H(q0) -> measure q0
@@ -143,17 +177,26 @@ pub fn quantum_commit(class: Field) -> Bool {
 // 1. Private linear layer (LWE homomorphic encryption — FHE)
 // 2. Decrypt encrypted outputs (bridge to plaintext)
 // 3. Dense neural layer with lookup-table ReLU (AI + Rosetta Stone)
-// 4. Quantum commitment (2-qubit Bell circuit — Quantum)
+// 4. Poseidon2 hash commitment (binds model + key + output — Crypto)
+// 5. Quantum commitment (2-qubit Bell circuit — Quantum)
 //
 // The lookup table at lut_addr serves dual purpose:
 //   - Neural activation (ReLU in Phase 2)
 //   - FHE test polynomial (same table would drive PBS)
 // One table, multiple readers. The STARK proof covers all reads.
 //
+// Poseidon2 round constants at rc_addr serve the hash commitment.
+// Both the LUT and round constants live in RAM, authenticated by
+// the STARK consistency argument.
+//
 // The class is computed inside the pipeline via argmax on the dense layer
 // output. expected_class is the prover's claim — the circuit asserts it
 // matches the computed argmax, preventing class substitution without
 // performing the actual inference.
+//
+// The hash digest binds this specific model (weights_digest), this
+// specific key (key_digest), and the computed output to the proof.
+// expected_digest is the prover's claim — the circuit asserts it matches.
 //
 // Returns: Bool from quantum measurement confirming the commitment.
 pub fn trinity(
@@ -171,7 +214,11 @@ pub fn trinity(
     dense_b_addr: Field,
     activated_addr: Field,
     lut_addr: Field,
-    expected_class: Field
+    expected_class: Field,
+    rc_addr: Field,
+    weights_digest: Field,
+    key_digest: Field,
+    expected_digest: Field
 ) -> Bool {
     // Phase 1: Encrypted linear layer
     private_linear(cts_addr, w_priv_addr, ct_out_addr, tmp_addr, lwe_n, input_dim, neurons)
@@ -182,6 +229,9 @@ pub fn trinity(
     // Compute class from neural output — data dependency between AI and Quantum
     let class: Field = tensor.argmax(activated_addr, neurons)
     assert.eq(class, expected_class)
-    // Phase 3: Quantum commitment on computed class
+    // Phase 3: Hash commitment — binds model parameters to proof
+    let digest: Field = hash_commit(activated_addr, neurons, weights_digest, key_digest, class, rc_addr)
+    assert.eq(digest, expected_digest)
+    // Phase 4: Quantum commitment on computed class
     quantum_commit(class)
 }

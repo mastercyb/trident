@@ -1,5 +1,7 @@
 module std.crypto.poseidon2
 
+use vm.io.mem
+
 // Poseidon2 hash function over the Goldilocks field (p = 2^64 - 2^32 + 1).
 //
 // Implements the Poseidon2 permutation (Grassi et al., 2023) with:
@@ -987,4 +989,70 @@ pub fn hash4(
         lf31
     )
     squeeze4(result)
+}
+
+// ---------------------------------------------------------------------------
+// RAM-based variants
+// ---------------------------------------------------------------------------
+// Read 86 round constants from RAM and call permute.
+// Layout: rc_addr+0..rc_addr+31 = first full (32),
+//         rc_addr+32..rc_addr+53 = partial (22),
+//         rc_addr+54..rc_addr+85 = last full (32).
+//
+// This enables Poseidon2 in pipelines where passing 86 parameters
+// through the call chain is impractical. The STARK proof authenticates
+// all RAM reads through consistency.
+pub fn permute_from_ram(st: State, rc_addr: Field) -> State {
+    permute(
+        st,
+        mem.read(rc_addr), mem.read(rc_addr + 1), mem.read(rc_addr + 2), mem.read(rc_addr + 3),
+        mem.read(rc_addr + 4), mem.read(rc_addr + 5), mem.read(rc_addr + 6), mem.read(rc_addr + 7),
+        mem.read(rc_addr + 8), mem.read(rc_addr + 9), mem.read(rc_addr + 10), mem.read(rc_addr + 11),
+        mem.read(rc_addr + 12), mem.read(rc_addr + 13), mem.read(rc_addr + 14), mem.read(rc_addr + 15),
+        mem.read(rc_addr + 16), mem.read(rc_addr + 17), mem.read(rc_addr + 18), mem.read(rc_addr + 19),
+        mem.read(rc_addr + 20), mem.read(rc_addr + 21), mem.read(rc_addr + 22), mem.read(rc_addr + 23),
+        mem.read(rc_addr + 24), mem.read(rc_addr + 25), mem.read(rc_addr + 26), mem.read(rc_addr + 27),
+        mem.read(rc_addr + 28), mem.read(rc_addr + 29), mem.read(rc_addr + 30), mem.read(rc_addr + 31),
+        mem.read(rc_addr + 32), mem.read(rc_addr + 33), mem.read(rc_addr + 34), mem.read(rc_addr + 35),
+        mem.read(rc_addr + 36), mem.read(rc_addr + 37), mem.read(rc_addr + 38), mem.read(rc_addr + 39),
+        mem.read(rc_addr + 40), mem.read(rc_addr + 41), mem.read(rc_addr + 42), mem.read(rc_addr + 43),
+        mem.read(rc_addr + 44), mem.read(rc_addr + 45), mem.read(rc_addr + 46), mem.read(rc_addr + 47),
+        mem.read(rc_addr + 48), mem.read(rc_addr + 49), mem.read(rc_addr + 50), mem.read(rc_addr + 51),
+        mem.read(rc_addr + 52), mem.read(rc_addr + 53),
+        mem.read(rc_addr + 54), mem.read(rc_addr + 55), mem.read(rc_addr + 56), mem.read(rc_addr + 57),
+        mem.read(rc_addr + 58), mem.read(rc_addr + 59), mem.read(rc_addr + 60), mem.read(rc_addr + 61),
+        mem.read(rc_addr + 62), mem.read(rc_addr + 63), mem.read(rc_addr + 64), mem.read(rc_addr + 65),
+        mem.read(rc_addr + 66), mem.read(rc_addr + 67), mem.read(rc_addr + 68), mem.read(rc_addr + 69),
+        mem.read(rc_addr + 70), mem.read(rc_addr + 71), mem.read(rc_addr + 72), mem.read(rc_addr + 73),
+        mem.read(rc_addr + 74), mem.read(rc_addr + 75), mem.read(rc_addr + 76), mem.read(rc_addr + 77),
+        mem.read(rc_addr + 78), mem.read(rc_addr + 79), mem.read(rc_addr + 80), mem.read(rc_addr + 81),
+        mem.read(rc_addr + 82), mem.read(rc_addr + 83), mem.read(rc_addr + 84), mem.read(rc_addr + 85)
+    )
+}
+
+// Hash 4 field elements using round constants from RAM.
+// Domain separation: capacity element s4 = 4.
+pub fn hash4_from_ram(
+    a: Field,
+    b: Field,
+    c: Field,
+    d: Field,
+    rc_addr: Field
+) -> (Field, Field, Field, Field) {
+    let st: State = State { s0: a, s1: b, s2: c, s3: d, s4: 4, s5: 0, s6: 0, s7: 0 }
+    let result: State = permute_from_ram(st, rc_addr)
+    squeeze4(result)
+}
+
+// Hash 4 field elements, return single digest (first rate element).
+pub fn hash4_to_digest(
+    a: Field,
+    b: Field,
+    c: Field,
+    d: Field,
+    rc_addr: Field
+) -> Field {
+    let st: State = State { s0: a, s1: b, s2: c, s3: d, s4: 4, s5: 0, s6: 0, s7: 0 }
+    let result: State = permute_from_ram(st, rc_addr)
+    squeeze1(result)
 }

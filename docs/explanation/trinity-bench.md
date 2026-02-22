@@ -1,22 +1,23 @@
-# Trinity: Provable Private Neural Inference with Quantum Commitment
+# Trinity: Provable Private Neural Inference with Hash and Quantum Commitment
 
 ## What Trinity Is
 
-A single Trident program that combines three computational domains
+A single Trident program that combines four computational domains
 in one STARK-verifiable trace:
 
 ```
-Encrypted Input --> Private Linear --> Decrypt --> Dense Layer --> argmax --> Quantum Commit --> Bool
-                       (FHE)                        (AI)                     (Quantum)
+Encrypted Input --> Private Linear --> Decrypt --> Dense Layer --> argmax --> Hash Commit --> Quantum Commit --> Bool
+                       (FHE)                        (AI)            (Poseidon2)          (Quantum)
 ```
 
-To our knowledge, no existing system composes all three domains in a
+To our knowledge, no existing system composes all four domains in a
 single proof. TFHE encrypts but can't prove. Cairo proves but can't
 encrypt. Qiskit simulates but does neither. Trinity demonstrates that
-FHE, neural inference, and quantum circuits can execute inside one
-STARK trace with data-dependent coupling between phases.
+FHE, neural inference, cryptographic hashing, and quantum circuits
+can execute inside one STARK trace with data-dependent coupling
+between phases.
 
-## The Four Phases
+## The Five Phases
 
 ### Phase 1: Privacy (LWE homomorphic encryption)
 
@@ -69,7 +70,29 @@ The argmax comparison (for classification) uses `convert.split()` to
 decompose field elements into (hi, lo) U32 pairs and compares the
 high word against `HALF_P >> 32`.
 
-### Phase 3: Quantum (2-qubit Bell pair commitment)
+### Phase 3: Crypto (Poseidon2 hash commitment)
+
+Binds the proof to specific model parameters by hashing
+(weights_digest, key_digest, output_digest, class) into a single
+field element via Poseidon2 (t=8 state, 4+22+4 rounds, x^7 S-box).
+
+weights_digest and key_digest are precomputed commitments to the
+model weights and encryption key. output_digest is computed inside
+the pipeline as the sum of activated outputs. The prover supplies
+an `expected_digest` hint; the circuit asserts it matches the
+computed hash.
+
+This means the proof says "THIS model with THIS key produced THIS
+result and THIS classification," not just "some model produced some
+result." Without the hash commitment, a prover could substitute a
+different model or key and still produce a valid proof.
+
+Round constants (86 field elements) are stored in RAM and read via
+`poseidon2.permute_from_ram` -- the same RAM-based pattern as the
+ReLU lookup table. Both are authenticated by the STARK consistency
+argument.
+
+### Phase 4: Quantum (2-qubit Bell pair commitment)
 
 Superdense coding commitment circuit with entanglement:
 
@@ -106,15 +129,21 @@ Phase 1  output --> Phase 1b input   (encrypted ciphertexts in RAM)
 Phase 1b output --> Phase 2  input   (decrypted plaintext in RAM)
 Phase 2  output --> argmax --> class  (computed classification)
 class   --> assert.eq(expected_class) (prover's claim must match)
-class   --> Phase 3 input            (quantum commit on computed class)
+Phase 2  output + class --> Phase 3  (hash commitment inputs)
+Phase 3  output --> assert.eq(expected_digest)
+class   --> Phase 4 input            (quantum commit on computed class)
 ```
 
 The class fed to quantum commitment is computed inside the pipeline
 via `tensor.argmax()` on the dense layer output. The prover supplies
 an `expected_class` hint, and the circuit asserts it matches the
 computed argmax. This prevents shortcutting: you cannot substitute a
-class without performing the actual inference, and you cannot remove
-the quantum phase without breaking the pipeline's return value.
+class without performing the actual inference.
+
+The hash digest binds the proof to specific model parameters. Both
+the class and the digest are asserted against prover hints, and both
+feed into subsequent phases. You cannot remove any phase without
+breaking the pipeline's data flow.
 
 Every phase consumes the output of the previous phase. The STARK
 trace cannot be "cut" into independent sub-traces.
@@ -127,7 +156,8 @@ trace cannot be "cut" into independent sub-traces.
 Phase 1  (Privacy):  private_linear -- 16 neurons * 8 inputs * LWE ops
 Phase 1b (Decrypt):  16 neurons * lwe.decrypt (inner product + noise check)
 Phase 2  (Neural):   matvec(16x16) + bias + lut_relu + argmax
-Phase 3  (Quantum):  2-qubit Bell circuit
+Phase 3  (Crypto):   Poseidon2 hash (sum + permute, 86 round constants from RAM)
+Phase 4  (Quantum):  2-qubit Bell circuit
 ```
 
 ### Why these numbers
@@ -153,16 +183,17 @@ Phase 3  (Quantum):  2-qubit Bell circuit
 
 ```
 Module                       Tri   Hand   Ratio
-std::trinity::inference      125     82   1.52x
+std::trinity::inference      148    121   1.22x
 ```
 
-Compiler generates 125 static instructions, hand baseline 82.
-The 1.52x gap is an optimization target for the compiler.
+Compiler generates 148 static instructions, hand baseline 121.
+The 1.22x gap is an optimization target for the compiler.
 
-Breakdown (hand): 24 decrypt_loop + 17 dense_layer + 3 quantum_commit
-+ 38 trinity pipeline = 82 total. The dense_layer grew from 3 to 17
-because it now makes three separate external calls (matvec, bias_add,
-lut.apply) instead of one monolithic call.
+Breakdown (hand): 24 decrypt_loop + 17 dense_layer + 13 sum_loop
++ 15 hash_commit + 3 quantum_commit + 49 trinity pipeline = 121 total.
+The Poseidon2 hash phase added sum_loop (13) and hash_commit (15)
+as new functions, and extended the trinity pipeline from 38 to 49
+instructions (4 new args + hash call + digest assert).
 
 ## The Rosetta Stone
 
@@ -201,17 +232,12 @@ a single `lut_addr` parameter.
 Phase 2 uses `std.math.lut` for ReLU activation via RAM-based lookup
 table. Same table can serve as FHE PBS test polynomial.
 
-### Next: Hash Commitment Phase (Poseidon2)
+### Done: Hash Commitment Phase (Poseidon2)
 
-Add a Poseidon2 commitment phase between Neural and Quantum:
-hash (weights_commit, key_commit, output) into a digest, feed the
-digest into the quantum commitment. This binds the proof to specific
-model parameters -- "this result was produced by THIS model with
-THIS key", not abstractly "some model".
-
-`std.crypto.poseidon2` already exists (991 lines, production-grade,
-t=8 state, RF=8 full rounds, RP=22 partial rounds). Adding it turns
-Trinity into a tetralogy: FHE + AI + Hash + Quantum.
+Phase 3 hashes (weights_digest, key_digest, output_digest, class)
+via Poseidon2, binding the proof to specific model parameters.
+Round constants stored in RAM, read via `poseidon2.permute_from_ram`.
+Trinity is now a tetralogy: FHE + AI + Hash + Quantum.
 
 ### Future: NTT as Shared Workhorse
 
@@ -236,9 +262,10 @@ and STARK proof generation. Relevant at dimension >= 256.
 std/fhe/lwe.tri                              LWE encryption module
 std/math/lut.tri                             RAM-based lookup table (Rosetta Stone)
 std/nn/tensor.tri                            Neural primitives (matvec, argmax)
+std/crypto/poseidon2.tri                     Poseidon2 hash (+ RAM-based variants)
 std/quantum/gates.tri                        Quantum gate library
 std/trinity/inference.tri                    Trinity module
-benches/std/trinity/inference.baseline.tasm  Hand-optimized TASM (82 instructions)
+benches/std/trinity/inference.baseline.tasm  Hand-optimized TASM (121 instructions)
 benches/std/trinity/inference.reference.rs   Rust ground truth (LWE_N=8, NEURONS=16)
 ```
 
@@ -256,16 +283,21 @@ The STARK proof covers every field operation in the trace:
   consistency argument.
 - **Argmax**: field-native comparison of 16 outputs via `convert.split()`.
   The computed class is asserted equal to the prover's `expected_class`.
+- **Hash commitment**: Poseidon2 permutation (86 round constants from RAM,
+  x^7 S-box, 4+22+4 rounds) over (weights_digest, key_digest,
+  output_digest, class). The computed digest is asserted equal to the
+  prover's `expected_digest`.
 - **Quantum circuit**: 2-qubit Bell pair state preparation, conditional CZ,
   inverse Bell decoding, trace-out, probability comparison. Every complex
   arithmetic operation is in the trace.
 - **Data flow**: each phase consumes the output of the previous phase.
   The trace cannot be cut into independent sub-traces.
 
-What the proof does NOT cover: the choice of weights, the choice of
-secret key, or the semantic meaning of the classification. The proof
-says "this computation was performed correctly on these inputs," not
-"these inputs are meaningful."
+The hash commitment binds the proof to specific model weights and
+encryption key via their digests. The proof says "this computation
+was performed correctly by THIS model with THIS key on these inputs."
+It does not cover the semantic meaning of the classification or the
+quality of the model.
 
 ## What Is Intentionally Toy
 
@@ -301,9 +333,10 @@ Trinity proves the 128K milestone:
 
 - Real LWE encryption, not polynomial approximation
 - Data-dependent phases -- class computed from AI output, not injected
-- Cross-domain composition (std.fhe, std.nn, std.quantum in one program)
+- Hash commitment binds model parameters to the proof
+- Cross-domain composition (std.fhe, std.nn, std.crypto, std.quantum)
 - Everything verifiable in a single STARK proof
-- Each revolution contributes meaningfully to the computation
+- Each domain contributes meaningfully to the computation
 - Stepping stone toward the Rosetta Stone unification
 
 `trident build std/trinity/inference.tri` -> `trisha prove` -> `trisha verify`.

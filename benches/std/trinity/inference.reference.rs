@@ -1,5 +1,5 @@
 use std::time::Instant;
-use trident::field::{Goldilocks, PrimeField};
+use trident::field::{poseidon2, Goldilocks, PrimeField};
 
 type F = Goldilocks;
 
@@ -168,6 +168,22 @@ fn quantum_commit(class: usize) -> bool {
     hi < 2147483647u32
 }
 
+// Phase 3: Hash commitment (Poseidon2)
+
+fn hash_commit(
+    activated: &[F],
+    weights_digest: F,
+    key_digest: F,
+    class: F,
+) -> F {
+    // Output digest: sum of activated values
+    let output_digest = activated.iter().fold(F::ZERO, |acc, &x| acc.add(x));
+    // Hash (weights_digest, key_digest, output_digest, class) -> digest
+    let input = [weights_digest, key_digest, output_digest, class];
+    let result = poseidon2::hash_fields_goldilocks(&input);
+    result[0]
+}
+
 // Full pipeline
 
 fn argmax(v: &[F]) -> usize {
@@ -190,6 +206,8 @@ fn trinity(
     dense_w: &[F],
     dense_b: &[F],
     lut: &[F],
+    weights_digest: F,
+    key_digest: F,
     d: F,
 ) -> bool {
     // Phase 1: Encrypted linear layer
@@ -198,8 +216,12 @@ fn trinity(
     let result: Vec<F> = ct_out.iter().map(|ct| decrypt(ct, s, d)).collect();
     // Phase 2: Dense neural layer (activation via shared lookup table)
     let activated = dense(dense_w, &result, dense_b, lut, NEURONS, NEURONS);
-    // Phase 3: Quantum commitment
+    // Compute class from neural output
     let class = argmax(&activated);
+    let class_f = F::from_u64(class as u64);
+    // Phase 3: Hash commitment — binds model parameters to proof
+    let _digest = hash_commit(&activated, weights_digest, key_digest, class_f);
+    // Phase 4: Quantum commitment
     quantum_commit(class)
 }
 
@@ -238,10 +260,19 @@ fn main() {
     // Shared lookup table: ReLU over plaintext domain [0, 1024)
     // Same table serves as NN activation and FHE PBS test polynomial.
     let lut = build_relu_lut();
+    // Precomputed digests for model binding
+    // weights_digest = hash(dense_w), key_digest = hash(s)
+    let weights_hash = poseidon2::hash_fields_goldilocks(&dense_w);
+    let weights_digest = weights_hash[0];
+    let s_hash = poseidon2::hash_fields_goldilocks(&s);
+    let key_digest = s_hash[0];
 
     // Warmup
     for _ in 0..100 {
-        std::hint::black_box(trinity(&cts, &s, &priv_w, &dense_w, &dense_b, &lut, d));
+        std::hint::black_box(trinity(
+            &cts, &s, &priv_w, &dense_w, &dense_b, &lut,
+            weights_digest, key_digest, d,
+        ));
     }
 
     let iters = 10000u128;
@@ -254,6 +285,8 @@ fn main() {
             std::hint::black_box(&dense_w),
             std::hint::black_box(&dense_b),
             std::hint::black_box(&lut),
+            std::hint::black_box(weights_digest),
+            std::hint::black_box(key_digest),
             std::hint::black_box(d),
         ));
     }
