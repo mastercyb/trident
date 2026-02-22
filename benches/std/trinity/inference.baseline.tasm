@@ -1,17 +1,13 @@
 // Hand-optimized TASM baseline: std.trinity.inference
 //
 // Provable private neural inference with quantum commitment.
-// Three-domain integration: Privacy (FHE polynomial ops),
-// Neural (ReLU activation), Quantum (Deutsch oracle).
+// Parametric: N-dim polynomials, M neurons, Deutsch oracle circuit.
+//
+// Pitch parameters: 64-dim input, 16 neurons, Deutsch oracle commitment.
 //
 // Stack convention:
 //   Arguments pushed left-to-right (first arg deepest on stack).
 //   Return values left on top of stack after return.
-//   RAM-based functions operate on addresses (field element pointers).
-//
-// This module's functions are compositions of poly.*, tensor.*, and gates.*
-// primitives. The baseline measures the overhead of arg setup and call
-// dispatch — the inner functions have their own baselines.
 //
 // Instruction count rules:
 //   - Comments (// ...) are NOT counted
@@ -22,113 +18,85 @@
 //
 // Static instruction count summary:
 //   __private_neuron  :  12
-//   __private_linear  :  45
+//   __private_linear  :   2
+//   __pl_loop         :  24
 //   __activate        :  11
 //   __quantum_commit  :   3
-//   __trinity         :  21
+//   __trinity         :  19
 //   ----------------------------------------
-//   Total             :  92
+//   Total             :  71
 
 
 // ===========================================================================
-// PHASE 1: PRIVATE LINEAR LAYER (FHE polynomial arithmetic)
+// PHASE 1: PRIVATE LINEAR LAYER
 // ===========================================================================
 
 
 // ---------------------------------------------------------------------------
 // __private_neuron: (input_addr, weight_addr, out_addr, x, n) -> Field
 // ---------------------------------------------------------------------------
-// Pointwise multiply input with weight polynomial, then evaluate at x.
-// FHE-style: encrypted dot product via polynomial arithmetic.
-//
-// Stack on entry: [n, x, out_addr, weight_addr, input_addr]
-//
-// Step 1: pointwise_mul(input_addr, weight_addr, out_addr, n)
-// Step 2: eval(out_addr, x, n)
-// Step 3: cleanup non-return args
-//
 // 12 counted instructions.
 __private_neuron:
-    // --- pointwise_mul(input_addr, weight_addr, out_addr, n) ---
     dup 4
     dup 4
     dup 4
     dup 4
     call __pointwise_mul
-    // Stack unchanged: [n, x, out_addr, weight_addr, input_addr]
-    // --- eval(out_addr, x, n) ---
     dup 2
     dup 2
     dup 2
     call __eval
-    // Stack: [result, n, x, out_addr, weight_addr, input_addr]
     swap 5
     pop 5
     return
 
 
 // ---------------------------------------------------------------------------
-// __private_linear: (input_addr, w0, w1, w2, w3, result_addr, tmp_addr, x, n)
+// __private_linear: (input_addr, weights_addr, result_addr, tmp_addr, x, n, neurons)
 // ---------------------------------------------------------------------------
-// Full private linear layer: 4 neurons via polynomial products.
+// Loop over neurons: for each i, compute private_neuron and store result.
 //
-// Stack on entry: [n, x, tmp_addr, result_addr, w3, w2, w1, w0, input_addr]
+// Stack on entry: [neurons, n, x, tmp_addr, result_addr, weights_addr, input_addr]
 //
-// For each neuron i: private_neuron(input_addr, w_i, tmp_addr, x, n)
-// then write result to result_addr + i.
-//
-// 45 counted instructions.
+// 2 counted instructions.
 __private_linear:
-    // --- neuron 0: private_neuron(input, w0, tmp, x, n) ---
-    dup 8
-    dup 8
-    dup 4
-    dup 4
-    dup 4
-    call __private_neuron
-    dup 4
-    write_mem 1
-    pop 1
-    // --- neuron 1 ---
-    dup 8
-    dup 7
-    dup 4
-    dup 4
-    dup 4
-    call __private_neuron
-    dup 4
-    push 1
-    add
-    write_mem 1
-    pop 1
-    // --- neuron 2 ---
-    dup 8
-    dup 6
-    dup 4
-    dup 4
-    dup 4
-    call __private_neuron
-    dup 4
-    push 2
-    add
-    write_mem 1
-    pop 1
-    // --- neuron 3 ---
-    dup 8
-    dup 5
-    dup 4
-    dup 4
-    dup 4
-    call __private_neuron
-    dup 4
-    push 3
-    add
-    write_mem 1
-    pop 1
-    // Cleanup
-    pop 5
-    pop 4
+    call __pl_loop
     return
+
+// Loop: counts neurons down to 0.
+// Stack: [counter, n, x, tmp_addr, result_addr, weights_addr, input_addr]
+__pl_loop:
+    dup 0
+    push 0
+    eq
+    skiz
+    return
+    push -1
+    add
+    // Stack: [i, n, x, tmp_addr, result_addr, weights_addr, input_addr]
+    // w_addr = weights_addr + i * n
+    dup 0
+    dup 2
+    mul
+    dup 6
+    add
+    // Stack: [w_addr, i, n, x, tmp_addr, result_addr, weights_addr, input_addr]
+    // private_neuron(input_addr, w_addr, tmp_addr, x, n)
+    dup 7
+    swap 1
+    dup 5
+    dup 5
+    dup 5
+    call __private_neuron
+    // Stack: [result, i, n, x, tmp_addr, result_addr, weights_addr, input_addr]
+    // mem.write(result_addr + i, result)
+    dup 1
+    dup 6
+    add
+    write_mem 1
+    pop 1
+    // Stack: [i, n, x, tmp_addr, result_addr, weights_addr, input_addr]
+    recurse
 
 
 // ===========================================================================
@@ -137,55 +105,59 @@ __private_linear:
 
 
 // ---------------------------------------------------------------------------
-// __activate: (result_addr, bias_addr, out_addr)
+// __activate: (result_addr, bias_addr, out_addr, neurons)
 // ---------------------------------------------------------------------------
-// Bias add + ReLU on 4-element vector.
+// Bias add + ReLU on N-element vector.
 //
-// Stack on entry: [out_addr, bias_addr, result_addr]
-//
-// Step 1: bias_add(result_addr, bias_addr, out_addr, 4)
-// Step 2: relu_layer(out_addr, out_addr, 4)
+// Stack on entry: [neurons, out_addr, bias_addr, result_addr]
 //
 // 11 counted instructions.
 __activate:
-    dup 2
-    dup 2
-    dup 2
-    push 4
+    dup 3
+    dup 3
+    dup 3
+    dup 3
     call __bias_add
-    dup 0
     dup 1
-    push 4
+    dup 2
+    dup 3
     call __relu_layer
-    pop 3
+    pop 4
     return
 
 
 // ===========================================================================
-// PHASE 3: QUANTUM COMMITMENT
+// PHASE 3: QUANTUM COMMITMENT (Deutsch's algorithm — 1-qubit)
 // ===========================================================================
 
 
 // ---------------------------------------------------------------------------
 // __quantum_commit: (class: Field) -> Bool
 // ---------------------------------------------------------------------------
-// Deutsch-style oracle: |0> -> H -> (Z if class) -> H -> measure
+// Single-qubit Deutsch oracle (matching .tri code):
+//   |0> -> H -> conditional Z -> H -> measure
 //
-// Mathematical reduction (all intermediate steps verified):
-//   init_zero:  zero=(1,0), one=(0,0)
-//   hadamard:   zero=(1,0), one=(1,0)
-//   pauliz:     one=(-1,0) when class!=0, one=(1,0) when class==0
-//   hadamard:   zero=(1+one_re, 0), one=(1-one_re, 0)
-//   measure:    |zero|^2 vs |one|^2
+// class=0 (constant): |0> -> H -> skip Z -> H -> |0> -> true
+// class>0 (balanced):  |0> -> H -> Z -> H -> |1> -> false
 //
-//   class==0: zero=(2,0), one=(0,0) -> |zero|^2=4 > |one|^2=0 -> true
-//   class!=0: zero=(0,0), one=(2,0) -> |zero|^2=0 < |one|^2=4 -> false
+// Unnormalized Hadamard: zero'=zero+one, one'=zero-one
 //
-// The full quantum circuit reduces to: class == 0.
-// This is the optimal instruction sequence for this Deutsch oracle.
+// Trace:
+//   init:  zero=1, one=0
+//   H:     zero=1, one=1
+//   Z(if class): zero=1, one=-1  (or stays 1 if class=0)
+//   H:     f_zero = zero+one, f_one = zero-one
+//   class=0: f_zero=2, f_one=0  -> prob_zero=4 > prob_one=0 -> true
+//   class>0: f_zero=0, f_one=2  -> prob_zero=0 < prob_one=4 -> false
 //
 // 3 counted instructions.
 __quantum_commit:
+    // Stack: [class]
+    // The full Deutsch circuit reduces to: result = (class == 0).
+    // Proof: init |0>, H gives (1,1). Conditional Z negates one-amp.
+    // Second H: class=0 -> (2,0), class>0 -> (0,2).
+    // measure_deterministic: prob_zero >= prob_one.
+    // class=0: 4 >= 0 -> true. class>0: 0 >= 4 -> false.
     push 0
     eq
     return
@@ -197,40 +169,37 @@ __quantum_commit:
 
 
 // ---------------------------------------------------------------------------
-// __trinity: (input_addr, w0, w1, w2, w3, bias_addr, result_addr,
-//             activated_addr, tmp_addr, x, n, expected_class) -> Bool
+// __trinity: (input_addr, weights_addr, bias_addr, result_addr,
+//             activated_addr, tmp_addr, x, n, neurons, expected_class) -> Bool
 // ---------------------------------------------------------------------------
 // Full pipeline: private_linear -> activate -> quantum_commit.
 //
 // Stack on entry:
-//   [expected_class, n, x, tmp_addr, activated_addr, result_addr,
-//    bias_addr, w3, w2, w1, w0, input_addr]
+//   [expected_class, neurons, n, x, tmp_addr, activated_addr,
+//    result_addr, bias_addr, weights_addr, input_addr]
 //
-// 21 counted instructions.
+// 19 counted instructions.
 __trinity:
-    // --- private_linear(input, w0, w1, w2, w3, result, tmp, x, n) ---
-    dup 11
-    dup 11
-    dup 11
-    dup 11
-    dup 11
+    // --- private_linear(input, weights, result, tmp, x, n, neurons) ---
+    dup 9
+    dup 9
+    dup 8
     dup 7
     dup 7
     dup 7
     dup 7
     call __private_linear
-    // --- activate(result_addr, bias_addr, activated_addr) ---
-    dup 5
-    dup 7
+    // --- activate(result, bias, activated, neurons) ---
     dup 6
+    dup 8
+    dup 7
+    dup 4
     call __activate
     // --- quantum_commit(expected_class) ---
     dup 0
     call __quantum_commit
-    // Stack: [result, expected_class, n, x, ...]
-    // Cleanup: remove all 12 original args, keep result
-    swap 12
+    // Cleanup
+    swap 10
     pop 5
     pop 5
-    pop 2
     return
