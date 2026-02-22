@@ -75,3 +75,7 @@ path = "benches/std/nn/tensor.reference.rs"
 [[example]]
 name = "ref_std_private_poly"
 path = "benches/std/private/poly.reference.rs"
+
+[[example]]
+name = "ref_std_trinity_inference"
+path = "benches/std/trinity/inference.reference.rs"

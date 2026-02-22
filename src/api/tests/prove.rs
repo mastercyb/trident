@@ -139,6 +139,11 @@ fn std_quantum_gates_compiles() {
 }
 
 #[test]
+fn std_trinity_inference_compiles() {
+    assert_compiles("std/trinity/inference.tri");
+}
+
+#[test]
 fn std_target_compiles() {
     assert_compiles("std/target.tri");
 }
