@@ -10,9 +10,11 @@ Encrypted Input --> Private Linear --> Decrypt --> Dense Layer --> argmax --> Qu
                        (FHE)                        (AI)                     (Quantum)
 ```
 
-No other system can do this. TFHE encrypts but can't prove.
-Cairo proves but can't encrypt. Qiskit simulates but does neither.
-Trinity does all three in one proof.
+To our knowledge, no existing system composes all three domains in a
+single proof. TFHE encrypts but can't prove. Cairo proves but can't
+encrypt. Qiskit simulates but does neither. Trinity demonstrates that
+FHE, neural inference, and quantum circuits can execute inside one
+STARK trace with data-dependent coupling between phases.
 
 ## The Four Phases
 
@@ -29,6 +31,14 @@ weights using `ct_scale` and `ct_add`.
 
 Parameters: LWE dimension 8, delta = p/1024 (10-bit plaintext space).
 
+The current bench uses LWE-style encryption with a `divine()` bridge
+to plaintext (Phase 1b). The full production path would use RLWE
+with programmable bootstrapping (PBS), where the ReLU lookup table
+from Phase 2 serves as the PBS test polynomial -- eliminating the
+decrypt step entirely. The LWE bench demonstrates the correct
+algebraic structure; RLWE + PBS adds polynomial multiplication
+via NTT (see Roadmap).
+
 ### Phase 1b: Decrypt (bridge to plaintext)
 
 Each encrypted output is decrypted via `io.divine()` -- the prover
@@ -36,11 +46,11 @@ supplies the candidate plaintext m, the circuit computes the noise
 |b - <a,s> - m*delta| and verifies it falls within the bound delta/2.
 The STARK proof covers the noise check.
 
-This is the witness injection mechanism: `divine()` is Trident's
-single interface for non-deterministic prover input. The same mechanism
-serves FHE decryption, neural weight injection, and quantum measurement
-outcomes. The proof constrains the divined value -- unconstrained
-divine calls are flagged by `trident audit`.
+`divine()` is Trident's primary mechanism for non-deterministic prover
+input. The same interface serves FHE decryption, neural weight
+injection, and quantum measurement outcomes. The proof constrains the
+divined value -- unconstrained divine calls are flagged by
+`trident audit`.
 
 ### Phase 2: Neural (dense layer -- matvec + bias + ReLU)
 
@@ -48,13 +58,16 @@ Full dense layer: `out = relu(W * x + b)`. Matrix-vector multiply
 (NEURONS x NEURONS), bias addition, ReLU activation. Identical to
 any neural network hidden layer, executing inside a STARK trace.
 
-ReLU in the Goldilocks field: values below p/2 are "positive" (kept),
-values at or above p/2 are "negative" (zeroed). This is the canonical
-field-native activation -- no quantization, no approximation. The
-comparison uses `convert.split()` to decompose into (hi, lo) U32 pairs
-and compares the high word against `HALF_P >> 32`.
+ReLU activation is implemented via a RAM-based lookup table
+(`std.math.lut`). The table maps each input to its ReLU output:
+values below p/2 are "positive" (kept), values at or above p/2 are
+"negative" (zeroed). This is the Rosetta Stone stepping stone -- the
+same table that serves as NN activation here would serve as the FHE
+programmable bootstrapping test polynomial (see Rosetta Stone below).
 
-Future direction: ReLU via lookup table (see Rosetta Stone below).
+The argmax comparison (for classification) uses `convert.split()` to
+decompose field elements into (hi, lo) U32 pairs and compares the
+high word against `HALF_P >> 32`.
 
 ### Phase 3: Quantum (2-qubit Bell pair commitment)
 
@@ -75,9 +88,14 @@ every gate operation -- init, Hadamard, tensor product, CNOT, CZ,
 complex arithmetic, norm squared, measurement comparison. The STARK
 proof covers the full 2-qubit circuit.
 
-Measurement is deterministic (provable comparison of outcome
-probabilities), not probabilistic. This is explicitly documented in
-`std.quantum.gates.measure_deterministic`.
+Measurement model: the prover computes outcome probabilities
+(p0 = |q00|^2 + |q01|^2, p1 = |q10|^2 + |q11|^2 after tracing out
+q1) and the circuit verifies which outcome has greater probability
+via field arithmetic. For states with deterministic outcomes (like
+Bell pairs), this is equivalent to a physical measurement -- the
+probability is 0 or 1. The comparison uses `convert.split()` over
+the Goldilocks field, same as `std.quantum.gates.measure_deterministic`
+for single-qubit states.
 
 ## Data Dependency: Phases Cannot Be Separated
 
@@ -223,6 +241,58 @@ std/trinity/inference.tri                    Trinity module
 benches/std/trinity/inference.baseline.tasm  Hand-optimized TASM (82 instructions)
 benches/std/trinity/inference.reference.rs   Rust ground truth (LWE_N=8, NEURONS=16)
 ```
+
+## What Is Proven
+
+The STARK proof covers every field operation in the trace:
+
+- **LWE encryption**: inner products, ciphertext scaling and addition,
+  homomorphic dot products over Goldilocks.
+- **Decryption noise check**: |b - <a,s> - m*delta| < delta/2 for each
+  divined plaintext. The prover supplies m via `divine()`, the circuit
+  verifies the bound.
+- **Dense layer**: matrix-vector multiply (16x16), bias addition, ReLU
+  lookup table reads. All RAM accesses authenticated by the STARK RAM
+  consistency argument.
+- **Argmax**: field-native comparison of 16 outputs via `convert.split()`.
+  The computed class is asserted equal to the prover's `expected_class`.
+- **Quantum circuit**: 2-qubit Bell pair state preparation, conditional CZ,
+  inverse Bell decoding, trace-out, probability comparison. Every complex
+  arithmetic operation is in the trace.
+- **Data flow**: each phase consumes the output of the previous phase.
+  The trace cannot be cut into independent sub-traces.
+
+What the proof does NOT cover: the choice of weights, the choice of
+secret key, or the semantic meaning of the classification. The proof
+says "this computation was performed correctly on these inputs," not
+"these inputs are meaningful."
+
+## What Is Intentionally Toy
+
+Trinity is a structural demonstration, not a production deployment.
+The parameters are chosen to exercise the correct algebraic operations
+at minimal scale:
+
+- **LWE_N = 8**: Real LWE operations but not cryptographically secure
+  (production TFHE uses N >= 630). The bench proves the homomorphic
+  structure compiles and verifies, not that it resists lattice attacks.
+- **NEURONS = 16**: Real dense layer but not a useful classifier.
+  256 weights is standard for compact on-device models but too small
+  for meaningful accuracy on real tasks.
+- **2-qubit Bell**: Demonstrates entanglement and conditional phase
+  gates. Quantum advantage requires O(100+) qubits; the bench proves
+  quantum circuits compose with FHE and neural ops inside a STARK.
+- **divine() bridge**: The LWE-to-plaintext decryption via `divine()`
+  is a sound proof technique (the noise check constrains the witness)
+  but is not how production FHE works. The full path uses RLWE + PBS
+  where the ReLU table drives blind rotation directly on ciphertexts.
+- **Deterministic measurement**: The quantum measurement selects the
+  higher-probability outcome. For Bell states this is exact (probability
+  is 0 or 1). For general states with non-trivial probability distributions,
+  a sampling-based model would be needed.
+
+The scaling path is clear: increase LWE_N, increase NEURONS, add
+RLWE + PBS, add more qubits. The algebraic structure does not change.
 
 ## Why This Matters
 
