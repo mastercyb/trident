@@ -1,0 +1,70 @@
+module std.math.lut
+
+// RAM-based lookup table over F_p.
+//
+// One table, multiple readers: the Rosetta Stone stepping stone.
+// The same precomputed table in RAM serves as:
+//   - Neural network activation (ReLU, GELU, etc.)
+//   - FHE test polynomial (for programmable bootstrapping)
+//   - Crypto S-box (nonlinear permutation)
+//
+// This is the RAM-emulated version of the native lookup argument
+// described in docs/explanation/vision.md. The STARK proof
+// authenticates all reads through RAM consistency — every reader
+// provably accesses the same table. When Triton VM exposes
+// user-defined LogUp tables, this module becomes a thin wrapper.
+//
+// Table layout: T[i] at RAM address (base + i) for i in [0, size).
+// Reads are O(1): mem.read(base + index).
+// Writes are O(size): one mem.write per entry.
+use vm.core.convert
+
+use vm.io.mem
+
+// ---------------------------------------------------------------------------
+// Write a ReLU activation table to RAM.
+// Domain: [0, size). half_size = threshold for sign detection.
+//   T[i] = i       if i < half_size   ("positive")
+//   T[i] = 0       if i >= half_size  ("negative" / wrapped field values)
+//
+// This is the field-native ReLU quantized to a bounded domain.
+// The same table serves as the PBS test polynomial for encrypted ReLU:
+// evaluating the table on encrypted data is programmable bootstrapping.
+// ---------------------------------------------------------------------------
+pub fn build_relu(base: Field, half_size: Field, size: Field) {
+    // Positive entries: T[i] = i for i in [0, half_size)
+    for i in 0..half_size bounded 4096 {
+        let idx: Field = convert.as_field(i)
+        mem.write(base + idx, idx)
+    }
+    // Negative entries: T[i] = 0 for i in [half_size, size)
+    for i in half_size..size bounded 4096 {
+        let idx: Field = convert.as_field(i)
+        mem.write(base + idx, 0)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Read from a lookup table. O(1) RAM access.
+// base: start address of the table in RAM.
+// index: the input value (must be in [0, size)).
+// Returns: T[index].
+// ---------------------------------------------------------------------------
+pub fn read(base: Field, index: Field) -> Field {
+    mem.read(base + index)
+}
+
+// ---------------------------------------------------------------------------
+// Apply a lookup table to N elements in RAM.
+// Reads each input from x_addr, looks up in table at base, writes to out_addr.
+// This is the "activation layer" pattern: out[i] = T[x[i]].
+// Same pattern as FHE programmable bootstrapping output extraction.
+// ---------------------------------------------------------------------------
+pub fn apply(base: Field, x_addr: Field, out_addr: Field, n: Field) {
+    for i in 0..n bounded 4096 {
+        let idx: Field = convert.as_field(i)
+        let x: Field = mem.read(x_addr + idx)
+        let result: Field = read(base, x)
+        mem.write(out_addr + idx, result)
+    }
+}

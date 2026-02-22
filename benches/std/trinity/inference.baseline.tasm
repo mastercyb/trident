@@ -1,8 +1,11 @@
 // Hand-optimized TASM baseline: std.trinity.inference
 //
 // Provable private neural inference with quantum commitment.
-// Real LWE encryption over Goldilocks, dense neural layer,
+// Real LWE encryption over Goldilocks, lookup-table ReLU activation,
 // 2-qubit Bell pair commitment.
+//
+// The ReLU lookup table is the Rosetta Stone primitive: the same
+// table serves as NN activation and FHE PBS test polynomial.
 //
 // Pitch parameters: LWE dim 8, 8 inputs, 16 neurons, Bell commitment.
 //
@@ -19,11 +22,11 @@
 //
 // Static instruction count summary:
 //   __decrypt_loop    :  24
-//   __dense_layer     :   3
+//   __dense_layer     :  17
 //   __quantum_commit  :   3
-//   __trinity         :  37
+//   __trinity         :  38
 //   ----------------------------------------
-//   Total             :  67
+//   Total             :  82
 
 
 // ===========================================================================
@@ -68,19 +71,49 @@ __decrypt_loop:
 
 
 // ===========================================================================
-// PHASE 2: DENSE NEURAL LAYER
+// PHASE 2: DENSE NEURAL LAYER (with lookup-table activation)
 // ===========================================================================
 
 
 // ---------------------------------------------------------------------------
-// __dense_layer: (w_addr, x_addr, b_addr, out_addr, tmp_addr, neurons)
+// __dense_layer: (w_addr, x_addr, b_addr, out_addr, tmp_addr, lut_addr, neurons)
 // ---------------------------------------------------------------------------
-// Square dense layer: rows = cols = neurons.
+// Dense layer: out = lut_relu(W * x + b).
+// Delegates to three external calls:
+//   1. matvec(w, x, tmp, neurons, neurons)
+//   2. bias_add(tmp, b, out, neurons)
+//   3. lut.apply(lut, out, out, neurons)
+// The lookup table is the Rosetta Stone primitive.
 //
-// 3 counted instructions.
+// Stack: [w, x, b, out, tmp, lut, neurons]
+//   st0: w_addr      st3: out_addr     st6: neurons
+//   st1: x_addr      st4: tmp_addr
+//   st2: b_addr      st5: lut_addr
+//
+// 17 counted instructions.
 __dense_layer:
-    dup 0
-    call __dense
+    // --- matvec(w, x, tmp, neurons, neurons) ---
+    // Need on stack: [w, x, tmp, neurons, neurons] (first arg deepest)
+    dup 6
+    dup 7
+    dup 7
+    dup 4
+    dup 4
+    call __tensor_matvec
+    // --- bias_add(tmp, b, out, neurons) ---
+    // Need on stack: [tmp, b, out, neurons]
+    dup 6
+    dup 4
+    dup 5
+    dup 7
+    call __tensor_bias_add
+    // --- lut.apply(lut, out, out, neurons) ---
+    // Need on stack: [lut, out, out, neurons]
+    dup 6
+    dup 4
+    dup 5
+    dup 8
+    call __lut_apply
     return
 
 
@@ -110,76 +143,78 @@ __quantum_commit:
 // __trinity: (cts_addr, s_addr, w_priv_addr, ct_out_addr, tmp_addr,
 //             result_addr, delta, lwe_n, input_dim, neurons,
 //             dense_w_addr, dense_b_addr, activated_addr,
-//             expected_class) -> Bool
+//             lut_addr, expected_class) -> Bool
 // ---------------------------------------------------------------------------
 // Full pipeline:
 //   1. lwe.private_linear (external)
 //   2. decrypt_outputs (inline loop)
-//   3. dense_layer
+//   3. dense_layer with lookup-table ReLU (Rosetta Stone)
 //   4. argmax + assert (data dependency: AI -> Quantum)
 //   5. quantum_commit
 //
-// Stack on entry (st0 = top, 14 args):
+// Stack on entry (st0 = top, 15 args):
 //   st0:  expected_class
-//   st1:  activated_addr
-//   st2:  dense_b_addr
-//   st3:  dense_w_addr
-//   st4:  neurons
-//   st5:  input_dim
-//   st6:  lwe_n
-//   st7:  delta
-//   st8:  result_addr
-//   st9:  tmp_addr
-//   st10: ct_out_addr
-//   st11: w_priv_addr
-//   st12: s_addr
-//   st13: cts_addr
+//   st1:  lut_addr
+//   st2:  activated_addr
+//   st3:  dense_b_addr
+//   st4:  dense_w_addr
+//   st5:  neurons
+//   st6:  input_dim
+//   st7:  lwe_n
+//   st8:  delta
+//   st9:  result_addr
+//   st10: tmp_addr
+//   st11: ct_out_addr
+//   st12: w_priv_addr
+//   st13: s_addr
+//   st14: cts_addr
 //
-// 37 counted instructions.
+// 38 counted instructions.
 __trinity:
     // --- Phase 1: lwe.private_linear(cts, w_priv, ct_out, tmp, lwe_n, input_dim, neurons) ---
-    dup 13
-    dup 12
-    dup 12
-    dup 12
-    dup 10
-    dup 10
-    dup 10
-    call __lwe_private_linear
-    // --- Phase 1b: decrypt_outputs(ct_out, s, result, delta, lwe_n, neurons) ---
-    // Push args for __decrypt_loop: [neurons, lwe_n, delta, result_addr, s_addr, ct_out_addr]
-    dup 4
-    dup 7
-    dup 9
-    dup 11
-    dup 15
     dup 14
+    dup 13
+    dup 13
+    dup 13
+    dup 11
+    dup 11
+    dup 11
+    call __lwe_private_linear
+    // --- Phase 1b: decrypt_outputs ---
+    // Push args for __decrypt_loop: [neurons, lwe_n, delta, result_addr, s_addr, ct_out_addr]
+    dup 5
+    dup 8
+    dup 10
+    dup 12
+    dup 16
+    dup 15
     call __decrypt_loop
     pop 6
-    // --- Phase 2: dense_layer(dense_w, result, dense_b, activated, tmp, neurons) ---
-    dup 3
-    dup 9
+    // --- Phase 2: dense_layer(dense_w, result, dense_b, activated, tmp, lut, neurons) ---
     dup 4
-    dup 4
-    dup 13
-    dup 9
-    call __dense_layer
-    pop 6
-    // --- argmax(activated_addr, neurons) + assert class == expected ---
-    // Stack: [expected_class, activated_addr, dense_b, dense_w, neurons, ...]
-    dup 1
+    dup 10
     dup 5
+    dup 5
+    dup 14
+    dup 5
+    dup 11
+    call __dense_layer
+    pop 7
+    // --- argmax(activated_addr, neurons) + assert class == expected ---
+    // Stack: [expected_class, lut_addr, activated_addr, dense_b, dense_w, neurons, ...]
+    dup 2
+    dup 6
     call __tensor_argmax
-    // Stack: [class, expected_class, activated_addr, ...]
+    // Stack: [class, expected_class, lut_addr, activated_addr, ...]
     dup 0
     dup 2
     eq
     assert
     // --- Phase 3: quantum_commit(class) ---
     call __quantum_commit
-    // Cleanup: swap result past 14 args, pop all
-    swap 14
+    // Cleanup: swap result past 15 args, pop all
+    swap 15
     pop 5
     pop 5
-    pop 4
+    pop 5
     return

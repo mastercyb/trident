@@ -105,14 +105,28 @@ fn private_linear(cts: &[Ciphertext], w: &[Vec<F>]) -> Vec<Ciphertext> {
         .collect()
 }
 
-// Phase 2: Dense neural layer
+// Phase 2: Dense neural layer with lookup-table activation
+//
+// The ReLU activation is a precomputed lookup table over the plaintext
+// domain [0, PLAINTEXT_SPACE). This is the Rosetta Stone primitive:
+// the same table serves as NN activation AND would serve as the FHE
+// programmable bootstrapping test polynomial.
 
-fn relu(x: F) -> F {
-    if x.to_u64() < HALF_P {
-        x
-    } else {
-        F::ZERO
-    }
+fn build_relu_lut() -> Vec<F> {
+    let half = PLAINTEXT_SPACE / 2;
+    (0..PLAINTEXT_SPACE)
+        .map(|i| {
+            if i < half {
+                F::from_u64(i)
+            } else {
+                F::ZERO
+            }
+        })
+        .collect()
+}
+
+fn lut_read(table: &[F], index: F) -> F {
+    table[index.to_u64() as usize]
 }
 
 fn matvec(mat: &[F], vec: &[F], rows: usize, cols: usize) -> Vec<F> {
@@ -127,11 +141,11 @@ fn matvec(mat: &[F], vec: &[F], rows: usize, cols: usize) -> Vec<F> {
         .collect()
 }
 
-fn dense(w: &[F], x: &[F], b: &[F], rows: usize, cols: usize) -> Vec<F> {
+fn dense(w: &[F], x: &[F], b: &[F], lut: &[F], rows: usize, cols: usize) -> Vec<F> {
     let mv = matvec(w, x, rows, cols);
     mv.iter()
         .zip(b.iter())
-        .map(|(&v, &bi)| relu(v.add(bi)))
+        .map(|(&v, &bi)| lut_read(lut, v.add(bi)))
         .collect()
 }
 
@@ -175,14 +189,15 @@ fn trinity(
     priv_w: &[Vec<F>],
     dense_w: &[F],
     dense_b: &[F],
+    lut: &[F],
     d: F,
 ) -> bool {
     // Phase 1: Encrypted linear layer
     let ct_out = private_linear(cts, priv_w);
     // Phase 1b: Decrypt
     let result: Vec<F> = ct_out.iter().map(|ct| decrypt(ct, s, d)).collect();
-    // Phase 2: Dense neural layer
-    let activated = dense(dense_w, &result, dense_b, NEURONS, NEURONS);
+    // Phase 2: Dense neural layer (activation via shared lookup table)
+    let activated = dense(dense_w, &result, dense_b, lut, NEURONS, NEURONS);
     // Phase 3: Quantum commitment
     let class = argmax(&activated);
     quantum_commit(class)
@@ -220,10 +235,13 @@ fn main() {
     let dense_b: Vec<F> = (0..NEURONS)
         .map(|i| F::from_u64(i as u64))
         .collect();
+    // Shared lookup table: ReLU over plaintext domain [0, 1024)
+    // Same table serves as NN activation and FHE PBS test polynomial.
+    let lut = build_relu_lut();
 
     // Warmup
     for _ in 0..100 {
-        std::hint::black_box(trinity(&cts, &s, &priv_w, &dense_w, &dense_b, d));
+        std::hint::black_box(trinity(&cts, &s, &priv_w, &dense_w, &dense_b, &lut, d));
     }
 
     let iters = 10000u128;
@@ -235,6 +253,7 @@ fn main() {
             std::hint::black_box(&priv_w),
             std::hint::black_box(&dense_w),
             std::hint::black_box(&dense_b),
+            std::hint::black_box(&lut),
             std::hint::black_box(d),
         ));
     }

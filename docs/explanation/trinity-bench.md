@@ -108,7 +108,7 @@ trace cannot be "cut" into independent sub-traces.
 ```
 Phase 1  (Privacy):  private_linear -- 16 neurons * 8 inputs * LWE ops
 Phase 1b (Decrypt):  16 neurons * lwe.decrypt (inner product + noise check)
-Phase 2  (Neural):   matvec(16x16) + bias + relu + argmax
+Phase 2  (Neural):   matvec(16x16) + bias + lut_relu + argmax
 Phase 3  (Quantum):  2-qubit Bell circuit
 ```
 
@@ -135,18 +135,20 @@ Phase 3  (Quantum):  2-qubit Bell circuit
 
 ```
 Module                       Tri   Hand   Ratio
-std::trinity::inference      120     67   1.79x
+std::trinity::inference      125     82   1.52x
 ```
 
-Compiler generates 120 static instructions, hand baseline 67.
-The 1.79x gap is an optimization target for the compiler.
+Compiler generates 125 static instructions, hand baseline 82.
+The 1.52x gap is an optimization target for the compiler.
 
-Breakdown (hand): 24 decrypt_loop + 3 dense_layer + 3 quantum_commit
-+ 37 trinity pipeline = 67 total.
+Breakdown (hand): 24 decrypt_loop + 17 dense_layer + 3 quantum_commit
++ 38 trinity pipeline = 82 total. The dense_layer grew from 3 to 17
+because it now makes three separate external calls (matvec, bias_add,
+lut.apply) instead of one monolithic call.
 
 ## The Rosetta Stone
 
-Trinity is a stepping stone toward the Rosetta Stone unification
+Trinity implements the first step of the Rosetta Stone unification
 described in `docs/explanation/vision.md`. The key insight: a single
 lookup table over F_p simultaneously serves as:
 
@@ -155,21 +157,31 @@ lookup table over F_p simultaneously serves as:
 3. **FHE**: test polynomial for programmable bootstrapping (PBS)
 4. **Crypto**: S-box for hash round function (Tip5)
 
-Trinity currently uses field-comparison ReLU (Phase 2) and explicit
-LWE arithmetic (Phase 1). The planned evolution:
+Trinity's Phase 2 uses a RAM-based lookup table (`std.math.lut`)
+for ReLU activation. The table is precomputed via `lut.build_relu`
+and read via `lut.apply` -- O(1) per element. The STARK proof
+authenticates all reads through RAM consistency.
 
-- **ReLU via lookup table** (`std.nn.activation.relu`): same table
-  entry serves as NN activation and STARK lookup authentication.
-- **PBS via lookup table**: blind rotation evaluates the same table
-  on encrypted data. The FHE test polynomial IS the activation table.
-- **Tip5 S-box**: the hash function's nonlinearity uses the same
-  table mechanism. Adding a Poseidon2/Tip5 commitment phase (see
-  Roadmap) would make all four roles visible in one program.
+**The same table IS the FHE PBS test polynomial.** In programmable
+bootstrapping, the test polynomial encodes the target function
+(ReLU) and is evaluated on encrypted data via blind rotation. In
+Trinity, the table is read on decrypted data, but the mathematical
+object is identical -- the RAM-based ReLU table can serve both roles.
 
-When lookup-table activation lands, Trinity demonstrates the Rosetta
-Stone identity directly: one table, three readers, one proof.
+This is the RAM-emulated version of the native LogUp lookup. When
+Triton VM exposes user-defined lookup arguments, `std.math.lut`
+becomes a thin wrapper and the cost drops to zero per read.
+
+Current implementation: `std.math.lut` provides `build_relu`,
+`read`, and `apply`. The table is shared across the pipeline via
+a single `lut_addr` parameter.
 
 ## Roadmap
+
+### Done: Lookup-Table Activation (Rosetta Stone step)
+
+Phase 2 uses `std.math.lut` for ReLU activation via RAM-based lookup
+table. Same table can serve as FHE PBS test polynomial.
 
 ### Next: Hash Commitment Phase (Poseidon2)
 
@@ -182,11 +194,6 @@ THIS key", not abstractly "some model".
 `std.crypto.poseidon2` already exists (991 lines, production-grade,
 t=8 state, RF=8 full rounds, RP=22 partial rounds). Adding it turns
 Trinity into a tetralogy: FHE + AI + Hash + Quantum.
-
-### Future: Lookup Table Unification
-
-Replace field-comparison ReLU with lookup-table ReLU. Use the same
-table for FHE PBS. Demonstrate the Rosetta Stone identity in code.
 
 ### Future: NTT as Shared Workhorse
 
@@ -209,10 +216,11 @@ and STARK proof generation. Relevant at dimension >= 256.
 
 ```
 std/fhe/lwe.tri                              LWE encryption module
-std/nn/tensor.tri                            Neural primitives (dense, argmax)
+std/math/lut.tri                             RAM-based lookup table (Rosetta Stone)
+std/nn/tensor.tri                            Neural primitives (matvec, argmax)
 std/quantum/gates.tri                        Quantum gate library
 std/trinity/inference.tri                    Trinity module
-benches/std/trinity/inference.baseline.tasm  Hand-optimized TASM (67 instructions)
+benches/std/trinity/inference.baseline.tasm  Hand-optimized TASM (82 instructions)
 benches/std/trinity/inference.reference.rs   Rust ground truth (LWE_N=8, NEURONS=16)
 ```
 

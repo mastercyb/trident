@@ -4,14 +4,18 @@ module std.trinity.inference
 //
 // Three revolutions, one program:
 //   Phase 1 — Privacy: LWE homomorphic encryption (real TFHE over Goldilocks)
-//   Phase 2 — Neural:  Dense layer (matvec + bias + ReLU)
+//   Phase 2 — Neural:  Dense layer (matvec + bias + lookup-table ReLU)
 //   Phase 3 — Quantum: 2-qubit Bell pair commitment circuit
+//
+// The ReLU activation is a RAM-based lookup table — the same table that
+// would serve as the FHE programmable bootstrapping test polynomial.
+// One table, multiple readers: the Rosetta Stone stepping stone.
 //
 // The STARK proof covers everything. No other system on earth does this.
 //
 // Pitch parameters:
 //   LWE dimension 8, 8 encrypted inputs, 16-neuron hidden layer,
-//   2-qubit Bell commitment. ~30K dynamic ops, ~10s prove, ~15MB proof.
+//   2-qubit Bell commitment.
 use vm.core.field
 
 use vm.core.convert
@@ -24,6 +28,8 @@ use std.nn.tensor
 
 use std.fhe.lwe
 
+use std.math.lut
+
 use std.quantum.gates
 
 // ---------------------------------------------------------------------------
@@ -32,14 +38,6 @@ use std.quantum.gates
 // Real homomorphic computation: encrypted input vector multiplied by
 // plaintext weight matrix. Each output is an LWE ciphertext encoding
 // the weighted sum. The STARK proof covers every field operation.
-//
-// cts_addr: encrypted input vector (input_dim ciphertexts, stride lwe_n+1)
-// w_addr: weight matrix (neurons x input_dim, plaintext, row-major)
-// ct_out_addr: encrypted output vector (neurons ciphertexts)
-// tmp_addr: scratch (lwe_n+1 elements)
-// lwe_n: LWE dimension
-// input_dim: number of input ciphertexts
-// neurons: number of output neurons
 pub fn private_linear(
     cts_addr: Field,
     w_addr: Field,
@@ -58,13 +56,6 @@ pub fn private_linear(
 // Bridge between encrypted Phase 1 and plaintext Phase 2.
 // Each output ciphertext is decrypted via io.divine() — the prover
 // supplies the plaintext, the circuit verifies the noise bound.
-//
-// ct_out_addr: encrypted outputs (neurons ciphertexts)
-// s_addr: secret key (lwe_n elements)
-// result_addr: decrypted plaintext output (neurons elements)
-// delta: LWE scaling factor
-// lwe_n: LWE dimension
-// neurons: number of outputs
 pub fn decrypt_outputs(
     ct_out_addr: Field,
     s_addr: Field,
@@ -83,19 +74,29 @@ pub fn decrypt_outputs(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2: Neural dense layer
+// Phase 2: Neural dense layer with lookup-table activation
 // ---------------------------------------------------------------------------
-// Full dense layer: out = relu(W * x + b).
-// Operates on decrypted plaintext from Phase 1b.
+// Dense layer: out = lut_relu(W * x + b).
+// Matrix-vector multiply, bias addition, then ReLU via lookup table.
+//
+// The lookup table is the Rosetta Stone primitive:
+//   - Here it serves as the neural network activation function.
+//   - The same table IS the FHE programmable bootstrapping test polynomial.
+//   - The STARK proof authenticates all table reads through RAM consistency.
+//
+// lut_addr: precomputed ReLU table in RAM (built by lut.build_relu)
 pub fn dense_layer(
     w_addr: Field,
     x_addr: Field,
     b_addr: Field,
     out_addr: Field,
     tmp_addr: Field,
+    lut_addr: Field,
     neurons: Field
 ) {
-    tensor.dense(w_addr, x_addr, b_addr, out_addr, tmp_addr, neurons, neurons)
+    tensor.matvec(w_addr, x_addr, tmp_addr, neurons, neurons)
+    tensor.bias_add(tmp_addr, b_addr, out_addr, neurons)
+    lut.apply(lut_addr, out_addr, out_addr, neurons)
 }
 
 // ---------------------------------------------------------------------------
@@ -141,8 +142,13 @@ pub fn quantum_commit(class: Field) -> Bool {
 // ---------------------------------------------------------------------------
 // 1. Private linear layer (LWE homomorphic encryption — FHE)
 // 2. Decrypt encrypted outputs (bridge to plaintext)
-// 3. Dense neural layer (matvec + bias + ReLU — AI)
+// 3. Dense neural layer with lookup-table ReLU (AI + Rosetta Stone)
 // 4. Quantum commitment (2-qubit Bell circuit — Quantum)
+//
+// The lookup table at lut_addr serves dual purpose:
+//   - Neural activation (ReLU in Phase 2)
+//   - FHE test polynomial (same table would drive PBS)
+// One table, multiple readers. The STARK proof covers all reads.
 //
 // The class is computed inside the pipeline via argmax on the dense layer
 // output. expected_class is the prover's claim — the circuit asserts it
@@ -164,14 +170,15 @@ pub fn trinity(
     dense_w_addr: Field,
     dense_b_addr: Field,
     activated_addr: Field,
+    lut_addr: Field,
     expected_class: Field
 ) -> Bool {
     // Phase 1: Encrypted linear layer
     private_linear(cts_addr, w_priv_addr, ct_out_addr, tmp_addr, lwe_n, input_dim, neurons)
     // Phase 1b: Decrypt
     decrypt_outputs(ct_out_addr, s_addr, result_addr, delta, lwe_n, neurons)
-    // Phase 2: Dense neural layer
-    dense_layer(dense_w_addr, result_addr, dense_b_addr, activated_addr, tmp_addr, neurons)
+    // Phase 2: Dense neural layer (activation via shared lookup table)
+    dense_layer(dense_w_addr, result_addr, dense_b_addr, activated_addr, tmp_addr, lut_addr, neurons)
     // Compute class from neural output — data dependency between AI and Quantum
     let class: Field = tensor.argmax(activated_addr, neurons)
     assert.eq(class, expected_class)
