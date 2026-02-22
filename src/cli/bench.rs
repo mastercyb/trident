@@ -59,9 +59,8 @@ pub fn cmd_bench(args: BenchArgs) {
         process::exit(1);
     }
 
-    let project_root = bench_dir
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."));
+    let project_root = find_project_root(&bench_dir);
+    let benches_root = project_root.join("benches");
 
     let mut baselines = find_baseline_files(&bench_dir, 0);
     baselines.sort();
@@ -91,7 +90,7 @@ pub fn cmd_bench(args: BenchArgs) {
 
     for baseline_path in &baselines {
         let rel = baseline_path
-            .strip_prefix(&bench_dir)
+            .strip_prefix(&benches_root)
             .unwrap_or(baseline_path);
         let rel_str = rel.to_string_lossy();
         let source_rel = rel_str.replace(".baseline.tasm", ".tri");
@@ -833,6 +832,24 @@ fn find_baseline_files(dir: &std::path::Path, depth: usize) -> Vec<PathBuf> {
         }
     }
     files
+}
+
+/// Find the project root from a bench directory.
+///
+/// Walks up from `bench_dir` looking for a parent that contains a `benches/`
+/// child. This handles both `trident bench` (bench_dir = `benches/`) and
+/// `trident bench benches/std/trinity` (bench_dir = `benches/std/trinity/`).
+fn find_project_root(bench_dir: &Path) -> &Path {
+    let mut dir = bench_dir;
+    loop {
+        if dir.file_name().map(|n| n == "benches").unwrap_or(false) {
+            return dir.parent().unwrap_or(Path::new("."));
+        }
+        match dir.parent() {
+            Some(parent) if parent != dir => dir = parent,
+            _ => return bench_dir.parent().unwrap_or(Path::new(".")),
+        }
+    }
 }
 
 /// Resolve the bench directory by searching ancestor directories.
