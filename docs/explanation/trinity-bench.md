@@ -243,17 +243,64 @@ Module                       Tri   Hand   Ratio
 std::trinity::inference      211    167   1.26x
 ```
 
-Compiler generates 211 static instructions, hand baseline 167.
-The 1.26x gap is an optimization target for the compiler.
+Per-function breakdown:
 
-Breakdown (hand): 24 decrypt_loop + 17 dense_layer + 13 sum_loop
-+ 15 hash_commit + 17 lut_hash_commit + 3 quantum_commit
-+ 78 trinity pipeline = 167 total.
+```
+Function          Tri   Hand   Ratio   Notes
+decrypt_loop        -     24       -   hand-only loop (compiler inlines)
+dense_layer        19     17   1.12x   matvec + bias + lut.apply
+sum_loop            -     13       -   hand-only helper (compiler inlines)
+hash_commit        13     15   0.87x   compiler beats hand
+lut_hash_commit    15     17   0.88x   compiler beats hand
+quantum_commit     53      3  17.67x   hand uses algebraic shortcut (class == 0)
+trinity           111     78   1.42x   pipeline orchestration (29 args)
+```
 
-The Rosetta Stone unification added lut_hash_commit (17 instructions
-for the LUT sponge hash path) and extended the trinity pipeline from
-49 to 78 instructions (10 new args + LUT sponge call + PBS bootstrap
-call + digest/result assertions).
+The compiler beats hand in `hash_commit` and `lut_hash_commit` (sum + hash
+call) because the compiler's sum loop is more compact. The `quantum_commit`
+gap (53 vs 3) is structural: the .tri code traces every quantum gate while
+hand TASM uses the algebraic reduction `class == 0`. The `trinity` pipeline
+at 1.42x is the main optimization target — orchestrating 29 arguments and
+6 phase calls.
+
+## End-to-End Example
+
+Running `ref_std_trinity_inference` produces the full data trace:
+
+```
+--- Parameters ---
+  p = 18446744069414584321, delta = 18014398505287680
+  LWE_N = 8, INPUT_DIM = 8, NEURONS = 16, RING_N = 64, domain = 1024
+
+--- Phase 1: LWE Encryption ---
+  plaintexts = [1, 2, 3, 4, 5, 6, 7, 8]
+
+--- Phase 1b: Decrypt ---
+  decrypted = [74, 62, 90, 63, 71, 74, 62, 90, 63, 71, 74, 62, 90, 63, 71, 74]
+  encrypt/decrypt round-trip = PASS
+
+--- Phase 2: Dense Layer + ReLU (Reader 1) ---
+  activated = [136, 153, 155, 137, 149, 141, 158, 160, 142, 154, 146, 163, 165, 147, 159, 163]
+  class (argmax) = 12
+
+--- Phase 3a: LUT Sponge Hash (Reader 2) ---
+  lut_digest = 546  (112 table reads from shared LUT)
+
+--- Phase 3b: Poseidon2 Hash ---
+  poseidon_digest = 812426740292758636
+
+--- Phase 4: PBS Demo (Reader 3) ---
+  pbs_result = lut[74] = 74, PBS == direct = PASS
+
+--- Phase 5: Quantum Commitment ---
+  class = 12, quantum_commit = false  (class > 0)
+
+VERDICT: ALL CHECKS PASS
+```
+
+Every value is deterministic. The reference generates prover hints
+(expected_class, expected_digest, expected_lut_digest, pbs_expected_m)
+that the .tri circuit asserts via `assert.eq`.
 
 ## The Rosetta Stone
 
