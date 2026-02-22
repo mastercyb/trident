@@ -149,7 +149,94 @@ fn dense(w: &[F], x: &[F], b: &[F], lut: &[F], rows: usize, cols: usize) -> Vec<
         .collect()
 }
 
-// Phase 3: Quantum commitment (2-qubit Bell pair)
+// Phase 3a: LUT sponge hash commitment (Rosetta Stone Reader #2)
+//
+// Sponge construction where the S-box reads from the same lookup table
+// as the ReLU activation. State width 8, 14 rounds, circulant MDS.
+
+const LUT_SPONGE_ROUNDS: usize = 14;
+const LUT_SPONGE_WIDTH: usize = 8;
+
+fn lut_sponge_sbox_layer(state: &mut [F; LUT_SPONGE_WIDTH], lut: &[F], domain: u64) {
+    for i in 0..LUT_SPONGE_WIDTH {
+        // Reduce to [0, domain) then look up in the shared table
+        let reduced = state[i].to_u64() % domain;
+        state[i] = lut[reduced as usize];
+    }
+}
+
+fn lut_sponge_mds(state: &mut [F; LUT_SPONGE_WIDTH]) {
+    // circulant(2,1,1,...,1): new[i] = state[i] + sum(state)
+    let sum = state.iter().fold(F::ZERO, |acc, &x| acc.add(x));
+    for i in 0..LUT_SPONGE_WIDTH {
+        state[i] = state[i].add(sum);
+    }
+}
+
+fn lut_sponge_add_constants(state: &mut [F; LUT_SPONGE_WIDTH], rc: &[F]) {
+    for i in 0..LUT_SPONGE_WIDTH {
+        state[i] = state[i].add(rc[i]);
+    }
+}
+
+fn lut_sponge_permute(state: &mut [F; LUT_SPONGE_WIDTH], lut: &[F], domain: u64, rc: &[F]) {
+    for r in 0..LUT_SPONGE_ROUNDS {
+        let rc_offset = r * LUT_SPONGE_WIDTH;
+        lut_sponge_add_constants(state, &rc[rc_offset..rc_offset + LUT_SPONGE_WIDTH]);
+        lut_sponge_sbox_layer(state, lut, domain);
+        lut_sponge_mds(state);
+    }
+}
+
+fn lut_sponge_round_constants() -> Vec<F> {
+    // Deterministic round constants: simple derivation for demo.
+    // 14 rounds * 8 elements = 112 constants.
+    (0..LUT_SPONGE_ROUNDS * LUT_SPONGE_WIDTH)
+        .map(|i| F::from_u64((i as u64 + 42) * 0x9E3779B97F4A7C15 % 0xFFFF_FFFF_0000_0001))
+        .collect()
+}
+
+fn lut_hash_commit(
+    activated: &[F],
+    weights_digest: F,
+    key_digest: F,
+    class: F,
+    lut: &[F],
+) -> F {
+    let output_digest = activated.iter().fold(F::ZERO, |acc, &x| acc.add(x));
+    let mut state = [F::ZERO; LUT_SPONGE_WIDTH];
+    // Absorb: rate = 4
+    state[0] = weights_digest;
+    state[1] = key_digest;
+    state[2] = output_digest;
+    state[3] = class;
+    // Domain separation: capacity element
+    state[4] = F::from_u64(4);
+    let rc = lut_sponge_round_constants();
+    lut_sponge_permute(&mut state, lut, PLAINTEXT_SPACE, &rc);
+    // Squeeze: first element
+    state[0]
+}
+
+// Phase 4: PBS demo (Rosetta Stone Reader #3)
+//
+// Simplified PBS: evaluate the lookup table on a decrypted ciphertext value.
+// In the full pipeline, this would be blind rotation on encrypted data.
+// The demo proves the table read path is correct.
+
+fn pbs_demo(ct: &Ciphertext, s: &[F], d: F, lut: &[F]) -> F {
+    // Decrypt the ciphertext
+    let m = decrypt(ct, s, d);
+    // Apply the lookup table — same table as NN activation
+    let m_u64 = m.to_u64();
+    if m_u64 < PLAINTEXT_SPACE {
+        lut[m_u64 as usize]
+    } else {
+        F::ZERO
+    }
+}
+
+// Phase 5: Quantum commitment (2-qubit Bell pair)
 
 fn quantum_commit(class: usize) -> bool {
     let (q00, q01, mut q10, mut q11) = (F::ONE, F::ZERO, F::ZERO, F::ONE);
@@ -168,7 +255,7 @@ fn quantum_commit(class: usize) -> bool {
     hi < 2147483647u32
 }
 
-// Phase 3: Hash commitment (Poseidon2)
+// Phase 3b: Hash commitment (Poseidon2) — production binding
 
 fn hash_commit(
     activated: &[F],
@@ -214,14 +301,18 @@ fn trinity(
     let ct_out = private_linear(cts, priv_w);
     // Phase 1b: Decrypt
     let result: Vec<F> = ct_out.iter().map(|ct| decrypt(ct, s, d)).collect();
-    // Phase 2: Dense neural layer (activation via shared lookup table)
+    // Phase 2: Dense neural layer — Reader 1 (lut activation)
     let activated = dense(dense_w, &result, dense_b, lut, NEURONS, NEURONS);
     // Compute class from neural output
     let class = argmax(&activated);
     let class_f = F::from_u64(class as u64);
-    // Phase 3: Hash commitment — binds model parameters to proof
+    // Phase 3a: LUT sponge hash — Reader 2 (S-box from same table)
+    let _lut_digest = lut_hash_commit(&activated, weights_digest, key_digest, class_f, lut);
+    // Phase 3b: Poseidon2 hash — binding commitment
     let _digest = hash_commit(&activated, weights_digest, key_digest, class_f);
-    // Phase 4: Quantum commitment
+    // Phase 4: PBS demo — Reader 3 (test polynomial from same table)
+    let _pbs_result = pbs_demo(&ct_out[0], s, d, lut);
+    // Phase 5: Quantum commitment
     quantum_commit(class)
 }
 
