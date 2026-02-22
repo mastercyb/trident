@@ -241,7 +241,8 @@ pub fn quantum_commit(class: Field) -> Bool {
 // 5. PBS demo (test polynomial = LUT)            [Reader 3: lut.read]
 // 6. Quantum commitment (2-qubit Bell circuit)
 //
-// One table (lut_addr), three readers: the Rosetta Stone.
+// One table (lut_addr), four readers: the Rosetta Stone.
+// Readers 1-3 demonstrated here. Reader 4 (STARK LogUp) is upstream.
 // All reads from the same RAM address, authenticated by STARK consistency.
 //
 // Returns: Bool from quantum measurement confirming the commitment.

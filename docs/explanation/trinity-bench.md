@@ -3,7 +3,7 @@
 ## What Trinity Is
 
 A single Trident program that demonstrates the Rosetta Stone unification:
-**one lookup table, three readers**, across five computational domains
+**one lookup table, four readers**, across five computational domains
 in one STARK-verifiable trace.
 
 ```
@@ -13,13 +13,14 @@ Encrypted Input --> Private Linear --> Decrypt --> Dense Layer --> argmax
      (Crypto, Reader 2)    (Crypto)       (FHE, Reader 3)   (Quantum)
 ```
 
-The three readers share a single RAM-based ReLU lookup table (`lut_addr`):
+The four readers share a single RAM-based ReLU lookup table (`lut_addr`):
 
-| Reader | Phase | Module | Operation |
-|--------|-------|--------|-----------|
-| 1 | Phase 2 (Neural) | `std.math.lut.apply` | ReLU activation |
-| 2 | Phase 3a (LUT Sponge) | `std.math.lut.read` | Crypto S-box |
-| 3 | Phase 4 (PBS Demo) | `std.math.lut.read` | FHE test polynomial |
+| Reader | Phase | Module | Operation | Status |
+|--------|-------|--------|-----------|--------|
+| 1 | Phase 2 (Neural) | `std.math.lut.apply` | ReLU activation | demonstrated |
+| 2 | Phase 3a (LUT Sponge) | `std.math.lut.read` | Crypto S-box | demonstrated |
+| 3 | Phase 4 (PBS Demo) | `std.math.lut.read` | FHE test polynomial | demonstrated |
+| 4 | STARK trace | Triton VM LogUp | Proof authentication | upstream |
 
 To our knowledge, no existing system composes all five domains in a
 single proof. TFHE encrypts but can't prove. Cairo proves but can't
@@ -257,19 +258,24 @@ call + digest/result assertions).
 ## The Rosetta Stone
 
 Trinity implements the Rosetta Stone unification: **one lookup table,
-three readers**. A single RAM-based ReLU table (`lut_addr`) is read
-by three independent subsystems within the same STARK trace:
+four readers**. A single RAM-based ReLU table (`lut_addr`) is read
+by four independent subsystems within the same STARK trace:
 
 | Reader | Phase | Call site | Purpose |
 |--------|-------|-----------|---------|
 | 1 | Phase 2 | `lut.apply` in `dense_layer` | Neural activation (ReLU) |
 | 2 | Phase 3a | `lut.read` in `lut_sponge.sbox_layer` | Crypto S-box for hash |
 | 3 | Phase 4 | `lut.read` in `pbs.build_test_poly` | FHE test polynomial |
+| 4 | STARK trace | Triton VM LogUp | Proof authentication |
+
+Readers 1-3 are demonstrated in Trinity. Reader 4 is the STARK itself —
+when Triton VM exposes user-defined lookup arguments, all RAM reads
+become native LogUp lookups.
 
 The table is built once via `lut.build_relu` and threaded through the
-entire pipeline as `lut_addr`. All three readers access the same RAM
-region. The STARK proof authenticates every read through RAM consistency
-— it is provably the same table in all three contexts.
+entire pipeline as `lut_addr`. All readers access the same RAM region.
+The STARK proof authenticates every read through RAM consistency
+— it is provably the same table in all four contexts.
 
 ### Why not Tip5 or Poseidon2 as Reader 2?
 
@@ -280,21 +286,20 @@ bounded-domain tables: it reduces state elements to [0, D) via
 constrained modular reduction before each S-box lookup. This makes it
 compatible with the same 1024-entry ReLU table used by the other readers.
 
-### The fourth reader
+### Reader 4: STARK LogUp
 
 Reader 4 is the STARK itself. Triton VM's LogUp argument performs
 lookups against predefined tables. When Triton VM exposes user-defined
 lookup arguments, `std.math.lut` becomes a thin wrapper and the cost
-drops to zero per read. All four readers would then share a single
-native table. This is upstream of Trident and not demonstrated in the
-current bench.
+drops to zero per read. All four readers share a single table — three
+demonstrated, one awaiting upstream support.
 
 ## Roadmap
 
 ### Done: Lookup-Table Activation (Reader 1)
 
 Phase 2 uses `std.math.lut.apply` for ReLU activation via RAM-based
-lookup table. The table serves as the foundation for all three readers.
+lookup table. The table serves as the foundation for all four readers.
 
 ### Done: LUT Sponge Hash (Reader 2)
 
@@ -334,7 +339,7 @@ zero, and the STARK itself becomes the fourth reader.
 | Variant        | Change                                     | Metric                      |
 |----------------|--------------------------------------------|-----------------------------|
 | base           | LWE_N=8, NEURONS=16, 2-qubit              | control point               |
-| +rosetta       | 3 readers of shared LUT                    | Rosetta Stone demo          |
+| +rosetta       | 4 readers of shared LUT                    | Rosetta Stone demo          |
 | sweep          | LWE_N in {8,16}, NEURONS in {16,32}       | scaling trends              |
 | transparent    | divine() off, all inputs public            | witness cost measurement    |
 
@@ -349,7 +354,7 @@ std/nn/tensor.tri                            Neural primitives (matvec, argmax)
 std/crypto/poseidon2.tri                     Poseidon2 hash (+ RAM-based variants)
 std/crypto/lut_sponge.tri                    LUT sponge hash (Reader 2)
 std/quantum/gates.tri                        Quantum gate library
-std/trinity/inference.tri                    Trinity module (3 readers, 29 args)
+std/trinity/inference.tri                    Trinity module (4 readers, 29 args)
 benches/std/trinity/inference.baseline.tasm  Hand-optimized TASM (167 instructions)
 benches/std/trinity/inference.reference.rs   Rust ground truth
 ```
@@ -382,8 +387,9 @@ The STARK proof covers every field operation in the trace:
   CZ, inverse Bell decoding, trace-out, probability comparison.
 - **Data flow**: each phase consumes the output of the previous phase.
   The trace cannot be cut into independent sub-traces.
-- **Rosetta Stone binding**: all three readers access the same `lut_addr`.
+- **Rosetta Stone binding**: all four readers access the same table.
   The STARK RAM consistency argument proves it is the same table.
+  Readers 1-3 via `lut_addr`, Reader 4 via native LogUp (upstream).
 
 The hash commitments (both LUT sponge and Poseidon2) bind the proof to
 specific model weights and encryption key via their digests. The proof
@@ -408,7 +414,7 @@ at minimal scale:
   operations at reduced scale.
 - **LUT sponge security**: 14 rounds with a 10-bit S-box is conservative
   but not formally analyzed. The purpose is to demonstrate the Rosetta
-  Stone unification (same table, three readers), not to propose a new
+  Stone unification (same table, four readers), not to propose a new
   hash standard.
 - **PBS demo simplification**: The demo decrypts before table evaluation.
   Full PBS would perform blind rotation on encrypted data. The table
@@ -432,7 +438,7 @@ not change.
 ## Why This Matters
 
 Trinity proves the Rosetta Stone unification:
-**one lookup table, three readers, five domains, one proof.**
+**one lookup table, four readers, five domains, one proof.**
 
 - Real LWE encryption, not polynomial approximation
 - Data-dependent phases -- class computed from AI output, not injected

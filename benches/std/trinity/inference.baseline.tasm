@@ -1,6 +1,6 @@
 // Hand-optimized TASM baseline: std.trinity.inference
 //
-// Rosetta Stone unification: one lookup table, three readers.
+// Rosetta Stone unification: one lookup table, four readers.
 // Real LWE encryption over Goldilocks, lookup-table ReLU activation,
 // LUT sponge hash (S-box from LUT), Poseidon2 hash commitment,
 // PBS demo (test polynomial from LUT), 2-qubit Bell pair commitment.
@@ -8,6 +8,7 @@
 // Reader 1: lut.apply    in __dense_layer    — neural activation
 // Reader 2: lut.read     in __lut_sponge     — crypto S-box
 // Reader 3: lut.read     in __pbs_build_test — FHE test polynomial
+// Reader 4: STARK LogUp                      — proof authentication (upstream)
 //
 // Pitch parameters: LWE dim 8, 8 inputs, 16 neurons,
 // ring dim 64, domain 1024, Bell commitment.
@@ -229,7 +230,7 @@ __quantum_commit:
 //             pbs_acc_addr, pbs_test_addr, pbs_tmp_addr,
 //             pbs_expected_m) -> Bool
 // ---------------------------------------------------------------------------
-// One table (lut_addr), three readers:
+// One table (lut_addr), four readers (1-3 demonstrated, 4 upstream):
 //   Phase 2:  lut.apply (Reader 1 — NN activation)
 //   Phase 3a: lut.read  (Reader 2 — crypto S-box)
 //   Phase 4:  lut.read  (Reader 3 — FHE test polynomial)

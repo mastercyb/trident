@@ -5,11 +5,12 @@ module std.fhe.pbs
 // PBS evaluates a lookup table on encrypted data — the core TFHE operation.
 // The lookup table is read from the SAME RAM address as the neural network
 // ReLU activation and the LUT sponge S-box. This is Reader #3 of the
-// Rosetta Stone: one table, three readers.
+// Rosetta Stone: one table, four readers.
 //
 //   Reader 1: std.nn via lut.apply       — neural activation
 //   Reader 2: std.crypto.lut_sponge      — crypto S-box
 //   Reader 3: THIS MODULE via lut.read   — FHE test polynomial
+//   Reader 4: STARK LogUp                — proof authentication (upstream)
 //
 // Algorithm (simplified TFHE):
 //   1. Build test polynomial from lookup table

@@ -4,11 +4,12 @@ module std.crypto.lut_sponge
 //
 // The S-box reads from a RAM-based lookup table — the SAME table used
 // for neural network activation (ReLU) and FHE programmable bootstrapping.
-// This is the Rosetta Stone: one table, three readers.
+// This is the Rosetta Stone: one table, four readers.
 //
 //   Reader 1: std.nn via lut.apply  — neural activation
 //   Reader 2: THIS MODULE via lut.read — crypto S-box
 //   Reader 3: std.fhe.pbs via lut.read — FHE test polynomial
+//   Reader 4: STARK LogUp — proof authentication (upstream)
 //
 // Construction: Rescue-style sponge with bounded S-box.
 //   State width: 8, Rate: 4, Capacity: 4
