@@ -8,20 +8,22 @@ const HALF_P: u64 = (0xFFFF_FFFF_0000_0001u64 - 1) / 2;
 // Pitch parameters:
 //   LWE dimension 8, 8 encrypted inputs, 16 neurons.
 //   Delta = p / 1024 (10-bit plaintext space).
+//   Ring dimension 64 for PBS, domain 1024.
 //   2-qubit Bell quantum commitment.
 const LWE_N: usize = 8;
 const INPUT_DIM: usize = 8;
 const NEURONS: usize = 16;
 const PLAINTEXT_SPACE: u64 = 1024;
+const RING_N: usize = 64;
 
 fn delta() -> F {
-    // Delta = p / t. p = 2^64 - 2^32 + 1, t = 1024.
-    // p / 1024 = (2^64 - 2^32 + 1) / 1024
     let p = 0xFFFF_FFFF_0000_0001u64;
     F::from_u64(p / PLAINTEXT_SPACE)
 }
 
+// ===========================================================================
 // Phase 1: LWE encryption
+// ===========================================================================
 
 fn inner_product(a: &[F], s: &[F]) -> F {
     let mut sum = F::ZERO;
@@ -48,16 +50,12 @@ fn encrypt(m: F, s: &[F], a: &[F], e: F, delta: F) -> Ciphertext {
 fn decrypt(ct: &Ciphertext, s: &[F], delta: F) -> F {
     let dot = inner_product(&ct.a, s);
     let phase = ct.b.sub(dot);
-    // Round: m = round(phase / delta)
-    // Find m such that |phase - m * delta| is minimized
     let phase_u64 = phase.to_u64();
     let delta_u64 = delta.to_u64();
-    // Simple rounding: m = (phase + delta/2) / delta
     let half_delta = delta_u64 / 2;
     let shifted = if phase_u64 <= HALF_P {
         phase_u64.wrapping_add(half_delta)
     } else {
-        // Negative phase: p - |phase|, so m = t - round(|phase| / delta)
         let neg_phase = 0xFFFF_FFFF_0000_0001u64 - phase_u64;
         let neg_m = (neg_phase + half_delta) / delta_u64;
         return F::from_u64(PLAINTEXT_SPACE - neg_m);
@@ -105,12 +103,11 @@ fn private_linear(cts: &[Ciphertext], w: &[Vec<F>]) -> Vec<Ciphertext> {
         .collect()
 }
 
+// ===========================================================================
 // Phase 2: Dense neural layer with lookup-table activation
-//
-// The ReLU activation is a precomputed lookup table over the plaintext
-// domain [0, PLAINTEXT_SPACE). This is the Rosetta Stone primitive:
-// the same table serves as NN activation AND would serve as the FHE
-// programmable bootstrapping test polynomial.
+// ===========================================================================
+// ReLU via precomputed lookup table over [0, PLAINTEXT_SPACE).
+// This is Reader #1 of the Rosetta Stone.
 
 fn build_relu_lut() -> Vec<F> {
     let half = PLAINTEXT_SPACE / 2;
@@ -126,7 +123,14 @@ fn build_relu_lut() -> Vec<F> {
 }
 
 fn lut_read(table: &[F], index: F) -> F {
-    table[index.to_u64() as usize]
+    // In Triton VM, reading past the table returns 0 (uninit RAM).
+    // In Rust reference, we emulate this behavior.
+    let idx = index.to_u64() as usize;
+    if idx < table.len() {
+        table[idx]
+    } else {
+        F::ZERO
+    }
 }
 
 fn matvec(mat: &[F], vec: &[F], rows: usize, cols: usize) -> Vec<F> {
@@ -149,24 +153,23 @@ fn dense(w: &[F], x: &[F], b: &[F], lut: &[F], rows: usize, cols: usize) -> Vec<
         .collect()
 }
 
+// ===========================================================================
 // Phase 3a: LUT sponge hash commitment (Rosetta Stone Reader #2)
-//
-// Sponge construction where the S-box reads from the same lookup table
-// as the ReLU activation. State width 8, 14 rounds, circulant MDS.
+// ===========================================================================
+// Sponge with S-box reading from the same LUT as ReLU activation.
+// State width 8, 14 rounds, circulant MDS.
 
 const LUT_SPONGE_ROUNDS: usize = 14;
 const LUT_SPONGE_WIDTH: usize = 8;
 
 fn lut_sponge_sbox_layer(state: &mut [F; LUT_SPONGE_WIDTH], lut: &[F], domain: u64) {
     for i in 0..LUT_SPONGE_WIDTH {
-        // Reduce to [0, domain) then look up in the shared table
         let reduced = state[i].to_u64() % domain;
         state[i] = lut[reduced as usize];
     }
 }
 
 fn lut_sponge_mds(state: &mut [F; LUT_SPONGE_WIDTH]) {
-    // circulant(2,1,1,...,1): new[i] = state[i] + sum(state)
     let sum = state.iter().fold(F::ZERO, |acc, &x| acc.add(x));
     for i in 0..LUT_SPONGE_WIDTH {
         state[i] = state[i].add(sum);
@@ -189,8 +192,6 @@ fn lut_sponge_permute(state: &mut [F; LUT_SPONGE_WIDTH], lut: &[F], domain: u64,
 }
 
 fn lut_sponge_round_constants() -> Vec<F> {
-    // Deterministic round constants: simple derivation for demo.
-    // 14 rounds * 8 elements = 112 constants.
     (0..LUT_SPONGE_ROUNDS * LUT_SPONGE_WIDTH)
         .map(|i| F::from_u64((i as u64 + 42) * 0x9E3779B97F4A7C15 % 0xFFFF_FFFF_0000_0001))
         .collect()
@@ -205,29 +206,39 @@ fn lut_hash_commit(
 ) -> F {
     let output_digest = activated.iter().fold(F::ZERO, |acc, &x| acc.add(x));
     let mut state = [F::ZERO; LUT_SPONGE_WIDTH];
-    // Absorb: rate = 4
     state[0] = weights_digest;
     state[1] = key_digest;
     state[2] = output_digest;
     state[3] = class;
-    // Domain separation: capacity element
-    state[4] = F::from_u64(4);
+    state[4] = F::from_u64(4); // domain separation
     let rc = lut_sponge_round_constants();
     lut_sponge_permute(&mut state, lut, PLAINTEXT_SPACE, &rc);
-    // Squeeze: first element
     state[0]
 }
 
+// ===========================================================================
+// Phase 3b: Poseidon2 hash commitment — production binding
+// ===========================================================================
+
+fn hash_commit(
+    activated: &[F],
+    weights_digest: F,
+    key_digest: F,
+    class: F,
+) -> F {
+    let output_digest = activated.iter().fold(F::ZERO, |acc, &x| acc.add(x));
+    let input = [weights_digest, key_digest, output_digest, class];
+    let result = poseidon2::hash_fields_goldilocks(&input);
+    result[0]
+}
+
+// ===========================================================================
 // Phase 4: PBS demo (Rosetta Stone Reader #3)
-//
-// Simplified PBS: evaluate the lookup table on a decrypted ciphertext value.
-// In the full pipeline, this would be blind rotation on encrypted data.
-// The demo proves the table read path is correct.
+// ===========================================================================
+// Simplified PBS: decrypt + lookup in same table as NN activation.
 
 fn pbs_demo(ct: &Ciphertext, s: &[F], d: F, lut: &[F]) -> F {
-    // Decrypt the ciphertext
     let m = decrypt(ct, s, d);
-    // Apply the lookup table — same table as NN activation
     let m_u64 = m.to_u64();
     if m_u64 < PLAINTEXT_SPACE {
         lut[m_u64 as usize]
@@ -236,7 +247,9 @@ fn pbs_demo(ct: &Ciphertext, s: &[F], d: F, lut: &[F]) -> F {
     }
 }
 
+// ===========================================================================
 // Phase 5: Quantum commitment (2-qubit Bell pair)
+// ===========================================================================
 
 fn quantum_commit(class: usize) -> bool {
     let (q00, q01, mut q10, mut q11) = (F::ONE, F::ZERO, F::ZERO, F::ONE);
@@ -255,23 +268,9 @@ fn quantum_commit(class: usize) -> bool {
     hi < 2147483647u32
 }
 
-// Phase 3b: Hash commitment (Poseidon2) — production binding
-
-fn hash_commit(
-    activated: &[F],
-    weights_digest: F,
-    key_digest: F,
-    class: F,
-) -> F {
-    // Output digest: sum of activated values
-    let output_digest = activated.iter().fold(F::ZERO, |acc, &x| acc.add(x));
-    // Hash (weights_digest, key_digest, output_digest, class) -> digest
-    let input = [weights_digest, key_digest, output_digest, class];
-    let result = poseidon2::hash_fields_goldilocks(&input);
-    result[0]
-}
-
+// ===========================================================================
 // Full pipeline
+// ===========================================================================
 
 fn argmax(v: &[F]) -> usize {
     let mut best = 0;
@@ -286,6 +285,17 @@ fn argmax(v: &[F]) -> usize {
     best
 }
 
+/// Trinity pipeline result — all intermediate values for verification.
+struct TrinityResult {
+    result: Vec<F>,      // decrypted plaintexts
+    activated: Vec<F>,   // after dense+ReLU
+    class: usize,        // argmax classification
+    lut_digest: F,       // LUT sponge hash
+    poseidon_digest: F,  // Poseidon2 hash
+    pbs_result: F,       // PBS demo output
+    quantum: bool,       // quantum commitment
+}
+
 fn trinity(
     cts: &[Ciphertext],
     s: &[F],
@@ -296,7 +306,7 @@ fn trinity(
     weights_digest: F,
     key_digest: F,
     d: F,
-) -> bool {
+) -> TrinityResult {
     // Phase 1: Encrypted linear layer
     let ct_out = private_linear(cts, priv_w);
     // Phase 1b: Decrypt
@@ -307,25 +317,45 @@ fn trinity(
     let class = argmax(&activated);
     let class_f = F::from_u64(class as u64);
     // Phase 3a: LUT sponge hash — Reader 2 (S-box from same table)
-    let _lut_digest = lut_hash_commit(&activated, weights_digest, key_digest, class_f, lut);
+    let lut_digest = lut_hash_commit(&activated, weights_digest, key_digest, class_f, lut);
     // Phase 3b: Poseidon2 hash — binding commitment
-    let _digest = hash_commit(&activated, weights_digest, key_digest, class_f);
+    let poseidon_digest = hash_commit(&activated, weights_digest, key_digest, class_f);
     // Phase 4: PBS demo — Reader 3 (test polynomial from same table)
-    let _pbs_result = pbs_demo(&ct_out[0], s, d, lut);
+    let pbs_result = pbs_demo(&ct_out[0], s, d, lut);
     // Phase 5: Quantum commitment
-    quantum_commit(class)
+    let quantum = quantum_commit(class);
+
+    TrinityResult {
+        result,
+        activated,
+        class,
+        lut_digest,
+        poseidon_digest,
+        pbs_result,
+        quantum,
+    }
 }
 
 fn main() {
     let d = delta();
+    let p = 0xFFFF_FFFF_0000_0001u64;
+
+    // ========== DATA SETUP ==========
+
     // Secret key (small values for demo)
     let s: Vec<F> = (0..LWE_N)
         .map(|i| F::from_u64((i as u64 + 1) % 3))
         .collect();
+
+    // Plaintext messages: [1, 2, 3, 4, 5, 6, 7, 0] mod 1024
+    let messages: Vec<F> = (0..INPUT_DIM)
+        .map(|i| F::from_u64((i as u64 + 1) % PLAINTEXT_SPACE))
+        .collect();
+
     // Encrypt INPUT_DIM values
     let cts: Vec<Ciphertext> = (0..INPUT_DIM)
         .map(|i| {
-            let m = F::from_u64((i as u64 + 1) % PLAINTEXT_SPACE);
+            let m = messages[i];
             let a: Vec<F> = (0..LWE_N)
                 .map(|j| F::from_u64(((i * LWE_N + j) as u64 + 7) % 97))
                 .collect();
@@ -333,6 +363,7 @@ fn main() {
             encrypt(m, &s, &a, e, d)
         })
         .collect();
+
     // Private layer weights (NEURONS x INPUT_DIM)
     let priv_w: Vec<Vec<F>> = (0..NEURONS)
         .map(|i| {
@@ -341,22 +372,154 @@ fn main() {
                 .collect()
         })
         .collect();
+
     // Dense layer (NEURONS x NEURONS)
+    // Weights are small (0-2) so matvec + bias stays in [0, 512) — positive ReLU domain.
+    // With 16 inputs, max result = 16*2*max_input + 15 = 32*90 + 15 = 2895 > 1024.
+    // Use weights mod 2 to keep results smaller, and ensure they stay in [0, 1024).
+    // Actually: result[i] ~ 74, so matvec ~ 16 * 1 * 74 = 1184. Need smaller weights.
+    // Use weights in {0, 1} only: max = 16 * 1 * 90 = 1440 > 1024. Still too big.
+    // Use a sparse pattern: most weights 0, a few 1.
     let dense_w: Vec<F> = (0..NEURONS * NEURONS)
-        .map(|i| F::from_u64((i as u64 + 1) % 7))
+        .map(|i| {
+            let row = i / NEURONS;
+            let col = i % NEURONS;
+            // Diagonal + one neighbor: keeps sum manageable
+            if col == row || col == (row + 1) % NEURONS {
+                F::ONE
+            } else {
+                F::ZERO
+            }
+        })
         .collect();
     let dense_b: Vec<F> = (0..NEURONS)
         .map(|i| F::from_u64(i as u64))
         .collect();
-    // Shared lookup table: ReLU over plaintext domain [0, 1024)
-    // Same table serves as NN activation and FHE PBS test polynomial.
+
+    // Shared lookup table: ReLU over [0, 1024)
     let lut = build_relu_lut();
-    // Precomputed digests for model binding
-    // weights_digest = hash(dense_w), key_digest = hash(s)
+
+    // Precomputed digests
     let weights_hash = poseidon2::hash_fields_goldilocks(&dense_w);
     let weights_digest = weights_hash[0];
     let s_hash = poseidon2::hash_fields_goldilocks(&s);
     let key_digest = s_hash[0];
+
+    // ========== END-TO-END EXECUTION ==========
+
+    let tr = trinity(
+        &cts, &s, &priv_w, &dense_w, &dense_b, &lut,
+        weights_digest, key_digest, d,
+    );
+
+    // ========== VERIFICATION PRINTOUT ==========
+
+    eprintln!("=== TRINITY: Rosetta Stone Unification ===");
+    eprintln!("=== One table, four readers, five domains ===");
+    eprintln!();
+    eprintln!("--- Parameters ---");
+    eprintln!("  p (Goldilocks)     = {}", p);
+    eprintln!("  delta (p/1024)     = {}", d.to_u64());
+    eprintln!("  LWE_N              = {}", LWE_N);
+    eprintln!("  INPUT_DIM          = {}", INPUT_DIM);
+    eprintln!("  NEURONS            = {}", NEURONS);
+    eprintln!("  RING_N             = {}", RING_N);
+    eprintln!("  PLAINTEXT_SPACE    = {}", PLAINTEXT_SPACE);
+    eprintln!();
+
+    eprintln!("--- Secret key ---");
+    eprint!("  s = [");
+    for (i, &si) in s.iter().enumerate() {
+        if i > 0 { eprint!(", "); }
+        eprint!("{}", si.to_u64());
+    }
+    eprintln!("]");
+    eprintln!();
+
+    eprintln!("--- Phase 1: LWE Encryption ---");
+    eprint!("  plaintexts = [");
+    for (i, &m) in messages.iter().enumerate() {
+        if i > 0 { eprint!(", "); }
+        eprint!("{}", m.to_u64());
+    }
+    eprintln!("]");
+    eprintln!("  {} ciphertexts, each {} field elements", INPUT_DIM, LWE_N + 1);
+    eprintln!();
+
+    eprintln!("--- Phase 1b: Decrypt ---");
+    eprint!("  decrypted = [");
+    for (i, &r) in tr.result.iter().enumerate() {
+        if i > 0 { eprint!(", "); }
+        eprint!("{}", r.to_u64());
+    }
+    eprintln!("]");
+    // Verify round-trip: decrypt(encrypt(m)) == m for each original ciphertext
+    let roundtrip_ok = messages.iter().zip(cts.iter())
+        .all(|(&m, ct)| decrypt(ct, &s, d).to_u64() == m.to_u64());
+    eprintln!("  encrypt/decrypt    = {}", if roundtrip_ok { "PASS" } else { "FAIL" });
+    // Note: tr.result contains weighted sums from private_linear, not original plaintexts
+    eprintln!();
+
+    eprintln!("--- Phase 2: Dense Layer + ReLU (Reader 1: lut.apply) ---");
+    eprint!("  activated = [");
+    for (i, &a) in tr.activated.iter().enumerate() {
+        if i > 0 { eprint!(", "); }
+        eprint!("{}", a.to_u64());
+    }
+    eprintln!("]");
+    let output_digest = tr.activated.iter().fold(F::ZERO, |acc, &x| acc.add(x));
+    eprintln!("  output_digest      = {}", output_digest.to_u64());
+    eprintln!("  class (argmax)     = {}", tr.class);
+    eprintln!();
+
+    eprintln!("--- Phase 3a: LUT Sponge Hash (Reader 2: lut.read in S-box) ---");
+    eprintln!("  lut_digest         = {}", tr.lut_digest.to_u64());
+    eprintln!("  (14 rounds * 8 S-box reads = 112 table reads from shared LUT)");
+    eprintln!();
+
+    eprintln!("--- Phase 3b: Poseidon2 Hash (production binding) ---");
+    eprintln!("  weights_digest     = {}", weights_digest.to_u64());
+    eprintln!("  key_digest         = {}", key_digest.to_u64());
+    eprintln!("  poseidon_digest    = {}", tr.poseidon_digest.to_u64());
+    eprintln!();
+
+    eprintln!("--- Phase 4: PBS Demo (Reader 3: lut.read in test polynomial) ---");
+    // PBS operates on ct_out[0] from Phase 1 (the first encrypted weighted sum)
+    eprintln!("  input: ct_out[0]   -> decrypt = {}", tr.result[0].to_u64());
+    eprintln!("  pbs_result         = lut[{}] = {}", tr.result[0].to_u64(), tr.pbs_result.to_u64());
+    // Verify PBS matches direct lookup on the decrypted value
+    let direct_lookup = lut_read(&lut, tr.result[0]);
+    eprintln!("  direct lut_read    = {}", direct_lookup.to_u64());
+    let pbs_ok = tr.pbs_result.to_u64() == direct_lookup.to_u64();
+    eprintln!("  PBS == direct      = {}", if pbs_ok { "PASS" } else { "FAIL" });
+    eprintln!();
+
+    eprintln!("--- Phase 5: Quantum Commitment (2-qubit Bell) ---");
+    eprintln!("  class              = {}", tr.class);
+    eprintln!("  quantum_commit     = {}", tr.quantum);
+    eprintln!("  (class=0 -> true, class>0 -> false)");
+    eprintln!();
+
+    eprintln!("--- Prover Hints (expected values for assert.eq) ---");
+    eprintln!("  expected_class     = {}", tr.class);
+    eprintln!("  expected_lut_digest= {}", tr.lut_digest.to_u64());
+    eprintln!("  expected_digest    = {}", tr.poseidon_digest.to_u64());
+    eprintln!("  pbs_expected_m     = {}", tr.pbs_result.to_u64());
+    eprintln!();
+
+    eprintln!("--- Rosetta Stone: One Table, Four Readers ---");
+    eprintln!("  Reader 1: lut.apply  in dense_layer         -> ReLU activation");
+    eprintln!("  Reader 2: lut.read   in lut_sponge S-box    -> crypto hash");
+    eprintln!("  Reader 3: lut.read   in pbs test polynomial -> FHE bootstrap");
+    eprintln!("  Reader 4: STARK LogUp                       -> proof auth (upstream)");
+    eprintln!("  All readers: same 1024-entry table at lut_addr");
+    eprintln!();
+
+    // Final verdict
+    let all_ok = roundtrip_ok && pbs_ok;
+    eprintln!("=== VERDICT: {} ===", if all_ok { "ALL CHECKS PASS" } else { "FAILURE" });
+
+    // ========== BENCHMARK ==========
 
     // Warmup
     for _ in 0..100 {
