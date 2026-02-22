@@ -1,9 +1,9 @@
 // Hand-optimized TASM baseline: std.trinity.inference
 //
 // Provable private neural inference with quantum commitment.
-// Parametric: N-dim polynomials, M neurons, Deutsch oracle circuit.
+// Parametric: N-dim polynomials, M neurons, 2-qubit Bell commitment.
 //
-// Pitch parameters: 16-dim input, 16 neurons, Deutsch oracle commitment.
+// Pitch parameters: 8-dim input, 16 neurons, 2-qubit Bell commitment.
 //
 // Stack convention:
 //   Arguments pushed left-to-right (first arg deepest on stack).
@@ -20,11 +20,11 @@
 //   __private_neuron  :  12
 //   __private_linear  :   2
 //   __pl_loop         :  24
-//   __activate        :  11
+//   __dense_layer     :   3
 //   __quantum_commit  :   3
-//   __trinity         :  19
+//   __trinity         :  23
 //   ----------------------------------------
-//   Total             :  71
+//   Total             :  67
 
 
 // ===========================================================================
@@ -100,64 +100,54 @@ __pl_loop:
 
 
 // ===========================================================================
-// PHASE 2: NEURAL ACTIVATION
+// PHASE 2: DENSE NEURAL LAYER
 // ===========================================================================
 
 
 // ---------------------------------------------------------------------------
-// __activate: (result_addr, bias_addr, out_addr, neurons)
+// __dense_layer: (w_addr, x_addr, b_addr, out_addr, tmp_addr, neurons)
 // ---------------------------------------------------------------------------
-// Bias add + ReLU on N-element vector.
+// Full dense layer: out = relu(W * x + b).
+// Square layer: rows = cols = neurons.
+// Delegates to tensor.dense(w, x, b, out, tmp, rows, cols).
 //
-// Stack on entry: [neurons, out_addr, bias_addr, result_addr]
+// Stack on entry: [neurons, tmp_addr, out_addr, b_addr, x_addr, w_addr]
+// __dense expects: [cols, rows, tmp_addr, out_addr, b_addr, x_addr, w_addr]
+// Since rows = cols = neurons, just dup neurons for cols.
 //
-// 11 counted instructions.
-__activate:
-    dup 3
-    dup 3
-    dup 3
-    dup 3
-    call __bias_add
-    dup 1
-    dup 2
-    dup 3
-    call __relu_layer
-    pop 4
+// 3 counted instructions.
+__dense_layer:
+    dup 0
+    call __dense
     return
 
 
 // ===========================================================================
-// PHASE 3: QUANTUM COMMITMENT (Deutsch's algorithm — 1-qubit)
+// PHASE 3: QUANTUM COMMITMENT (2-qubit Bell pair)
 // ===========================================================================
 
 
 // ---------------------------------------------------------------------------
 // __quantum_commit: (class: Field) -> Bool
 // ---------------------------------------------------------------------------
-// Single-qubit Deutsch oracle (matching .tri code):
-//   |0> -> H -> conditional Z -> H -> measure
+// 2-qubit Bell pair commitment:
+//   |00> -> H(q0) -> CNOT -> conditional CZ -> CNOT -> H(q0) -> measure q0
 //
-// class=0 (constant): |0> -> H -> skip Z -> H -> |0> -> true
-// class>0 (balanced):  |0> -> H -> Z -> H -> |1> -> false
+// class=0: Bell -> skip CZ -> decode -> |00> -> p0=4,p1=0 -> true
+// class>0: Bell -> CZ -> decode -> |10> -> p0=0,p1=4 -> false
 //
-// Unnormalized Hadamard: zero'=zero+one, one'=zero-one
+// The circuit reduces algebraically to: result = (class == 0).
 //
-// Trace:
-//   init:  zero=1, one=0
-//   H:     zero=1, one=1
-//   Z(if class): zero=1, one=-1  (or stays 1 if class=0)
-//   H:     f_zero = zero+one, f_one = zero-one
-//   class=0: f_zero=2, f_one=0  -> prob_zero=4 > prob_one=0 -> true
-//   class>0: f_zero=0, f_one=2  -> prob_zero=0 < prob_one=4 -> false
+// Proof:
+//   After H+CNOT: q00=1, q01=0, q10=0, q11=1
+//   CZ(class>0): q11=-1
+//   CNOT decode: swap q10<->q11
+//     class=0: [1,0,1,0] -> H(q0): [2,0,0,0] -> p0=4, p1=0 -> true
+//     class>0: [1,0,0,-1] -> swap -> [1,0,-1,0] -> H: [0,0,2,0] -> p0=0, p1=4 -> false
 //
 // 3 counted instructions.
 __quantum_commit:
     // Stack: [class]
-    // The full Deutsch circuit reduces to: result = (class == 0).
-    // Proof: init |0>, H gives (1,1). Conditional Z negates one-amp.
-    // Second H: class=0 -> (2,0), class>0 -> (0,2).
-    // measure_deterministic: prob_zero >= prob_one.
-    // class=0: 4 >= 0 -> true. class>0: 0 >= 4 -> false.
     push 0
     eq
     return
@@ -169,37 +159,53 @@ __quantum_commit:
 
 
 // ---------------------------------------------------------------------------
-// __trinity: (input_addr, weights_addr, bias_addr, result_addr,
-//             activated_addr, tmp_addr, x, n, neurons, expected_class) -> Bool
+// __trinity: (input_addr, weights_addr, result_addr, tmp_addr, x, n,
+//             neurons, dense_w_addr, dense_b_addr, activated_addr,
+//             expected_class) -> Bool
 // ---------------------------------------------------------------------------
-// Full pipeline: private_linear -> activate -> quantum_commit.
+// Full pipeline: private_linear -> dense_layer -> quantum_commit.
 //
-// Stack on entry:
-//   [expected_class, neurons, n, x, tmp_addr, activated_addr,
-//    result_addr, bias_addr, weights_addr, input_addr]
+// Stack on entry (st0 = top):
+//   st0:  expected_class
+//   st1:  activated_addr
+//   st2:  dense_b_addr
+//   st3:  dense_w_addr
+//   st4:  neurons
+//   st5:  n
+//   st6:  x
+//   st7:  tmp_addr
+//   st8:  result_addr
+//   st9:  weights_addr
+//   st10: input_addr
 //
-// 19 counted instructions.
+// 23 counted instructions.
 __trinity:
     // --- private_linear(input, weights, result, tmp, x, n, neurons) ---
-    dup 9
-    dup 9
-    dup 8
-    dup 7
-    dup 7
-    dup 7
-    dup 7
+    // push: st10, st9, st8, st7, st6, st5, st4
+    dup 10
+    dup 10
+    dup 10
+    dup 10
+    dup 10
+    dup 10
+    dup 10
     call __private_linear
-    // --- activate(result, bias, activated, neurons) ---
-    dup 6
-    dup 8
-    dup 7
+    // --- dense_layer(dense_w, result, dense_b, activated, tmp, neurons) ---
+    // push: st3, st8, st2, st1, st7, st4
+    dup 3
+    dup 9
     dup 4
-    call __activate
+    dup 4
+    dup 11
+    dup 9
+    call __dense_layer
+    pop 6
     // --- quantum_commit(expected_class) ---
     dup 0
     call __quantum_commit
-    // Cleanup
-    swap 10
+    // Cleanup: swap result past 11 args, pop all
+    swap 11
     pop 5
     pop 5
+    pop 1
     return

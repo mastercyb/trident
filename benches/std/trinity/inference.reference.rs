@@ -6,13 +6,13 @@ type F = Goldilocks;
 const HALF_P: u64 = (0xFFFF_FFFF_0000_0001u64 - 1) / 2;
 
 // Pitch parameters:
-//   16-dim encrypted input polynomial (Z_p[x]/(x^16+1))
-//   16-neuron hidden layer (16 x 16 weight matrix)
-//   Deutsch oracle quantum commitment
+//   8-dim encrypted input polynomial (Z_p[x]/(x^8+1))
+//   16-neuron hidden layer
+//   2-qubit Bell pair quantum commitment
 //
 // ~11K dynamic ops, ~3s prove (GPU), ~5MB proof.
 // See .cortex/plans/trinity-explainer.md for rationale.
-const POLY_N: usize = 16;
+const POLY_N: usize = 8;
 const NEURONS: usize = 16;
 
 // Phase 1: Private linear layer (FHE-style polynomial arithmetic)
@@ -43,7 +43,7 @@ fn private_linear(input: &[F], weights: &[F], tmp: &mut [F], x: F, result: &mut 
     }
 }
 
-// Phase 2: Neural activation
+// Phase 2: Dense neural layer (matvec + bias + ReLU)
 
 fn relu(x: F) -> F {
     if x.to_u64() < HALF_P {
@@ -53,40 +53,53 @@ fn relu(x: F) -> F {
     }
 }
 
-fn activate(result: &[F], bias: &[F], out: &mut [F]) {
-    for i in 0..NEURONS {
-        out[i] = relu(result[i].add(bias[i]));
+fn matvec(mat: &[F], vec: &[F], out: &mut [F], rows: usize, cols: usize) {
+    for i in 0..rows {
+        let mut sum = F::ZERO;
+        for j in 0..cols {
+            sum = sum.add(mat[i * cols + j].mul(vec[j]));
+        }
+        out[i] = sum;
     }
 }
 
-// Phase 3: Quantum commitment (Deutsch's algorithm — 1-qubit)
+fn dense(w: &[F], x: &[F], b: &[F], out: &mut [F], tmp: &mut [F], rows: usize, cols: usize) {
+    matvec(w, x, tmp, rows, cols);
+    for i in 0..rows {
+        out[i] = relu(tmp[i].add(b[i]));
+    }
+}
+
+// Phase 3: Quantum commitment (2-qubit Bell pair)
 //
-// Single-qubit oracle commitment matching .tri code:
-//   |0> -> H -> conditional Z -> H -> measure
+// Superdense coding commitment circuit:
+//   |00> -> H(q0) -> CNOT -> conditional CZ -> CNOT -> H(q0) -> measure q0
 //
-// class=0 (constant oracle): H|0>=|+>, skip Z, H|+>=|0> -> measure true
-// class>0 (balanced oracle):  H|0>=|+>, Z|+>=|->, H|->=|1> -> measure false
-//
-// Unnormalized Hadamard (no sqrt(2) in field):
-//   H: zero' = zero + one, one' = zero - one
+// class=0: |00> -> Bell -> skip CZ -> decode -> |00> -> p0=4,p1=0 -> true
+// class>0: |00> -> Bell -> CZ -> decode -> |10> -> p0=0,p1=4 -> false
 
 fn quantum_commit(class: usize) -> bool {
-    // init |0>: zero=(1,0), one=(0,0)
-    let q_zero = F::ONE;
-    let q_one = F::ZERO;
-    // Hadamard: zero' = 1+0 = 1, one' = 1-0 = 1
-    let h_zero = q_zero.add(q_one);
-    let h_one = q_zero.sub(q_one);
-    // Conditional Z: negate one-amplitude if class != 0
-    let z_zero = h_zero;
-    let z_one = if class != 0 { h_one.neg() } else { h_one };
-    // Second Hadamard
-    let f_zero = z_zero.add(z_one);
-    let f_one = z_zero.sub(z_one);
-    // Deterministic measure: |zero|^2 vs |one|^2
-    let prob_zero = f_zero.mul(f_zero);
-    let prob_one = f_one.mul(f_one);
-    let diff = prob_zero.sub(prob_one);
+    // init |00>, H(q0), tensor product
+    // q0: zero=(1,0), one=(0,0) -> H -> zero=(1,0), one=(1,0)
+    // q1: zero=(1,0), one=(0,0)
+    // product: q00=(1,0), q01=(0,0), q10=(1,0), q11=(0,0)
+    // CNOT (swap q10<->q11): q00=(1,0), q01=(0,0), q10=(0,0), q11=(1,0)
+    let (q00, q01, mut q10, mut q11) = (F::ONE, F::ZERO, F::ZERO, F::ONE);
+    // Conditional CZ: negate q11 if class != 0
+    if class != 0 {
+        q11 = q11.neg();
+    }
+    // Decode: CNOT (swap q10<->q11)
+    std::mem::swap(&mut q10, &mut q11);
+    // H on q0: q00' = q00+q10, q01' = q01+q11, q10' = q00-q10, q11' = q01-q11
+    let h00 = q00.add(q10);
+    let h01 = q01.add(q11);
+    let h10 = q00.sub(q10);
+    let h11 = q01.sub(q11);
+    // Measure q0: p0 = |q00|^2 + |q01|^2, p1 = |q10|^2 + |q11|^2
+    let p0 = h00.mul(h00).add(h01.mul(h01));
+    let p1 = h10.mul(h10).add(h11.mul(h11));
+    let diff = p0.sub(p1);
     let hi = (diff.to_u64() >> 32) as u32;
     hi < 2147483647u32
 }
@@ -106,34 +119,48 @@ fn argmax(v: &[F]) -> usize {
     best
 }
 
-fn trinity(input: &[F], weights: &[F], bias: &[F], x: F) -> bool {
+fn trinity(
+    input: &[F],
+    poly_weights: &[F],
+    dense_w: &[F],
+    dense_b: &[F],
+    x: F,
+) -> bool {
     let mut tmp = vec![F::ZERO; POLY_N];
     let mut result = vec![F::ZERO; NEURONS];
+    let mut dense_tmp = vec![F::ZERO; NEURONS];
     let mut activated = vec![F::ZERO; NEURONS];
-    private_linear(input, weights, &mut tmp, x, &mut result);
-    activate(&result, bias, &mut activated);
+    // Phase 1: Private linear layer
+    private_linear(input, poly_weights, &mut tmp, x, &mut result);
+    // Phase 2: Dense neural layer
+    dense(dense_w, &result, dense_b, &mut activated, &mut dense_tmp, NEURONS, NEURONS);
+    // Phase 3: Quantum commitment
     let class = argmax(&activated);
     quantum_commit(class)
 }
 
 fn main() {
-    // 64-dim input polynomial
+    // 8-dim input polynomial
     let input: Vec<F> = (0..POLY_N)
         .map(|i| F::from_u64(i as u64 + 1))
         .collect();
-    // 16 x 64 weight matrix (contiguous)
-    let weights: Vec<F> = (0..NEURONS * POLY_N)
+    // 16 x 8 polynomial weight matrix (contiguous)
+    let poly_weights: Vec<F> = (0..NEURONS * POLY_N)
         .map(|i| F::from_u64(i as u64 + 1))
         .collect();
-    // 16-element bias
-    let bias: Vec<F> = (0..NEURONS)
+    // 16 x 16 dense weight matrix
+    let dense_w: Vec<F> = (0..NEURONS * NEURONS)
+        .map(|i| F::from_u64((i as u64 + 1) % 7))
+        .collect();
+    // 16-element dense bias
+    let dense_b: Vec<F> = (0..NEURONS)
         .map(|i| F::from_u64(i as u64))
         .collect();
     let x = F::from_u64(7);
 
     // Warmup
     for _ in 0..100 {
-        std::hint::black_box(trinity(&input, &weights, &bias, x));
+        std::hint::black_box(trinity(&input, &poly_weights, &dense_w, &dense_b, x));
     }
 
     let iters = 10000u128;
@@ -141,8 +168,9 @@ fn main() {
     for _ in 0..iters {
         std::hint::black_box(trinity(
             std::hint::black_box(&input),
-            std::hint::black_box(&weights),
-            std::hint::black_box(&bias),
+            std::hint::black_box(&poly_weights),
+            std::hint::black_box(&dense_w),
+            std::hint::black_box(&dense_b),
             std::hint::black_box(x),
         ));
     }
