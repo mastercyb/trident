@@ -3,7 +3,7 @@
 // Provable private neural inference with quantum commitment.
 // Parametric: N-dim polynomials, M neurons, Deutsch oracle circuit.
 //
-// Pitch parameters: 64-dim input, 16 neurons, Deutsch oracle commitment.
+// Pitch parameters: 16-dim input, 16 neurons, Deutsch oracle commitment.
 //
 // Stack convention:
 //   Arguments pushed left-to-right (first arg deepest on stack).

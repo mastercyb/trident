@@ -9,8 +9,9 @@ module std.trinity.inference
 //
 // The STARK proof covers everything. No other system on earth does this.
 //
-// Designed for pitch-ready parameters:
-//   64-dim encrypted input, 16-neuron hidden layer, Deutsch oracle commitment.
+// Pitch parameters:
+//   16-dim encrypted input, 16-neuron hidden layer, Deutsch oracle commitment.
+//   ~11K dynamic ops, ~3s prove, ~5MB proof.
 use vm.core.field
 
 use vm.core.convert

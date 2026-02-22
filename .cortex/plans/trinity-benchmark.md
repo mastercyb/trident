@@ -23,8 +23,9 @@ Three phases, one program:
 Story: encrypted input (polynomial) goes through a neural layer, the output
 class is committed via a quantum circuit. The STARK proof covers everything.
 
-Dimensions kept small for provability: 4-element vectors, degree-4 polynomials,
-1-qubit circuit. ~500-1000 instructions total.
+Pitch parameters: 16-dim encrypted polynomial, 16-neuron hidden layer,
+1-qubit Deutsch oracle. ~11K dynamic instructions, ~3s prove time.
+See `trinity-explainer.md` for parameter rationale.
 
 ## Language Constraints (verified)
 
@@ -53,13 +54,13 @@ Public functions:
 
 - `private_neuron(input_addr, weight_addr, out_addr, x, n) -> Field`
   — pointwise_mul + poly eval = one encrypted neuron output
-- `private_linear(input_addr, w0..w3_addr, result_addr, tmp_addr, x, n)`
-  — 4 neurons = full linear layer
-- `activate(result_addr, bias_addr, out_addr)`
-  — bias_add + relu_layer on 4 elements
+- `private_linear(input_addr, weights_addr, result_addr, tmp_addr, x, n, neurons)`
+  — N neurons via loop, weights contiguous at weights_addr + i*n
+- `activate(result_addr, bias_addr, out_addr, neurons)`
+  — bias_add + relu_layer on N elements
 - `quantum_commit(class: Field) -> Bool`
   — init |0>, H, conditional Z (using `if class { pauliz }` not `!=`), H, measure
-- `trinity(input_addr, w0..w3_addr, bias_addr, result_addr, activated_addr, tmp_addr, x, n, expected_class) -> Bool`
+- `trinity(input_addr, weights_addr, bias_addr, result_addr, activated_addr, tmp_addr, x, n, neurons, expected_class) -> Bool`
   — full pipeline: private_linear → activate → quantum_commit
 
 Note: argmax is done in the Rust reference and passed as `expected_class`.
@@ -72,7 +73,7 @@ Hand-optimized TASM from first principles for each public function.
 Labels: `__private_neuron:`, `__private_linear:`, `__activate:`,
 `__quantum_commit:`, `__trinity:`.
 
-Target: ~70-90 total instructions.
+Current: 71 static instructions (parametric loop). Compiler: 61 (0.86x).
 
 ### 3. `benches/std/trinity/inference.reference.rs` — Rust ground truth
 

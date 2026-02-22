@@ -6,10 +6,13 @@ type F = Goldilocks;
 const HALF_P: u64 = (0xFFFF_FFFF_0000_0001u64 - 1) / 2;
 
 // Pitch parameters:
-//   64-dim encrypted input polynomial
-//   16-neuron hidden layer (16 x 64 weight matrix)
+//   16-dim encrypted input polynomial (Z_p[x]/(x^16+1))
+//   16-neuron hidden layer (16 x 16 weight matrix)
 //   Deutsch oracle quantum commitment
-const POLY_N: usize = 64;
+//
+// ~11K dynamic ops, ~3s prove (GPU), ~5MB proof.
+// See .cortex/plans/trinity-explainer.md for rationale.
+const POLY_N: usize = 16;
 const NEURONS: usize = 16;
 
 // Phase 1: Private linear layer (FHE-style polynomial arithmetic)
