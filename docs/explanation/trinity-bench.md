@@ -1,23 +1,34 @@
-# Trinity: Provable Private Neural Inference with Hash and Quantum Commitment
+# Trinity: Rosetta Stone Unification — Provable Private Neural Inference
 
 ## What Trinity Is
 
-A single Trident program that combines four computational domains
-in one STARK-verifiable trace:
+A single Trident program that demonstrates the Rosetta Stone unification:
+**one lookup table, three readers**, across five computational domains
+in one STARK-verifiable trace.
 
 ```
-Encrypted Input --> Private Linear --> Decrypt --> Dense Layer --> argmax --> Hash Commit --> Quantum Commit --> Bool
-                       (FHE)                        (AI)            (Poseidon2)          (Quantum)
+Encrypted Input --> Private Linear --> Decrypt --> Dense Layer --> argmax
+                       (FHE)                     (AI, Reader 1)
+  --> LUT Sponge Hash --> Poseidon2 Hash --> PBS Demo --> Quantum Commit --> Bool
+     (Crypto, Reader 2)    (Crypto)       (FHE, Reader 3)   (Quantum)
 ```
 
-To our knowledge, no existing system composes all four domains in a
+The three readers share a single RAM-based ReLU lookup table (`lut_addr`):
+
+| Reader | Phase | Module | Operation |
+|--------|-------|--------|-----------|
+| 1 | Phase 2 (Neural) | `std.math.lut.apply` | ReLU activation |
+| 2 | Phase 3a (LUT Sponge) | `std.math.lut.read` | Crypto S-box |
+| 3 | Phase 4 (PBS Demo) | `std.math.lut.read` | FHE test polynomial |
+
+To our knowledge, no existing system composes all five domains in a
 single proof. TFHE encrypts but can't prove. Cairo proves but can't
 encrypt. Qiskit simulates but does neither. Trinity demonstrates that
-FHE, neural inference, cryptographic hashing, and quantum circuits
-can execute inside one STARK trace with data-dependent coupling
-between phases.
+FHE, neural inference, LUT-based cryptographic hashing, Poseidon2,
+programmable bootstrapping, and quantum circuits can execute inside one
+STARK trace with data-dependent coupling between phases.
 
-## The Five Phases
+## The Seven Phases
 
 ### Phase 1: Privacy (LWE homomorphic encryption)
 
@@ -32,14 +43,6 @@ weights using `ct_scale` and `ct_add`.
 
 Parameters: LWE dimension 8, delta = p/1024 (10-bit plaintext space).
 
-The current bench uses LWE-style encryption with a `divine()` bridge
-to plaintext (Phase 1b). The full production path would use RLWE
-with programmable bootstrapping (PBS), where the ReLU lookup table
-from Phase 2 serves as the PBS test polynomial -- eliminating the
-decrypt step entirely. The LWE bench demonstrates the correct
-algebraic structure; RLWE + PBS adds polynomial multiplication
-via NTT (see Roadmap).
-
 ### Phase 1b: Decrypt (bridge to plaintext)
 
 Each encrypted output is decrypted via `io.divine()` -- the prover
@@ -53,24 +56,46 @@ injection, and quantum measurement outcomes. The proof constrains the
 divined value -- unconstrained divine calls are flagged by
 `trident audit`.
 
-### Phase 2: Neural (dense layer -- matvec + bias + ReLU)
+### Phase 2: Neural — Reader 1 (dense layer + LUT activation)
 
 Full dense layer: `out = relu(W * x + b)`. Matrix-vector multiply
 (NEURONS x NEURONS), bias addition, ReLU activation. Identical to
 any neural network hidden layer, executing inside a STARK trace.
 
-ReLU activation is implemented via a RAM-based lookup table
-(`std.math.lut`). The table maps each input to its ReLU output:
-values below p/2 are "positive" (kept), values at or above p/2 are
-"negative" (zeroed). This is the Rosetta Stone stepping stone -- the
-same table that serves as NN activation here would serve as the FHE
-programmable bootstrapping test polynomial (see Rosetta Stone below).
+**Reader 1**: ReLU activation is implemented via `lut.apply`, which
+reads the shared RAM-based lookup table. The table maps each input
+to its ReLU output: values below p/2 are "positive" (kept), values
+at or above p/2 are "negative" (zeroed).
 
 The argmax comparison (for classification) uses `convert.split()` to
 decompose field elements into (hi, lo) U32 pairs and compares the
 high word against `HALF_P >> 32`.
 
-### Phase 3: Crypto (Poseidon2 hash commitment)
+### Phase 3a: LUT Sponge Hash — Reader 2 (crypto S-box)
+
+A custom sponge hash where the S-box reads from the **same lookup
+table** as the ReLU activation. This is the Rosetta Stone crypto
+reader — proving that a single table can serve both neural and
+cryptographic roles.
+
+Construction: Rescue-style sponge with bounded S-box.
+- State width: 8, Rate: 4, Capacity: 4
+- S-box: `lut.read(lut_addr, x mod D)` where D = 1024 (table domain)
+- MDS: circulant(2,1,1,...,1) — same structure as Poseidon2 external
+- Rounds: 14 (conservative for 10-bit S-box)
+- Round constants: 14 * 8 = 112 field elements from RAM
+
+**Reader 2**: Each S-box application calls `lut.read` on the shared
+table. After the MDS layer, state elements exceed [0, D), so a
+`reduce_mod` step uses `divine()` + constraint to bring them back:
+the prover supplies r = x mod D and k = x/D, the circuit verifies
+x == k*D + r and r < D via `convert.split()`.
+
+The hash binds (weights_digest, key_digest, output_digest, class)
+into a single digest. The computed digest is asserted against the
+prover's `expected_lut_digest`.
+
+### Phase 3b: Poseidon2 Hash (production binding)
 
 Binds the proof to specific model parameters by hashing
 (weights_digest, key_digest, output_digest, class) into a single
@@ -92,7 +117,24 @@ Round constants (86 field elements) are stored in RAM and read via
 ReLU lookup table. Both are authenticated by the STARK consistency
 argument.
 
-### Phase 4: Quantum (2-qubit Bell pair commitment)
+### Phase 4: PBS Demo — Reader 3 (FHE test polynomial)
+
+Programmable Bootstrapping evaluates the shared lookup table on
+encrypted data. The test polynomial is built by reading from the
+**same ReLU table** via `lut.read` — proving the table serves as
+both NN activation and FHE functional evaluation.
+
+**Reader 3**: `pbs.build_test_poly` reads N entries from `lut_addr`
+to construct the test polynomial for blind rotation. The same table
+that activates neurons now drives FHE bootstrapping.
+
+The demo: decrypt a sample ciphertext, apply the lookup table,
+verify the result matches the expected plaintext. The full production
+path would perform blind rotation on encrypted data without decryption.
+
+Parameters: ring dimension 64, domain 1024.
+
+### Phase 5: Quantum (2-qubit Bell pair commitment)
 
 Superdense coding commitment circuit with entanglement:
 
@@ -129,9 +171,13 @@ Phase 1  output --> Phase 1b input   (encrypted ciphertexts in RAM)
 Phase 1b output --> Phase 2  input   (decrypted plaintext in RAM)
 Phase 2  output --> argmax --> class  (computed classification)
 class   --> assert.eq(expected_class) (prover's claim must match)
-Phase 2  output + class --> Phase 3  (hash commitment inputs)
-Phase 3  output --> assert.eq(expected_digest)
-class   --> Phase 4 input            (quantum commit on computed class)
+Phase 2  output + class --> Phase 3a (LUT sponge hash inputs)
+Phase 3a output --> assert.eq(expected_lut_digest)
+Phase 2  output + class --> Phase 3b (Poseidon2 hash inputs)
+Phase 3b output --> assert.eq(expected_digest)
+Phase 1  output + lut --> Phase 4    (PBS on encrypted data + same table)
+Phase 4  output --> assert.eq(expected_m)
+class   --> Phase 5 input            (quantum commit on computed class)
 ```
 
 The class fed to quantum commitment is computed inside the pipeline
@@ -140,24 +186,26 @@ an `expected_class` hint, and the circuit asserts it matches the
 computed argmax. This prevents shortcutting: you cannot substitute a
 class without performing the actual inference.
 
-The hash digest binds the proof to specific model parameters. Both
-the class and the digest are asserted against prover hints, and both
-feed into subsequent phases. You cannot remove any phase without
-breaking the pipeline's data flow.
+Both hash digests (LUT sponge and Poseidon2) bind the proof to
+specific model parameters. The PBS demo binds the FHE evaluation to
+the same table. All are asserted against prover hints. You cannot
+remove any phase without breaking the pipeline's data flow.
 
 Every phase consumes the output of the previous phase. The STARK
 trace cannot be "cut" into independent sub-traces.
 
 ## Parameters
 
-### LWE_N = 8, INPUT_DIM = 8, NEURONS = 16
+### LWE_N = 8, INPUT_DIM = 8, NEURONS = 16, ring_n = 64, domain = 1024
 
 ```
-Phase 1  (Privacy):  private_linear -- 16 neurons * 8 inputs * LWE ops
-Phase 1b (Decrypt):  16 neurons * lwe.decrypt (inner product + noise check)
-Phase 2  (Neural):   matvec(16x16) + bias + lut_relu + argmax
-Phase 3  (Crypto):   Poseidon2 hash (sum + permute, 86 round constants from RAM)
-Phase 4  (Quantum):  2-qubit Bell circuit
+Phase 1  (Privacy):     private_linear -- 16 neurons * 8 inputs * LWE ops
+Phase 1b (Decrypt):     16 neurons * lwe.decrypt (inner product + noise check)
+Phase 2  (Neural):      matvec(16x16) + bias + lut_relu + argmax  [Reader 1]
+Phase 3a (LUT Sponge):  sum + 14-round sponge (8 S-box reads/round) [Reader 2]
+Phase 3b (Poseidon2):   sum + permute (86 round constants from RAM)
+Phase 4  (PBS Demo):    build_test_poly + bootstrap              [Reader 3]
+Phase 5  (Quantum):     2-qubit Bell circuit
 ```
 
 ### Why these numbers
@@ -175,6 +223,14 @@ Phase 4  (Quantum):  2-qubit Bell circuit
 - **delta = p/1024**: 10-bit plaintext space. Plaintexts in [0, 1024).
   Noise tolerance delta/2 for correct decryption.
 
+- **ring_n = 64**: Ring dimension for RLWE/PBS operations. Structurally
+  identical to production N = 1024+. Goldilocks has 2^32 roots of unity,
+  making NTT native.
+
+- **domain = 1024**: Lookup table domain size. Matches the plaintext
+  space. The LUT sponge S-box reduces state elements to [0, 1024) via
+  constrained modular reduction before table reads.
+
 - **2-qubit Bell**: Entanglement + measurement. Architecturally proves
   quantum circuits compose with FHE and neural ops. More substantial
   than 1-qubit Deutsch (which collapses to a single comparison).
@@ -183,76 +239,102 @@ Phase 4  (Quantum):  2-qubit Bell circuit
 
 ```
 Module                       Tri   Hand   Ratio
-std::trinity::inference      148    121   1.22x
+std::trinity::inference      211    167   1.26x
 ```
 
-Compiler generates 148 static instructions, hand baseline 121.
-The 1.22x gap is an optimization target for the compiler.
+Compiler generates 211 static instructions, hand baseline 167.
+The 1.26x gap is an optimization target for the compiler.
 
 Breakdown (hand): 24 decrypt_loop + 17 dense_layer + 13 sum_loop
-+ 15 hash_commit + 3 quantum_commit + 49 trinity pipeline = 121 total.
-The Poseidon2 hash phase added sum_loop (13) and hash_commit (15)
-as new functions, and extended the trinity pipeline from 38 to 49
-instructions (4 new args + hash call + digest assert).
++ 15 hash_commit + 17 lut_hash_commit + 3 quantum_commit
++ 78 trinity pipeline = 167 total.
+
+The Rosetta Stone unification added lut_hash_commit (17 instructions
+for the LUT sponge hash path) and extended the trinity pipeline from
+49 to 78 instructions (10 new args + LUT sponge call + PBS bootstrap
+call + digest/result assertions).
 
 ## The Rosetta Stone
 
-Trinity implements the first step of the Rosetta Stone unification
-described in `docs/explanation/vision.md`. The key insight: a single
-lookup table over F_p simultaneously serves as:
+Trinity implements the Rosetta Stone unification: **one lookup table,
+three readers**. A single RAM-based ReLU table (`lut_addr`) is read
+by three independent subsystems within the same STARK trace:
 
-1. **STARK**: lookup argument (LogUp) for proof authentication
-2. **Neural network**: activation function (ReLU, GELU, SiLU)
-3. **FHE**: test polynomial for programmable bootstrapping (PBS)
-4. **Crypto**: S-box for hash round function (Tip5)
+| Reader | Phase | Call site | Purpose |
+|--------|-------|-----------|---------|
+| 1 | Phase 2 | `lut.apply` in `dense_layer` | Neural activation (ReLU) |
+| 2 | Phase 3a | `lut.read` in `lut_sponge.sbox_layer` | Crypto S-box for hash |
+| 3 | Phase 4 | `lut.read` in `pbs.build_test_poly` | FHE test polynomial |
 
-Trinity's Phase 2 uses a RAM-based lookup table (`std.math.lut`)
-for ReLU activation. The table is precomputed via `lut.build_relu`
-and read via `lut.apply` -- O(1) per element. The STARK proof
-authenticates all reads through RAM consistency.
+The table is built once via `lut.build_relu` and threaded through the
+entire pipeline as `lut_addr`. All three readers access the same RAM
+region. The STARK proof authenticates every read through RAM consistency
+— it is provably the same table in all three contexts.
 
-**The same table IS the FHE PBS test polynomial.** In programmable
-bootstrapping, the test polynomial encodes the target function
-(ReLU) and is evaluated on encrypted data via blind rotation. In
-Trinity, the table is read on decrypted data, but the mathematical
-object is identical -- the RAM-based ReLU table can serve both roles.
+### Why not Tip5 or Poseidon2 as Reader 2?
 
-This is the RAM-emulated version of the native LogUp lookup. When
-Triton VM exposes user-defined lookup arguments, `std.math.lut`
-becomes a thin wrapper and the cost drops to zero per read.
+Tip5 and Poseidon2 S-boxes operate on the full Goldilocks field
+(~2^64 possible inputs). A RAM-based lookup table cannot store 2^64
+entries. The LUT sponge hash was designed specifically to work with
+bounded-domain tables: it reduces state elements to [0, D) via
+constrained modular reduction before each S-box lookup. This makes it
+compatible with the same 1024-entry ReLU table used by the other readers.
 
-Current implementation: `std.math.lut` provides `build_relu`,
-`read`, and `apply`. The table is shared across the pipeline via
-a single `lut_addr` parameter.
+### The fourth reader
+
+Reader 4 is the STARK itself. Triton VM's LogUp argument performs
+lookups against predefined tables. When Triton VM exposes user-defined
+lookup arguments, `std.math.lut` becomes a thin wrapper and the cost
+drops to zero per read. All four readers would then share a single
+native table. This is upstream of Trident and not demonstrated in the
+current bench.
 
 ## Roadmap
 
-### Done: Lookup-Table Activation (Rosetta Stone step)
+### Done: Lookup-Table Activation (Reader 1)
 
-Phase 2 uses `std.math.lut` for ReLU activation via RAM-based lookup
-table. Same table can serve as FHE PBS test polynomial.
+Phase 2 uses `std.math.lut.apply` for ReLU activation via RAM-based
+lookup table. The table serves as the foundation for all three readers.
 
-### Done: Hash Commitment Phase (Poseidon2)
+### Done: LUT Sponge Hash (Reader 2)
 
-Phase 3 hashes (weights_digest, key_digest, output_digest, class)
-via Poseidon2, binding the proof to specific model parameters.
-Round constants stored in RAM, read via `poseidon2.permute_from_ram`.
-Trinity is now a tetralogy: FHE + AI + Hash + Quantum.
+Phase 3a hashes (weights_digest, key_digest, output_digest, class)
+via a custom sponge where every S-box is a read from the shared ReLU
+table. 14 rounds, 8 S-box reads per round = 112 table reads per hash.
+Module: `std/crypto/lut_sponge.tri`.
 
-### Future: NTT as Shared Workhorse
+### Done: Poseidon2 Hash Commitment
 
-`std.private.poly` already has NTT/INTT over Goldilocks (exploiting
-the field's 2^32 roots of unity). Moving from LWE to RLWE would
-make NTT the shared primitive between FHE polynomial multiplication
-and STARK proof generation. Relevant at dimension >= 256.
+Phase 3b hashes the same inputs via Poseidon2, providing production-grade
+binding. Round constants stored in RAM. Trinity computes both hashes
+and asserts both digests.
+
+### Done: PBS Demo (Reader 3)
+
+Phase 4 builds the test polynomial from the shared ReLU table and
+evaluates it on a sample ciphertext. Modules: `std/fhe/rlwe.tri`
+(Ring-LWE), `std/fhe/pbs.tri` (Programmable Bootstrapping).
+
+### Future: Full Blind Rotation
+
+The current PBS demo decrypts before table evaluation. Full blind
+rotation would operate entirely on encrypted data, eliminating the
+decrypt step. The algebraic structure (RLWE external product, monomial
+multiplication, sample extraction) is already implemented in
+`std/fhe/pbs.tri` and `std/fhe/rlwe.tri`.
+
+### Future: Native LogUp (Reader 4)
+
+When Triton VM exposes user-defined lookup arguments, all RAM-based
+table reads become native LogUp lookups. The cost per read drops to
+zero, and the STARK itself becomes the fourth reader.
 
 ### Future: Benchmark Matrix
 
 | Variant        | Change                                     | Metric                      |
 |----------------|--------------------------------------------|-----------------------------|
 | base           | LWE_N=8, NEURONS=16, 2-qubit              | control point               |
-| +hash          | Poseidon2 commitment of model/key/output   | commitment cost share       |
-| +lookup        | ReLU via lookup table                      | Rosetta Stone demo          |
+| +rosetta       | 3 readers of shared LUT                    | Rosetta Stone demo          |
 | sweep          | LWE_N in {8,16}, NEURONS in {16,32}       | scaling trends              |
 | transparent    | divine() off, all inputs public            | witness cost measurement    |
 
@@ -260,13 +342,16 @@ and STARK proof generation. Relevant at dimension >= 256.
 
 ```
 std/fhe/lwe.tri                              LWE encryption module
+std/fhe/rlwe.tri                             Ring-LWE encryption (NTT-based)
+std/fhe/pbs.tri                              Programmable Bootstrapping (Reader 3)
 std/math/lut.tri                             RAM-based lookup table (Rosetta Stone)
 std/nn/tensor.tri                            Neural primitives (matvec, argmax)
 std/crypto/poseidon2.tri                     Poseidon2 hash (+ RAM-based variants)
+std/crypto/lut_sponge.tri                    LUT sponge hash (Reader 2)
 std/quantum/gates.tri                        Quantum gate library
-std/trinity/inference.tri                    Trinity module
-benches/std/trinity/inference.baseline.tasm  Hand-optimized TASM (121 instructions)
-benches/std/trinity/inference.reference.rs   Rust ground truth (LWE_N=8, NEURONS=16)
+std/trinity/inference.tri                    Trinity module (3 readers, 29 args)
+benches/std/trinity/inference.baseline.tasm  Hand-optimized TASM (167 instructions)
+benches/std/trinity/inference.reference.rs   Rust ground truth
 ```
 
 ## What Is Proven
@@ -278,26 +363,33 @@ The STARK proof covers every field operation in the trace:
 - **Decryption noise check**: |b - <a,s> - m*delta| < delta/2 for each
   divined plaintext. The prover supplies m via `divine()`, the circuit
   verifies the bound.
-- **Dense layer**: matrix-vector multiply (16x16), bias addition, ReLU
-  lookup table reads. All RAM accesses authenticated by the STARK RAM
-  consistency argument.
+- **Dense layer + Reader 1**: matrix-vector multiply (16x16), bias
+  addition, ReLU lookup table reads via `lut.apply`. All RAM accesses
+  authenticated by the STARK RAM consistency argument.
 - **Argmax**: field-native comparison of 16 outputs via `convert.split()`.
   The computed class is asserted equal to the prover's `expected_class`.
-- **Hash commitment**: Poseidon2 permutation (86 round constants from RAM,
-  x^7 S-box, 4+22+4 rounds) over (weights_digest, key_digest,
-  output_digest, class). The computed digest is asserted equal to the
-  prover's `expected_digest`.
-- **Quantum circuit**: 2-qubit Bell pair state preparation, conditional CZ,
-  inverse Bell decoding, trace-out, probability comparison. Every complex
-  arithmetic operation is in the trace.
+- **LUT sponge hash + Reader 2**: 14-round sponge permutation where
+  each S-box is a `lut.read` from the shared ReLU table. Modular
+  reduction to [0, 1024) is constrained via `divine()` + `assert.eq`.
+  The computed LUT digest is asserted against `expected_lut_digest`.
+- **Poseidon2 hash commitment**: permutation (86 round constants from
+  RAM, x^7 S-box, 4+22+4 rounds) over (weights_digest, key_digest,
+  output_digest, class). The computed digest is asserted against
+  `expected_digest`.
+- **PBS demo + Reader 3**: test polynomial built from the shared ReLU
+  table via `lut.read`. Bootstrap result asserted against `expected_m`.
+- **Quantum circuit**: 2-qubit Bell pair state preparation, conditional
+  CZ, inverse Bell decoding, trace-out, probability comparison.
 - **Data flow**: each phase consumes the output of the previous phase.
   The trace cannot be cut into independent sub-traces.
+- **Rosetta Stone binding**: all three readers access the same `lut_addr`.
+  The STARK RAM consistency argument proves it is the same table.
 
-The hash commitment binds the proof to specific model weights and
-encryption key via their digests. The proof says "this computation
-was performed correctly by THIS model with THIS key on these inputs."
-It does not cover the semantic meaning of the classification or the
-quality of the model.
+The hash commitments (both LUT sponge and Poseidon2) bind the proof to
+specific model weights and encryption key via their digests. The proof
+says "this computation was performed correctly by THIS model with THIS
+key on these inputs." It does not cover the semantic meaning of the
+classification or the quality of the model.
 
 ## What Is Intentionally Toy
 
@@ -311,6 +403,16 @@ at minimal scale:
 - **NEURONS = 16**: Real dense layer but not a useful classifier.
   256 weights is standard for compact on-device models but too small
   for meaningful accuracy on real tasks.
+- **ring_n = 64**: Structurally identical to production N = 1024+.
+  The NTT, polynomial multiplication, and blind rotation are real
+  operations at reduced scale.
+- **LUT sponge security**: 14 rounds with a 10-bit S-box is conservative
+  but not formally analyzed. The purpose is to demonstrate the Rosetta
+  Stone unification (same table, three readers), not to propose a new
+  hash standard.
+- **PBS demo simplification**: The demo decrypts before table evaluation.
+  Full PBS would perform blind rotation on encrypted data. The table
+  read path (Reader 3) is demonstrated correctly.
 - **2-qubit Bell**: Demonstrates entanglement and conditional phase
   gates. Quantum advantage requires O(100+) qubits; the bench proves
   quantum circuits compose with FHE and neural ops inside a STARK.
@@ -324,19 +426,21 @@ at minimal scale:
   a sampling-based model would be needed.
 
 The scaling path is clear: increase LWE_N, increase NEURONS, add
-RLWE + PBS, add more qubits. The algebraic structure does not change.
+full blind rotation, add more qubits. The algebraic structure does
+not change.
 
 ## Why This Matters
 
-Trinity proves the 128K milestone:
-"Small model inference compiles to provable Trident."
+Trinity proves the Rosetta Stone unification:
+**one lookup table, three readers, five domains, one proof.**
 
 - Real LWE encryption, not polynomial approximation
 - Data-dependent phases -- class computed from AI output, not injected
-- Hash commitment binds model parameters to the proof
+- Dual hash commitment (LUT sponge + Poseidon2) binds model parameters
+- Three independent subsystems read the same table, proven by STARK RAM
+- Programmable bootstrapping reads the same table as neural activation
 - Cross-domain composition (std.fhe, std.nn, std.crypto, std.quantum)
 - Everything verifiable in a single STARK proof
 - Each domain contributes meaningfully to the computation
-- Stepping stone toward the Rosetta Stone unification
 
 `trident build std/trinity/inference.tri` -> `trisha prove` -> `trisha verify`.
