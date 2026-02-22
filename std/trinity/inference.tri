@@ -1,23 +1,27 @@
 module std.trinity.inference
 
-// Provable private neural inference with hash commitment and quantum circuit.
+// Provable private neural inference with Rosetta Stone unification.
 //
-// Four domains, one program:
-//   Phase 1 — Privacy: LWE homomorphic encryption (real TFHE over Goldilocks)
-//   Phase 2 — Neural:  Dense layer (matvec + bias + lookup-table ReLU)
-//   Phase 3 — Crypto:  Poseidon2 hash commitment (binds model parameters)
-//   Phase 4 — Quantum: 2-qubit Bell pair commitment circuit
+// Five domains, one program, one lookup table:
+//   Phase 1  — Privacy:  LWE homomorphic encryption (real TFHE over Goldilocks)
+//   Phase 2  — Neural:   Dense layer (matvec + bias + LUT ReLU)       [Reader 1]
+//   Phase 3  — Crypto:   LUT sponge hash commitment (S-box from LUT)  [Reader 2]
+//   Phase 4  — FHE/PBS:  Programmable bootstrapping (test poly = LUT)  [Reader 3]
+//   Phase 5  — Quantum:  2-qubit Bell pair commitment circuit
 //
-// The ReLU activation is a RAM-based lookup table — the same table that
-// would serve as the FHE programmable bootstrapping test polynomial.
-// One table, multiple readers: the Rosetta Stone stepping stone.
+// The Rosetta Stone: one RAM-based lookup table (lut_addr) serves
+// three independent readers in the same program:
+//   Reader 1: lut.apply    in dense_layer     — neural activation
+//   Reader 2: lut.read     in lut_sponge      — crypto S-box
+//   Reader 3: lut.read     in pbs.build_test  — FHE test polynomial
+// All reads from the same RAM address, authenticated by STARK consistency.
 //
-// Poseidon2 round constants and the ReLU table both live in RAM,
-// authenticated by the STARK consistency argument.
+// Poseidon2 remains as the binding commitment (proven security).
+// LUT sponge demonstrates the Rosetta Stone crypto reader.
 //
 // Pitch parameters:
 //   LWE dimension 8, 8 encrypted inputs, 16-neuron hidden layer,
-//   Poseidon2 hash commitment, 2-qubit Bell commitment.
+//   ring dimension 64 for PBS, domain 1024, 2-qubit Bell commitment.
 use vm.core.field
 
 use vm.core.convert
@@ -30,9 +34,13 @@ use std.nn.tensor
 
 use std.fhe.lwe
 
+use std.fhe.pbs
+
 use std.math.lut
 
 use std.crypto.poseidon2
+
+use std.crypto.lut_sponge
 
 use std.quantum.gates
 
@@ -104,17 +112,26 @@ pub fn dense_layer(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 3: Hash commitment (Poseidon2)
+// Phase 3: Hash commitment — dual hash (Poseidon2 + LUT sponge)
 // ---------------------------------------------------------------------------
-// Binds the proof to specific model parameters and inference output.
-// Hashes (weights_digest, key_digest, output_digest, class) into a
-// single field element. The verifier checks this digest matches the
-// expected value — proving "THIS model with THIS key produced THIS
-// result", not just "some model produced some result".
+// Two hashes of the same data:
+//   Poseidon2: production binding (proven security, x^7 S-box).
+//   LUT sponge: Rosetta Stone demo (S-box from shared lookup table).
 //
-// Round constants are read from RAM at rc_addr (86 field elements).
-// output_digest is computed as the sum of activated outputs (a simple
-// commitment; a Merkle root would be stronger for large vectors).
+// The LUT sponge reads from lut_addr — the SAME table as Phase 2 ReLU.
+// This is Reader #2 of the Rosetta Stone.
+//
+// output_digest = sum(activated). Both hashes take
+// (weights_digest, key_digest, output_digest, class) as input.
+fn compute_output_digest(activated_addr: Field, neurons: Field) -> Field {
+    let mut output_digest: Field = 0
+    for i in 0..neurons bounded 4096 {
+        let idx: Field = convert.as_field(i)
+        output_digest = output_digest + mem.read(activated_addr + idx)
+    }
+    output_digest
+}
+
 pub fn hash_commit(
     activated_addr: Field,
     neurons: Field,
@@ -123,18 +140,60 @@ pub fn hash_commit(
     class: Field,
     rc_addr: Field
 ) -> Field {
-    // Compute output digest: sum of activated values
-    let mut output_digest: Field = 0
-    for i in 0..neurons bounded 4096 {
-        let idx: Field = convert.as_field(i)
-        output_digest = output_digest + mem.read(activated_addr + idx)
-    }
-    // Hash (weights_digest, key_digest, output_digest, class) -> digest
+    let output_digest: Field = compute_output_digest(activated_addr, neurons)
     poseidon2.hash4_to_digest(weights_digest, key_digest, output_digest, class, rc_addr)
 }
 
+// LUT sponge hash: Reader #2 of the Rosetta Stone.
+// S-box reads from lut_addr — the same table as NN activation.
+pub fn lut_hash_commit(
+    activated_addr: Field,
+    neurons: Field,
+    weights_digest: Field,
+    key_digest: Field,
+    class: Field,
+    lut_addr: Field,
+    domain: Field,
+    sponge_rc_addr: Field
+) -> Field {
+    let output_digest: Field = compute_output_digest(activated_addr, neurons)
+    lut_sponge.hash4_to_digest(weights_digest, key_digest, output_digest, class, lut_addr, domain, sponge_rc_addr)
+}
+
 // ---------------------------------------------------------------------------
-// Phase 4: Quantum commitment (2-qubit Bell pair)
+// Phase 4: PBS demo — programmable bootstrapping via shared LUT
+// ---------------------------------------------------------------------------
+// Bootstraps one sample ciphertext from Phase 1 output through the
+// same lookup table as test polynomial. Reader #3 of the Rosetta Stone.
+//
+// The circuit asserts the bootstrapped plaintext matches the
+// divine()-decrypted value — proving PBS and direct decryption
+// produce the same result on the same table.
+pub fn pbs_demo(
+    sample_ct_addr: Field,
+    s_addr: Field,
+    lut_addr: Field,
+    pbs_out_addr: Field,
+    delta: Field,
+    lwe_n: Field,
+    ring_n: Field,
+    domain: Field,
+    pbs_acc_addr: Field,
+    pbs_test_addr: Field,
+    pbs_tmp_addr: Field,
+    expected_m: Field
+) {
+    let m: Field = pbs.bootstrap(
+        sample_ct_addr, s_addr, lut_addr, pbs_out_addr,
+        delta, lwe_n, ring_n, domain,
+        pbs_acc_addr, pbs_test_addr, pbs_tmp_addr
+    )
+    // Assert PBS produces the same result as direct decryption
+    assert.eq(m, expected_m)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Quantum commitment (2-qubit Bell pair)
 // ---------------------------------------------------------------------------
 // Superdense coding commitment circuit:
 //   |00> -> H(q0) -> CNOT -> conditional CZ -> CNOT -> H(q0) -> measure q0
@@ -172,31 +231,18 @@ pub fn quantum_commit(class: Field) -> Bool {
 }
 
 // ---------------------------------------------------------------------------
-// Full Trinity pipeline
+// Full Trinity pipeline — Rosetta Stone unification
 // ---------------------------------------------------------------------------
-// 1. Private linear layer (LWE homomorphic encryption — FHE)
+// 1. Private linear layer (LWE homomorphic encryption)
 // 2. Decrypt encrypted outputs (bridge to plaintext)
-// 3. Dense neural layer with lookup-table ReLU (AI + Rosetta Stone)
-// 4. Poseidon2 hash commitment (binds model + key + output — Crypto)
-// 5. Quantum commitment (2-qubit Bell circuit — Quantum)
+// 3. Dense neural layer with LUT ReLU           [Reader 1: lut.apply]
+// 4. LUT sponge hash commitment (S-box = LUT)   [Reader 2: lut.read]
+//    + Poseidon2 hash commitment (binding)
+// 5. PBS demo (test polynomial = LUT)            [Reader 3: lut.read]
+// 6. Quantum commitment (2-qubit Bell circuit)
 //
-// The lookup table at lut_addr serves dual purpose:
-//   - Neural activation (ReLU in Phase 2)
-//   - FHE test polynomial (same table would drive PBS)
-// One table, multiple readers. The STARK proof covers all reads.
-//
-// Poseidon2 round constants at rc_addr serve the hash commitment.
-// Both the LUT and round constants live in RAM, authenticated by
-// the STARK consistency argument.
-//
-// The class is computed inside the pipeline via argmax on the dense layer
-// output. expected_class is the prover's claim — the circuit asserts it
-// matches the computed argmax, preventing class substitution without
-// performing the actual inference.
-//
-// The hash digest binds this specific model (weights_digest), this
-// specific key (key_digest), and the computed output to the proof.
-// expected_digest is the prover's claim — the circuit asserts it matches.
+// One table (lut_addr), three readers: the Rosetta Stone.
+// All reads from the same RAM address, authenticated by STARK consistency.
 //
 // Returns: Bool from quantum measurement confirming the commitment.
 pub fn trinity(
@@ -218,20 +264,43 @@ pub fn trinity(
     rc_addr: Field,
     weights_digest: Field,
     key_digest: Field,
-    expected_digest: Field
+    expected_digest: Field,
+    domain: Field,
+    sponge_rc_addr: Field,
+    expected_lut_digest: Field,
+    pbs_sample_ct: Field,
+    pbs_out_addr: Field,
+    ring_n: Field,
+    pbs_acc_addr: Field,
+    pbs_test_addr: Field,
+    pbs_tmp_addr: Field,
+    pbs_expected_m: Field
 ) -> Bool {
     // Phase 1: Encrypted linear layer
     private_linear(cts_addr, w_priv_addr, ct_out_addr, tmp_addr, lwe_n, input_dim, neurons)
     // Phase 1b: Decrypt
     decrypt_outputs(ct_out_addr, s_addr, result_addr, delta, lwe_n, neurons)
-    // Phase 2: Dense neural layer (activation via shared lookup table)
+    // Phase 2: Dense neural layer — Reader 1 (lut.apply on lut_addr)
     dense_layer(dense_w_addr, result_addr, dense_b_addr, activated_addr, tmp_addr, lut_addr, neurons)
-    // Compute class from neural output — data dependency between AI and Quantum
+    // Compute class from neural output
     let class: Field = tensor.argmax(activated_addr, neurons)
     assert.eq(class, expected_class)
-    // Phase 3: Hash commitment — binds model parameters to proof
+    // Phase 3a: LUT sponge hash — Reader 2 (lut.read on lut_addr)
+    let lut_digest: Field = lut_hash_commit(
+        activated_addr, neurons, weights_digest, key_digest,
+        class, lut_addr, domain, sponge_rc_addr
+    )
+    assert.eq(lut_digest, expected_lut_digest)
+    // Phase 3b: Poseidon2 hash — binding commitment (production security)
     let digest: Field = hash_commit(activated_addr, neurons, weights_digest, key_digest, class, rc_addr)
     assert.eq(digest, expected_digest)
-    // Phase 4: Quantum commitment on computed class
+    // Phase 4: PBS demo — Reader 3 (lut.read on lut_addr via build_test_poly)
+    pbs_demo(
+        pbs_sample_ct, s_addr, lut_addr, pbs_out_addr,
+        delta, lwe_n, ring_n, domain,
+        pbs_acc_addr, pbs_test_addr, pbs_tmp_addr,
+        pbs_expected_m
+    )
+    // Phase 5: Quantum commitment on computed class
     quantum_commit(class)
 }
