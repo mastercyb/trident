@@ -19,6 +19,9 @@ pub struct BenchArgs {
     /// Show per-function instruction breakdown
     #[arg(long)]
     pub functions: bool,
+    /// Skip neural model compilation (faster)
+    #[arg(long)]
+    pub skip_neural: bool,
 }
 
 /// Timing triplet for a single dimension: execute, prove, verify (ms).
@@ -71,13 +74,17 @@ pub fn cmd_bench(args: BenchArgs) {
     let options = trident::CompileOptions::default();
     let has_trisha = args.full && trisha_available();
 
-    // Load neural model once for all modules
+    // Load neural model once for all modules (unless --skip-neural)
     let wgpu_device = WgpuDevice::default();
-    let neural_model: Option<NeuralCompilerV2<Wgpu>> =
-        trident::neural::load_model::<Wgpu>(&wgpu_device);
-    if neural_model.is_some() {
-        eprint!("  Neural model loaded.\n");
-    }
+    let neural_model: Option<NeuralCompilerV2<Wgpu>> = if args.skip_neural {
+        None
+    } else {
+        let m = trident::neural::load_model::<Wgpu>(&wgpu_device);
+        if m.is_some() {
+            eprint!("  Neural model loaded.\n");
+        }
+        m
+    };
 
     // Collect data for each module
     let mut modules: Vec<ModuleBench> = Vec::new();
